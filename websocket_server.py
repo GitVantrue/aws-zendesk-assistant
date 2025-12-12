@@ -1997,15 +1997,7 @@ def zendesk_health_check():
     """Zendesk WebSocket 헬스 체크 엔드포인트"""
     return {'status': 'healthy', 'service': 'Zendesk WebSocket Server'}
 
-@app.route('/reports/<path:filepath>')
-def serve_report(filepath):
-    """HTML 보고서 파일 제공 (하위 디렉터리 포함)"""
-    try:
-        from flask import send_from_directory
-        return send_from_directory('/tmp/reports', filepath)
-    except Exception as e:
-        print(f"[ERROR] 파일 서빙 실패: {filepath} - {e}", flush=True)
-        return "파일을 찾을 수 없습니다.", 404
+
 
 if __name__ == '__main__':
     print("🚀 Saltware AWS Assistant WebSocket Server 시작")
