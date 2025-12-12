@@ -7,8 +7,10 @@ class SaltwareAWSAssistant {
     constructor() {
         this.client = null; // Zendesk Apps Framework 클라이언트
         this.socket = null; // Socket.IO 클라이언트
+        this.globalSocket = null; // 글로벌 Socket.IO 클라이언트
         this.isConnected = false;
         this.currentProgress = 0;
+        this.serverUrl = null; // 서버 URL 저장
         
         // DOM 요소들
         this.elements = {
@@ -104,21 +106,21 @@ class SaltwareAWSAssistant {
     async initWebSocket() {
         try {
             // WebSocket 서버 URL 가져오기 (Zendesk 설정 또는 기본값)
-            let serverUrl = 'http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/zendesk';
+            this.serverUrl = 'http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/zendesk';
             
             if (this.client) {
                 try {
                     const settings = await this.client.metadata();
-                    serverUrl = settings.settings.websocket_server_url || serverUrl;
+                    this.serverUrl = settings.settings.websocket_server_url || this.serverUrl;
                 } catch (error) {
                     console.log('📝 Zendesk 설정을 가져올 수 없습니다. 기본 URL을 사용합니다.');
                 }
             }
             
-            console.log('🔌 WebSocket 서버 연결 시도:', serverUrl);
+            console.log('🔌 WebSocket 서버 연결 시도:', this.serverUrl);
             
             // Socket.IO 클라이언트 생성
-            this.socket = io(serverUrl, {
+            this.socket = io(this.serverUrl, {
                 path: '/zendesk/socket.io',
                 transports: ['polling', 'websocket'],  // polling을 우선으로 (더 안정적)
                 timeout: 20000,  // 타임아웃 증가
@@ -215,27 +217,34 @@ class SaltwareAWSAssistant {
         });
         
         // 추가 안전장치: 네임스페이스 없이도 이벤트 수신
-        const globalSocket = io(serverUrl.replace('/zendesk', ''), {
-            transports: ['polling', 'websocket'],
-            timeout: 20000,
-            reconnection: true,
-            reconnectionAttempts: 10,
-            reconnectionDelay: 1000
-        });
-        
-        globalSocket.on('progress', (data) => {
-            console.log('🌐 글로벌 progress 이벤트 수신:', data);
-            if (data.progress > 0) {
-                console.log('🚨 글로벌에서 진행률', data.progress + '% 수신됨!');
-                this.updateProgress(data.progress, data.message);
-            }
-        });
-        
-        globalSocket.on('result', (data) => {
-            console.log('🌐 글로벌 result 이벤트 수신:', data);
-            this.showResult(data);
-            this.hideProgress();
-        });
+        try {
+            const globalServerUrl = this.serverUrl.replace('/zendesk', '');
+            console.log('🌐 글로벌 WebSocket 연결 시도:', globalServerUrl);
+            
+            this.globalSocket = io(globalServerUrl, {
+                transports: ['polling', 'websocket'],
+                timeout: 20000,
+                reconnection: true,
+                reconnectionAttempts: 10,
+                reconnectionDelay: 1000
+            });
+            
+            this.globalSocket.on('progress', (data) => {
+                console.log('🌐 글로벌 progress 이벤트 수신:', data);
+                if (data.progress > 0) {
+                    console.log('🚨 글로벌에서 진행률', data.progress + '% 수신됨!');
+                    this.updateProgress(data.progress, data.message);
+                }
+            });
+            
+            this.globalSocket.on('result', (data) => {
+                console.log('🌐 글로벌 result 이벤트 수신:', data);
+                this.showResult(data);
+                this.hideProgress();
+            });
+        } catch (error) {
+            console.warn('🌐 글로벌 WebSocket 연결 실패:', error);
+        }
     }
     
     /**
