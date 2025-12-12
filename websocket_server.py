@@ -207,16 +207,100 @@ def load_context_file(context_path):
         return ""
 
 def simple_clean_output(text):
-    """출력 텍스트 간단 정리"""
-    # ANSI 색상 코드 제거
+    """일반 질문 응답 정리 - 도구 사용 내역 제거, 결과만 추출 (Slack bot과 동일)"""
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    text = ansi_escape.sub('', text)
-    
-    # 불필요한 공백 정리
-    text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)
-    text = text.strip()
-    
-    return text
+    clean_text = ansi_escape.sub('', text)
+
+    # 도구 사용 및 명령어 실행 관련 라인 제거 (Slack bot과 동일한 패턴)
+    tool_patterns = [
+        r'🛠️.*',
+        r'●\s+.*',
+        r'✓\s+.*',
+        r'↳\s+Purpose:.*',
+        r'Service name:.*',
+        r'Operation name:.*',
+        r'Parameters:.*',
+        r'Region:.*',
+        r'Label:.*',
+        r'⋮.*',
+        r'.*Using tool:.*',
+        r'.*Running.*command:.*',
+        r'.*Completed in.*',
+        r'.*Execution.*',
+        r'.*Reading (file|directory):.*',
+        r'.*Successfully read.*',
+        r'.*I will run the following.*',
+        r'^>.*',
+        r'- Name:.*',
+        r'- MaxItems:.*',
+        r'- Bucket:.*',
+        r'- UserName:.*',
+        r'\+\s+\d+:.*',
+        r'^\s*\d+:.*',
+        r'^total \d+',
+        r'^drwx.*',
+        r'^-rw.*',
+        r'^lrwx.*',
+        r'^/root/.*',
+        r'.*which:.*',
+        r'.*pip.*install.*',
+        r'.*apt.*update.*',
+        r'.*yum.*install.*',
+        r'.*git clone.*',
+        r'.*bash: line.*',
+        r'.*command not found.*',
+        r'.*Package.*is already installed.*',
+        r'.*Dependencies resolved.*',
+        r'.*Transaction Summary.*',
+        r'.*Downloading Packages.*',
+        r'.*Running transaction.*',
+        r'.*Installing.*:.*',
+        r'.*Verifying.*:.*',
+        r'.*Complete!.*',
+        r'.*ERROR: Could not find.*',
+        r'.*WARNING:.*pip version.*',
+        r'.*Last metadata expiration.*',
+        r'.*Nothing to do.*',
+        r'.*fatal: destination path.*',
+        r'.*cd /root.*',
+        r'.*ls -la.*',
+        r'.*A newer release.*',
+        r'.*Available Versions.*',
+        r'.*Run the following command.*',
+        r'.*dnf upgrade.*',
+        r'.*Release notes.*',
+        r'.*Installed:.*',
+        r'.*Total download size:.*',
+        r'.*Installed size:.*',
+        r'.*MB/s.*',
+        r'.*kB.*00:00.*',
+        r'.*Transaction check.*',
+        r'.*Transaction test.*',
+        r'.*Preparing.*:.*'
+    ]
+
+    lines = clean_text.split('\n')
+    filtered_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        
+        # 불필요한 도구 실행 패턴 제거
+        skip_line = False
+        for pattern in tool_patterns:
+            if re.match(pattern, stripped, re.IGNORECASE):
+                skip_line = True
+                break
+
+        # 패턴에 매칭되지 않고 내용이 있는 줄만 유지
+        if not skip_line and stripped:
+            filtered_lines.append(stripped)
+
+    # 결과 정리
+    result = '\n'.join(filtered_lines)
+    result = re.sub(r'\n{3,}', '\n\n', result)
+
+    return result.strip() if result.strip() else "응답을 처리할 수 없습니다."
 
 @socketio.on('connect', namespace='/zendesk')
 def handle_connect():
