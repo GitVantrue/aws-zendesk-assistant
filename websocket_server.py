@@ -453,4 +453,4 @@ if __name__ == '__main__':
     print("🔗 Zendesk 앱에서 연결 가능")
     
     # 개발 모드로 실행 (디버그 활성화)
-    socketio.run(app, host='0.0.0.0', port=3001, debug=True)
+    socketio.run(app, host='0.0.0.0', port=3001, debug=False, allow_unsafe_werkzeug=True)
