@@ -541,72 +541,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         traceback.print_exc()
         return {}
 
-def generate_html_report(json_file_path):
-    """JSON 데이터를 월간 보안 점검 HTML 보고서로 변환"""
-    try:
-        print(f"[DEBUG] HTML 보고서 생성 시작: {json_file_path}", flush=True)
-        
-        # JSON 파일 로드
-        with open(json_file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        # HTML 템플릿 경로 (여러 경로 시도)
-        template_paths = [
-            'reference_templates/json_report_template.html',
-            '/tmp/reports/json_report_template.html',
-            'json_report_template.html'
-        ]
-        
-        template = None
-        for template_path in template_paths:
-            try:
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    template = f.read()
-                print(f"[DEBUG] 템플릿 로드 성공: {template_path}", flush=True)
-                break
-            except FileNotFoundError:
-                continue
-        
-        # 템플릿이 없으면 기본 HTML 생성 함수 사용
-        if not template:
-            print(f"[DEBUG] 템플릿 파일 없음, 기본 HTML 생성 사용", flush=True)
-            # 기본 HTML 생성
-            html_content = generate_html_from_json(data)
-            
-            # 파일 저장
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            html_filename = f"security_report_{account_id}_{timestamp}.html"
-            html_path = f"/tmp/reports/{html_filename}"
-            
-            with open(html_path, 'w', encoding='utf-8') as f:
-                f.write(html_content)
-            
-            print(f"[DEBUG] HTML 보고서 생성 완료: {html_path}", flush=True)
-            return html_path
-        
-        # 메타데이터 추출
-        metadata = data.get('metadata', {})
-        account_id = metadata.get('account_id', 'Unknown')
-        
-        # HTML 생성
-        html_content = generate_html_from_json(data)
-        
-        # 파일 저장
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        html_filename = f"security_report_{account_id}_{timestamp}.html"
-        html_path = f"/tmp/reports/{html_filename}"
-        
-        with open(html_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        
-        print(f"[DEBUG] HTML 보고서 생성 완료: {html_path}", flush=True)
-        return html_path
-        
-    except Exception as e:
-        print(f"[ERROR] HTML 보고서 생성 실패: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
-        return None
+
 
 def generate_html_from_json(data):
     """JSON 데이터를 HTML 보고서로 변환 (Slack bot과 동일한 로직)"""
@@ -779,10 +714,40 @@ def generate_html_report(json_file_path):
         with open(json_file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        # HTML 템플릿 읽기
-        template_path = 'reference_templates/json_report_template.html'
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template = f.read()
+        # HTML 템플릿 경로 (여러 경로 시도)
+        template_paths = [
+            'reference_templates/json_report_template.html',
+            '/tmp/reports/json_report_template.html',
+            'json_report_template.html'
+        ]
+        
+        template = None
+        for template_path in template_paths:
+            try:
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template = f.read()
+                print(f"[DEBUG] 템플릿 로드 성공: {template_path}", flush=True)
+                break
+            except FileNotFoundError:
+                continue
+        
+        # 템플릿이 없으면 기본 HTML 생성 함수 사용
+        if not template:
+            print(f"[DEBUG] 템플릿 파일 없음, 기본 HTML 생성 사용", flush=True)
+            # 기본 HTML 생성
+            html_content = generate_html_from_json(data)
+            
+            # 파일 저장
+            metadata = data.get('metadata', {})
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            html_filename = f"security_report_{metadata.get('account_id', 'unknown')}_{timestamp}.html"
+            html_path = f"/tmp/reports/{html_filename}"
+            
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            print(f"[DEBUG] HTML 보고서 생성 완료: {html_path}", flush=True)
+            return html_path
 
         # 기본 메타데이터
         metadata = data.get('metadata', {})
