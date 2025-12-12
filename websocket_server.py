@@ -162,27 +162,112 @@ def handle_aws_query(data):
         if question_type == 'screener':
             emit('progress', {'progress': 40, 'message': 'Service Screener 스캔 중...'}, namespace='/zendesk')
             
-            # Q CLI 실행
-            q_path = '/home/ec2-user/.local/bin/q'
-            cmd = [q_path, 'scan', '--account', account_id, '--region', 'ap-northeast-2']
+            try:
+                # Service Screener 실행 (Python 스크립트 직접 호출)
+                screener_path = '/root/service-screener-v2/Screener.py'
+                
+                # 스캔 설정 JSON 생성
+                import tempfile
+                import json
+                
+                # 스캔할 리전 목록
+                scan_regions = ['ap-northeast-2', 'us-east-1', 'us-west-2', 'eu-west-1']
+                
+                cross_accounts_config = {
+                    "general": {
+                        "IncludeThisAccount": True,
+                        "Regions": scan_regions
+                    }
+                }
+                
+                # 임시 JSON 파일 생성
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+                    json.dump(cross_accounts_config, f, indent=2)
+                    temp_json_path = f.name
+                
+                print(f"[DEBUG] 스캔 설정 파일 생성: {temp_json_path}", flush=True)
+                
+                # Service Screener 실행
+                cmd = [
+                    'python3',
+                    screener_path,
+                    '--crossAccounts', temp_json_path
+                ]
+                
+                env = os.environ.copy()
+                env.update(credentials)
+                
+                print(f"[DEBUG] Service Screener 실행 명령어: {' '.join(cmd)}", flush=True)
+                
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    timeout=600,  # 10분 타임아웃
+                    cwd='/root/service-screener-v2'
+                )
+                
+                # 임시 파일 삭제
+                try:
+                    os.remove(temp_json_path)
+                except:
+                    pass
+                
+                emit('progress', {'progress': 80, 'message': '결과 정리 중...'}, namespace='/zendesk')
+                
+                if result.returncode == 0:
+                    print(f"[DEBUG] ✅ Service Screener 스캔 완료", flush=True)
+                    
+                    # 결과 디렉터리 확인
+                    account_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
+                    
+                    if os.path.exists(account_result_dir):
+                        # 결과를 /tmp/reports로 복사 (웹 접근 가능하게)
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        tmp_report_dir = f'/tmp/reports/screener_{account_id}_{timestamp}'
+                        
+                        try:
+                            shutil.copytree(account_result_dir, tmp_report_dir)
+                            print(f"[DEBUG] ✅ 스캔 결과 복사 완료: {tmp_report_dir}", flush=True)
+                            
+                            # 보고서 URL 생성
+                            report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/screener_{account_id}_{timestamp}/index.html"
+                            
+                            emit('result', {
+                                'summary': f'✅ Service Screener 스캔 완료\n\n📊 상세 보고서: {report_url}',
+                                'reports': [{'name': f'screener_{account_id}_{timestamp}', 'url': report_url}],
+                                'data': {}
+                            }, namespace='/zendesk')
+                        except Exception as copy_error:
+                            print(f"[ERROR] 결과 복사 실패: {copy_error}", flush=True)
+                            emit('result', {
+                                'summary': f'⚠️ 스캔은 완료되었으나 보고서 복사 중 오류 발생: {str(copy_error)}',
+                                'reports': [],
+                                'data': {}
+                            }, namespace='/zendesk')
+                    else:
+                        print(f"[ERROR] 결과 디렉터리 없음: {account_result_dir}", flush=True)
+                        emit('result', {
+                            'summary': f'⚠️ 스캔은 완료되었으나 결과 디렉터리를 찾을 수 없습니다: {account_result_dir}',
+                            'reports': [],
+                            'data': {}
+                        }, namespace='/zendesk')
+                else:
+                    error_msg = result.stderr.strip() if result.stderr else '알 수 없는 오류'
+                    print(f"[ERROR] ❌ Service Screener 스캔 실패: {error_msg}", flush=True)
+                    emit('result', {
+                        'summary': f'❌ Service Screener 스캔 실패:\n{error_msg[:500]}',
+                        'reports': [],
+                        'data': {}
+                    }, namespace='/zendesk')
             
-            env = os.environ.copy()
-            env.update(credentials)
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=300)
-            
-            emit('progress', {'progress': 80, 'message': '결과 정리 중...'}, namespace='/zendesk')
-            
-            if result.returncode == 0:
-                output = simple_clean_output(result.stdout)
+            except Exception as e:
+                print(f"[ERROR] Service Screener 실행 중 오류: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
                 emit('result', {
-                    'summary': f'✅ Service Screener 스캔 완료\n\n{output}',
-                    'reports': [],
-                    'data': {'raw_output': result.stdout}
-                }, namespace='/zendesk')
-            else:
-                emit('result', {
-                    'summary': f'❌ Service Screener 스캔 실패: {result.stderr}',
+                    'summary': f'❌ Service Screener 실행 중 오류: {str(e)}',
                     'reports': [],
                     'data': {}
                 }, namespace='/zendesk')
