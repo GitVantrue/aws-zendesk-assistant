@@ -1303,6 +1303,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
         
         account_prefix = ""
         korean_prompt = ""  # 변수 초기화
+        context_content = ""  # 컨텍스트 내용 초기화
         
         if account_id:
             print(f"[DEBUG] 계정 ID 발견: {account_id}", flush=True)
@@ -1386,6 +1387,19 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
         # 질문 유형 분석
         question_type, context_path = analyze_question_type(query)
         print(f"[DEBUG] 질문 유형: {question_type}, 컨텍스트: {context_path}", flush=True)
+        
+        # 컨텍스트 파일 로드 (모든 경우에 대해)
+        context_content = load_context_file(context_path) if context_path else ""
+        
+        # 기본 한국어 프롬프트 구성 (모든 경우에 대해)
+        korean_prompt = f"""다음 컨텍스트를 참고하여 질문에 답변해주세요:
+
+{context_content}
+
+=== 사용자 질문 ===
+{query}
+
+위 컨텍스트의 가이드라인을 따라 한국어로 답변해주세요."""
         
         # 진행률 50% - AWS 분석 시작
         emit_progress(50, 'AWS 분석을 시작합니다...')
@@ -1636,19 +1650,6 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
             else:
                 # 일반 질문 처리 - 실제 Q CLI 실행
                 emit_progress(70, 'AWS API를 호출하고 있습니다...')
-                
-                # 컨텍스트 파일 로드
-                context_content = load_context_file(context_path) if context_path else ""
-                
-                # 한국어 프롬프트 구성
-                korean_prompt = f"""다음 컨텍스트를 참고하여 질문에 답변해주세요:
-
-{context_content}
-
-=== 사용자 질문 ===
-{query}
-
-위 컨텍스트의 가이드라인을 따라 한국어로 답변해주세요."""
                 
                 emit_progress(90, 'AI가 결과를 분석하고 있습니다...')
                 
