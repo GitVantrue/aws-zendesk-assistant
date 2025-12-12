@@ -1614,4 +1614,4 @@ def generate_html_report(json_file_path):
         return None
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=3001, debug=False)
+    socketio.run(app, host='0.0.0.0', port=3001, debug=False, allow_unsafe_werkzeug=True)
