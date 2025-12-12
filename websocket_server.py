@@ -1645,208 +1645,23 @@ def generate_html_report(data):
         
         print(f"[DEBUG] 템플릿 경로: {template_path}", flush=True)
         
-        # 템플릿 파일 로드 시도
-        template = None
-        if os.path.exists(template_path):
-            try:
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    template = f.read()
-                print(f"[DEBUG] 템플릿 파일에서 로드 완료", flush=True)
-            except Exception as e:
-                print(f"[DEBUG] 템플릿 파일 로드 실패: {e}, 기본 템플릿 사용", flush=True)
-                template = None
-        else:
-            print(f"[DEBUG] 템플릿 파일 없음: {template_path}, 기본 템플릿 사용", flush=True)
+        # 템플릿 파일 로드 (필수)
+        if not os.path.exists(template_path):
+            print(f"[ERROR] 템플릿 파일 없음: {template_path}", flush=True)
+            raise FileNotFoundError(f"템플릿 파일을 찾을 수 없습니다: {template_path}")
         
-        # 템플릿이 없으면 기본 HTML 생성
+        try:
+            with open(template_path, 'r', encoding='utf-8') as f:
+                template = f.read()
+            print(f"[DEBUG] 템플릿 파일에서 로드 완료 (크기: {len(template)} bytes)", flush=True)
+        except Exception as e:
+            print(f"[ERROR] 템플릿 파일 로드 실패: {e}", flush=True)
+            raise
+        
+        # 템플릿이 없으면 에러
         if not template:
-            print(f"[DEBUG] 기본 HTML 템플릿 생성 중...", flush=True)
-            template = """<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <title>AWS 월간 보안 점검 보고서 - {account_id}</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }}
-        .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }}
-        .header {{ background: #1a2332; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }}
-        .section {{ margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }}
-        .metric-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; }}
-        .metric-card {{ background: #f9f9f9; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #eee; }}
-        .metric-value {{ font-size: 2em; font-weight: bold; color: #1a2332; }}
-        table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
-        th {{ background: #2c3e50; color: white; padding: 10px; text-align: left; }}
-        td {{ padding: 10px; border-bottom: 1px solid #ddd; }}
-        tr:hover {{ background: #f9f9f9; }}
-        .critical {{ color: #c0392b; font-weight: bold; }}
-        .warning {{ color: #f39c12; font-weight: bold; }}
-        .ok {{ color: #27ae60; font-weight: bold; }}
-        .footer {{ text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🔒 AWS 월간 보안 점검 보고서</h1>
-            <p><strong>계정:</strong> {account_id} | <strong>리전:</strong> {region}</p>
-            <p><strong>보고서 생성일:</strong> {report_date}</p>
-            <p><strong>점검 기간:</strong> {period_start} ~ {period_end}</p>
-        </div>
-
-        {critical_issues_section}
-
-        <div class="section">
-            <h2>📊 전체 요약</h2>
-            <div class="metric-grid">
-                <div class="metric-card">
-                    <h3>EC2 인스턴스</h3>
-                    <div class="metric-value">{ec2_total}</div>
-                    <p>실행 중: {ec2_running} | 중지: {ec2_stopped}</p>
-                </div>
-                <div class="metric-card">
-                    <h3>S3 버킷</h3>
-                    <div class="metric-value">{s3_total}</div>
-                    <p>암호화: {s3_encrypted} ({s3_encrypted_rate}%)</p>
-                </div>
-                <div class="metric-card">
-                    <h3>RDS 인스턴스</h3>
-                    <div class="metric-value">{rds_total}</div>
-                    <p>Multi-AZ: {rds_multi_az}</p>
-                </div>
-                <div class="metric-card">
-                    <h3>IAM 사용자</h3>
-                    <div class="metric-value">{iam_users_total}</div>
-                    <p>MFA: {iam_mfa_enabled} ({iam_mfa_rate}%)</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>🔒 암호화 준수율</h2>
-            <p>EBS: {ebs_encrypted}/{ebs_total} ({ebs_rate}%)</p>
-            <p>S3: {s3_encrypted}/{s3_total} ({s3_encrypted_rate}%)</p>
-            <p>RDS: {rds_encrypted}/{rds_total} ({rds_encrypted_rate}%)</p>
-        </div>
-
-        <div class="section">
-            <h2>🖥️ EC2 인스턴스 ({ec2_total}개)</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>이름</th>
-                        <th>인스턴스 ID</th>
-                        <th>타입</th>
-                        <th>상태</th>
-                        <th>퍼블릭 IP</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {ec2_rows}
-                </tbody>
-            </table>
-        </div>
-
-        <div class="section">
-            <h2>💾 S3 버킷 ({s3_total}개)</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>버킷 이름</th>
-                        <th>리전</th>
-                        <th>암호화</th>
-                        <th>버저닝</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {s3_rows}
-                </tbody>
-            </table>
-        </div>
-
-        <div class="section">
-            <h2>🗄️ RDS 인스턴스 ({rds_total}개)</h2>
-            {rds_content}
-        </div>
-
-        <div class="section">
-            <h2>⚡ Lambda 함수 ({lambda_total}개)</h2>
-            {lambda_content}
-        </div>
-
-        <div class="section">
-            <h2>🔐 IAM 사용자 보안 ({iam_users_total}명)</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>사용자명</th>
-                        <th>MFA</th>
-                        <th>액세스 키</th>
-                        <th>보안 상태</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {iam_users_rows}
-                </tbody>
-            </table>
-        </div>
-
-        <div class="section">
-            <h2>🛡️ 보안 그룹 위험 규칙 ({sg_risky}개)</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>보안 그룹 ID</th>
-                        <th>이름</th>
-                        <th>포트</th>
-                        <th>프로토콜</th>
-                        <th>소스</th>
-                        <th>위험도</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {sg_risky_rows}
-                </tbody>
-            </table>
-        </div>
-
-        <div class="section">
-            <h2>✅ Trusted Advisor 점검 결과</h2>
-            <p>보안 Error: {ta_security_error} | Warning: {ta_security_warning}</p>
-            <p>내결함성 Error: {ta_fault_tolerance_error} | Warning: {ta_fault_tolerance_warning}</p>
-            <p>비용 최적화 Warning: {ta_cost_warning}</p>
-            <p>성능 Warning: {ta_performance_warning}</p>
-        </div>
-
-        <div class="section">
-            <h2>📋 CloudTrail 중요 이벤트 (최근 {cloudtrail_days}일)</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>이벤트 타입</th>
-                        <th>심각도</th>
-                        <th>발생 횟수</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {cloudtrail_critical_rows}
-                </tbody>
-            </table>
-        </div>
-
-        <div class="section">
-            <h2>📈 CloudWatch 알람 ({cloudwatch_alarms_total}개)</h2>
-            <p>발생 중: {cloudwatch_alarms_in_alarm} | 정상: {cloudwatch_alarms_ok} | 데이터 부족: {cloudwatch_alarms_insufficient}</p>
-        </div>
-
-        <div class="footer">
-            <p>🤖 이 보고서는 AWS Boto3 API를 통해 자동으로 생성되었습니다</p>
-            <p>생성 시간: {report_date} | 계정: {account_id} | 리전: {region}</p>
-        </div>
-    </div>
-</body>
-</html>"""
-            print(f"[DEBUG] 기본 HTML 템플릿 생성 완료", flush=True)
-
+            raise ValueError("템플릿이 비어있습니다")
+        
         # 기본 메타데이터
         metadata = data.get('metadata', {})
         
