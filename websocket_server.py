@@ -544,10 +544,29 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
 
 
 def generate_html_from_json(data):
-    """JSON 데이터를 HTML 보고서로 변환 (Slack bot과 동일한 로직)"""
+    """JSON 데이터를 HTML 보고서로 변환 (Slack bot 템플릿 사용)"""
     try:
-        # 기본 HTML 템플릿
-        html_template = """<!DOCTYPE html>
+        # 템플릿 파일 로드 시도
+        template_paths = [
+            'reference_templates/json_report_template.html',
+            '/tmp/reports/json_report_template.html',
+            'json_report_template.html'
+        ]
+        
+        template = None
+        for template_path in template_paths:
+            try:
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template = f.read()
+                print(f"[DEBUG] 템플릿 로드 성공: {template_path}", flush=True)
+                break
+            except FileNotFoundError:
+                continue
+        
+        # 템플릿이 없으면 기본 HTML 사용
+        if not template:
+            print(f"[DEBUG] 템플릿 파일 없음, 기본 HTML 생성", flush=True)
+            template = """<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
@@ -560,8 +579,6 @@ def generate_html_from_json(data):
         table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
         th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
         th {{ background-color: #f2f2f2; }}
-        .alert {{ padding: 15px; margin: 20px 0; border-radius: 5px; }}
-        .alert-danger {{ background-color: #f8d7da; border: 1px solid #f5c6cb; }}
         .section {{ margin: 30px 0; }}
     </style>
 </head>
@@ -571,7 +588,6 @@ def generate_html_from_json(data):
         <p>계정: {account_id} | 보고서 생성일: {report_date}</p>
         <p>분석 기간: {period_start} ~ {period_end}</p>
     </div>
-    
     <div class="summary">
         <h2>📊 요약</h2>
         <ul>
@@ -581,25 +597,17 @@ def generate_html_from_json(data):
             <li><strong>보안 그룹:</strong> 총 {sg_total}개 (위험: {sg_risky}개)</li>
         </ul>
     </div>
-    
     <div class="section">
-        <h2>🖥️ EC2 인스턴스</h2>
-        {ec2_table}
+        <h2>�️ EC2 인스턴스2</h2>
+        {ec2_rows}
     </div>
-    
     <div class="section">
         <h2>🪣 S3 버킷</h2>
-        {s3_table}
+        {s3_rows}
     </div>
-    
     <div class="section">
         <h2>👤 IAM 보안</h2>
-        {iam_table}
-    </div>
-    
-    <div class="section">
-        <h2>🛡️ 보안 그룹</h2>
-        {sg_table}
+        {iam_users_rows}
     </div>
 </body>
 </html>"""
@@ -607,106 +615,161 @@ def generate_html_from_json(data):
         # 데이터 추출
         metadata = data.get('metadata', {})
         resources = data.get('resources', {})
-        iam = data.get('iam_security', {})
-        sg = data.get('security_groups', {})
+        iam_data = data.get('iam_security', {})
+        sg_data = data.get('security_groups', {})
         
-        # 테이블 생성
-        ec2_table = generate_ec2_table(resources.get('ec2', {}).get('instances', []))
-        s3_table = generate_s3_table(resources.get('s3', {}).get('buckets', []))
-        iam_table = generate_iam_table(iam.get('users', {}).get('details', []))
-        sg_table = generate_sg_table(sg.get('details', []))
+        # EC2 데이터
+        ec2_data = resources.get('ec2', {})
+        ec2_total = ec2_data.get('total', 0)
+        ec2_running = ec2_data.get('running', 0)
+        ec2_stopped = ec2_total - ec2_running
         
-        # HTML 생성
-        html = html_template.format(
-            account_id=metadata.get('account_id', 'Unknown'),
-            report_date=metadata.get('report_date', 'Unknown'),
-            period_start=metadata.get('period_start', 'Unknown'),
-            period_end=metadata.get('period_end', 'Unknown'),
-            ec2_total=resources.get('ec2', {}).get('total', 0),
-            ec2_running=resources.get('ec2', {}).get('running', 0),
-            s3_total=resources.get('s3', {}).get('total', 0),
-            s3_encrypted=resources.get('s3', {}).get('encrypted', 0),
-            iam_total=iam.get('users', {}).get('total', 0),
-            iam_mfa=iam.get('users', {}).get('mfa_enabled', 0),
-            sg_total=sg.get('total', 0),
-            sg_risky=sg.get('risky', 0),
-            ec2_table=ec2_table,
-            s3_table=s3_table,
-            iam_table=iam_table,
-            sg_table=sg_table
-        )
+        # S3 데이터
+        s3_data = resources.get('s3', {})
+        s3_total = s3_data.get('total', 0)
+        s3_encrypted = s3_data.get('encrypted', 0)
+        s3_encrypted_rate = round((s3_encrypted / max(s3_total, 1)) * 100, 1) if s3_total > 0 else 0
         
-        return html
+        # RDS 데이터
+        rds_data = resources.get('rds', {})
+        rds_total = rds_data.get('total', 0)
+        rds_multi_az = 0
+        
+        # Lambda 데이터
+        lambda_data = resources.get('lambda', {})
+        lambda_total = lambda_data.get('total', 0)
+        
+        # IAM 데이터
+        iam_users = iam_data.get('users', {})
+        iam_total = iam_users.get('total', 0)
+        iam_mfa_enabled = iam_users.get('mfa_enabled', 0)
+        iam_mfa_rate = round((iam_mfa_enabled / max(iam_total, 1)) * 100, 1) if iam_total > 0 else 0
+        
+        # 보안 그룹 데이터
+        sg_total = sg_data.get('total', 0)
+        sg_risky = sg_data.get('risky', 0)
+        
+        # 암호화 데이터
+        encryption_data = data.get('encryption', {})
+        ebs_data = encryption_data.get('ebs', {})
+        rds_encryption = encryption_data.get('rds', {})
+        
+        ebs_total = ebs_data.get('total', 0)
+        ebs_encrypted = ebs_data.get('encrypted', 0)
+        ebs_rate = round((ebs_encrypted / max(ebs_total, 1)) * 100, 1) if ebs_total > 0 else 0
+        
+        rds_encrypted = rds_encryption.get('encrypted', 0)
+        rds_encrypted_rate = round(rds_encryption.get('encrypted_rate', 0) * 100, 1)
+        
+        # 행 생성
+        ec2_rows = generate_ec2_rows(ec2_data.get('instances', []))
+        s3_rows = generate_s3_rows(s3_data.get('buckets', []))
+        iam_users_rows = generate_iam_users_rows(iam_users.get('details', []))
+        sg_risky_rows = generate_sg_risky_rows(sg_data.get('details', []))
+        
+        # 템플릿 변수 생성
+        template_vars = {
+            'account_id': metadata.get('account_id', 'Unknown'),
+            'region': metadata.get('region', 'ap-northeast-2'),
+            'report_date': metadata.get('report_date', ''),
+            'period_start': metadata.get('period_start', ''),
+            'period_end': metadata.get('period_end', ''),
+            'ec2_total': ec2_total,
+            'ec2_running': ec2_running,
+            'ec2_stopped': ec2_stopped,
+            'ec2_rows': ec2_rows,
+            's3_total': s3_total,
+            's3_encrypted': s3_encrypted,
+            's3_encrypted_rate': s3_encrypted_rate,
+            's3_rows': s3_rows,
+            'rds_total': rds_total,
+            'rds_multi_az': rds_multi_az,
+            'rds_content': generate_rds_content(rds_data.get('instances', [])),
+            'lambda_total': lambda_total,
+            'lambda_content': generate_lambda_content(lambda_data.get('functions', [])),
+            'iam_users_total': iam_total,
+            'iam_mfa_enabled': iam_mfa_enabled,
+            'iam_mfa_rate': iam_mfa_rate,
+            'iam_users_rows': iam_users_rows,
+            'sg_total': sg_total,
+            'sg_risky': sg_risky,
+            'sg_risky_rows': sg_risky_rows,
+            'ebs_total': ebs_total,
+            'ebs_encrypted': ebs_encrypted,
+            'ebs_rate': ebs_rate,
+            'ebs_compliance_class': get_compliance_class(ebs_rate),
+            'rds_encrypted': rds_encrypted,
+            'rds_encrypted_rate': rds_encrypted_rate,
+            'rds_compliance_class': get_compliance_class(rds_encrypted_rate),
+            's3_compliance_class': get_compliance_class(s3_encrypted_rate),
+            'critical_issues_count': 0,
+            'critical_issues_section': '<div class="no-data">Critical 이슈가 없습니다</div>',
+            'ta_security_error': 0,
+            'ta_security_warning': 0,
+            'ta_fault_tolerance_error': 0,
+            'ta_fault_tolerance_warning': 0,
+            'ta_cost_warning': 0,
+            'ta_performance_warning': 0,
+            'ta_error_rows': '<tr><td colspan="4" class="no-data">Trusted Advisor 데이터 없음</td></tr>',
+            'cloudtrail_days': 30,
+            'cloudtrail_critical_rows': '<tr><td colspan="5" class="no-data">CloudTrail 데이터 없음</td></tr>',
+            'cloudwatch_alarms_total': 0,
+            'cloudwatch_alarms_in_alarm': 0,
+            'cloudwatch_alarms_ok': 0,
+            'cloudwatch_alarms_insufficient': 0,
+            'cloudwatch_alarm_rows': '<tr><td colspan="4" class="no-data">CloudWatch 알람 없음</td></tr>',
+            'ebs_unencrypted_section': '<div class="no-data">EBS 미암호화 볼륨이 없습니다</div>',
+            's3_security_issues_section': '<div class="no-data">S3 보안 이슈가 없습니다</div>',
+        }
+        
+        # 템플릿에 변수 적용
+        html_content = template.format(**template_vars)
+        
+        return html_content
         
     except Exception as e:
         print(f"[ERROR] HTML 생성 실패: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         return "<html><body><h1>보고서 생성 실패</h1></body></html>"
 
-def generate_ec2_table(instances):
-    """EC2 인스턴스 테이블 생성"""
-    if not instances:
-        return '<p>EC2 인스턴스가 없습니다.</p>'
-    
-    html = '<table><thead><tr><th>ID</th><th>이름</th><th>타입</th><th>상태</th><th>IP</th></tr></thead><tbody>'
-    for inst in instances:
-        html += f'''<tr>
-            <td>{inst.get('id', 'N/A')}</td>
-            <td>{inst.get('name', 'N/A')}</td>
-            <td>{inst.get('type', 'N/A')}</td>
-            <td>{inst.get('state', 'N/A')}</td>
-            <td>{inst.get('private_ip', 'N/A')}</td>
-        </tr>'''
-    html += '</tbody></table>'
-    return html
-
-def generate_s3_table(buckets):
-    """S3 버킷 테이블 생성"""
+def generate_s3_rows(buckets):
+    """S3 버킷 테이블 행 생성"""
     if not buckets:
-        return '<p>S3 버킷이 없습니다.</p>'
+        return '<tr><td colspan="6" class="no-data">S3 버킷이 없습니다</td></tr>'
     
-    html = '<table><thead><tr><th>이름</th><th>리전</th><th>암호화</th><th>생성일</th></tr></thead><tbody>'
+    rows = []
     for bucket in buckets:
-        html += f'''<tr>
-            <td>{bucket.get('name', 'N/A')}</td>
-            <td>{bucket.get('region', 'N/A')}</td>
-            <td>{'예' if bucket.get('encrypted') else '아니오'}</td>
-            <td>{bucket.get('creation_date', 'N/A')}</td>
-        </tr>'''
-    html += '</tbody></table>'
-    return html
-
-def generate_iam_table(users):
-    """IAM 사용자 테이블 생성"""
-    if not users:
-        return '<p>IAM 사용자가 없습니다.</p>'
+        encryption = bucket.get('encryption', {})
+        encrypted = encryption.get('enabled', False) or bucket.get('encrypted', False)
+        encryption_icon = '🔒' if encrypted else '🔓'
+        encryption_text = '활성화' if encrypted else '비활성화'
+        
+        versioning = bucket.get('versioning', {})
+        versioning_enabled = versioning.get('enabled', False)
+        versioning_icon = '✅' if versioning_enabled else '❌'
+        
+        public_access = bucket.get('public_access', {})
+        is_public = public_access.get('is_public', False)
+        public_icon = '⚠️' if is_public else '🔒'
+        public_text = '퍼블릭' if is_public else '프라이빗'
+        
+        creation_date = bucket.get('creation_date', 'N/A')
+        if hasattr(creation_date, 'strftime'):
+            creation_date = creation_date.strftime('%Y-%m-%d')
+        
+        rows.append(f"""
+        <tr>
+            <td>{bucket.get('name', 'Unknown')}</td>
+            <td>{bucket.get('region', 'Unknown')}</td>
+            <td>{encryption_icon} {encryption_text}</td>
+            <td>{versioning_icon} {'활성화' if versioning_enabled else '비활성화'}</td>
+            <td>{public_icon} {public_text}</td>
+            <td>{creation_date}</td>
+        </tr>
+        """)
     
-    html = '<table><thead><tr><th>사용자명</th><th>MFA</th><th>액세스 키</th><th>생성일</th></tr></thead><tbody>'
-    for user in users:
-        html += f'''<tr>
-            <td>{user.get('username', 'N/A')}</td>
-            <td>{'활성화' if user.get('mfa') else '비활성화'}</td>
-            <td>{len(user.get('access_keys', []))}개</td>
-            <td>{user.get('creation_date', 'N/A')}</td>
-        </tr>'''
-    html += '</tbody></table>'
-    return html
-
-def generate_sg_table(security_groups):
-    """보안 그룹 테이블 생성"""
-    if not security_groups:
-        return '<p>보안 그룹이 없습니다.</p>'
-    
-    html = '<table><thead><tr><th>ID</th><th>이름</th><th>설명</th><th>위험 규칙</th></tr></thead><tbody>'
-    for sg in security_groups:
-        risky_count = len(sg.get('risky_rules', []))
-        html += f'''<tr>
-            <td>{sg.get('id', 'N/A')}</td>
-            <td>{sg.get('name', 'N/A')}</td>
-            <td>{sg.get('description', 'N/A')}</td>
-            <td>{risky_count}개</td>
-        </tr>'''
-    html += '</tbody></table>'
-    return html
+    return ''.join(rows)
 
 def generate_html_report(json_file_path):
     """JSON 데이터를 월간 보안 점검 HTML 보고서로 변환 (Slack bot과 동일)"""
