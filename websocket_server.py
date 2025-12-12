@@ -153,13 +153,22 @@ def handle_aws_query(data):
         elif question_type == 'report':
             emit('progress', {'progress': 40, 'message': '보안 데이터 수집 중...'}, namespace='/zendesk')
             
-            # 월간 보고서 생성
-            today = datetime.now()
-            start_date = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
-            end_date = today.replace(day=1) - timedelta(days=1)
+            # 월간 보고서 생성 - 요청된 월 파싱
+            target_year, target_month = parse_month_from_query(query)
+            
+            # 지정된 월의 첫날과 마지막날 계산
+            if target_month == 12:
+                next_month_first = datetime(target_year + 1, 1, 1)
+            else:
+                next_month_first = datetime(target_year, target_month + 1, 1)
+            
+            start_date = datetime(target_year, target_month, 1)
+            end_date = next_month_first - timedelta(days=1)
             
             start_date_str = start_date.strftime('%Y-%m-%d')
             end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            print(f"[DEBUG] 보고서 기간: {start_date_str} ~ {end_date_str}", flush=True)
             
             # Raw 데이터 수집
             raw_data = collect_raw_security_data(account_id, start_date_str, end_date_str, credentials=credentials)
@@ -261,6 +270,51 @@ def extract_account_id(text):
     result = match.group() if match else None
     print(f"[DEBUG] 계정 ID 추출 시도: '{text}' -> '{result}'", flush=True)
     return result
+
+def parse_month_from_query(query):
+    """
+    쿼리에서 월 정보 추출
+    예: "8월 보고서", "2024년 8월", "August report" 등
+    
+    Returns:
+        tuple: (year, month) - 기본값은 지난달
+    """
+    query_lower = query.lower()
+    today = datetime.now()
+    
+    # 월 이름 매핑 (한글 + 영문)
+    month_map = {
+        '1월': 1, '2월': 2, '3월': 3, '4월': 4, '5월': 5, '6월': 6,
+        '7월': 7, '8월': 8, '9월': 9, '10월': 10, '11월': 11, '12월': 12,
+        'january': 1, 'february': 2, 'march': 3, 'april': 4, 'may': 5, 'june': 6,
+        'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12,
+        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+        'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+    }
+    
+    # 연도 추출 (4자리 숫자)
+    year_match = re.search(r'(\d{4})', query)
+    target_year = int(year_match.group(1)) if year_match else today.year
+    
+    # 월 추출
+    target_month = None
+    for month_name, month_num in month_map.items():
+        if month_name in query_lower:
+            target_month = month_num
+            break
+    
+    # 월을 찾지 못하면 지난달
+    if target_month is None:
+        # 지난달 계산
+        if today.month == 1:
+            target_year = today.year - 1
+            target_month = 12
+        else:
+            target_year = today.year
+            target_month = today.month - 1
+    
+    print(f"[DEBUG] 파싱된 월: {target_year}년 {target_month}월", flush=True)
+    return target_year, target_month
 
 def get_crossaccount_session(account_id):
     """Cross-account 세션 생성"""
