@@ -107,7 +107,7 @@ def get_crossaccount_session(account_id):
             print(f"[DEBUG] Assume role: {role_arn}", flush=True)
             assumed_role = sts_client.assume_role(
                 RoleArn=role_arn,
-                RoleSessionName=f"WebSocketBot-{account_id}"
+                RoleSessionName=f"ZendeskBot-{account_id}"
             )
             credentials = assumed_role['Credentials']
             print(f"[DEBUG] Cross-account 세션 생성 성공", flush=True)
@@ -147,7 +147,7 @@ def get_crossaccount_session(account_id):
             print(f"[DEBUG] Role 방식 Assume role: {role_arn} (with ExternalId)", flush=True)
             assumed_role = crossaccount_sts.assume_role(
                 RoleArn=role_arn,
-                RoleSessionName=f"WebSocketBot-{account_id}",
+                RoleSessionName=f"ZendeskBot-{account_id}",
                 ExternalId="saltwarec0rp"
             )
             credentials = assumed_role['Credentials']
@@ -629,9 +629,9 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 print(f"[DEBUG] - AWS_DEFAULT_REGION: {env_vars.get('AWS_DEFAULT_REGION', 'None')}", flush=True)
                 print(f"[DEBUG] - 질문 길이: {len(korean_prompt)}", flush=True)
                 
-                # Q CLI 실행 (실제 AWS 분석)
+                # Q CLI 실행 (실제 AWS 분석) - 도구 자동 승인 추가
                 q_result = subprocess.run(
-                    [q_cmd, 'chat', '--no-interactive', korean_prompt],
+                    [q_cmd, 'chat', '--no-interactive', '--trust-all-tools', korean_prompt],
                     capture_output=True,
                     text=True,
                     env=env_vars,
@@ -793,8 +793,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 @app.before_request
 def handle_preflight():
     """OPTIONS 요청 처리 (CORS preflight)"""
+    from flask import request, make_response
     if request.method == "OPTIONS":
-        from flask import make_response
         response = make_response()
         response.headers.add("Access-Control-Allow-Origin", "*")
         response.headers.add('Access-Control-Allow-Headers', "*")
