@@ -1624,9 +1624,19 @@ def generate_html_report(data):
         data = convert_datetime_to_json_serializable(data)
 
         # HTML 템플릿 읽기
-        template_path = os.path.join(os.path.dirname(__file__), 'templates', 'json_report_template.html')
+        # 현재 스크립트 디렉토리 기준으로 템플릿 경로 설정
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        template_path = os.path.join(script_dir, 'templates', 'json_report_template.html')
+        
+        print(f"[DEBUG] 템플릿 경로: {template_path}", flush=True)
+        
+        if not os.path.exists(template_path):
+            raise FileNotFoundError(f"템플릿 파일을 찾을 수 없습니다: {template_path}")
+        
         with open(template_path, 'r', encoding='utf-8') as f:
             template = f.read()
+        
+        print(f"[DEBUG] 템플릿 로드 완료", flush=True)
 
         # 기본 메타데이터
         metadata = data.get('metadata', {})
