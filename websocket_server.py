@@ -864,9 +864,26 @@ def generate_html_report(json_file_path):
         data = convert_qcli_json_to_template_format(data)
 
         # HTML 템플릿 읽기
-        template_path = 'reference_templates/json_report_template.html'
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template = f.read()
+        # 여러 경로 시도 (상대경로, 절대경로)
+        template_paths = [
+            'reference_templates/json_report_template.html',
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reference_templates', 'json_report_template.html'),
+            '/home/ec2-user/aws-zendesk-assistant/reference_templates/json_report_template.html',
+        ]
+        
+        template = None
+        for template_path in template_paths:
+            try:
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template = f.read()
+                print(f"[DEBUG] 템플릿 로드 성공: {template_path}", flush=True)
+                break
+            except FileNotFoundError:
+                print(f"[DEBUG] 템플릿 파일 없음: {template_path}", flush=True)
+                continue
+        
+        if not template:
+            raise FileNotFoundError("템플릿 파일을 찾을 수 없습니다")
 
         # 기본 메타데이터
         metadata = data.get('metadata', {})
