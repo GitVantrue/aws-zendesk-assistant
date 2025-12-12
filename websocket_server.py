@@ -286,6 +286,26 @@ def handle_aws_query(data):
                 # Service Screener 실행 (Reference 코드 기반, 경로만 현재 환경에 맞게 수정)
                 screener_base = os.path.join(os.path.dirname(__file__), 'service-screener-v2')
                 screener_path = os.path.join(screener_base, 'Screener.py')
+                screener_requirements = os.path.join(screener_base, 'requirements.txt')
+                
+                # Service Screener 의존성 설치 (첫 실행 시에만)
+                print(f"[DEBUG] Service Screener 의존성 설치 시작", flush=True)
+                pip_install_cmd = [
+                    'pip3', 'install', '-q',
+                    '-r', screener_requirements
+                ]
+                
+                pip_result = subprocess.run(
+                    pip_install_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5분 타임아웃
+                )
+                
+                if pip_result.returncode == 0:
+                    print(f"[DEBUG] Service Screener 의존성 설치 완료", flush=True)
+                else:
+                    print(f"[WARNING] Service Screener 의존성 설치 경고: {pip_result.stderr[:500]}", flush=True)
                 
                 # 스캔 설정 JSON 생성 (Reference 코드와 동일)
                 temp_json_path = f'/tmp/crossAccounts_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
