@@ -1657,40 +1657,40 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 print(f"[DEBUG] Q CLI 실행 시작 - 질문 유형: {question_type}", flush=True)
                 
                 try:
-                # Q CLI 경로 자동 감지 (권한에 따라)
-                q_paths = [
-                    '/home/ec2-user/.local/bin/q',  # ec2-user 우선
-                    '/root/.local/bin/q',           # root 경로
-                    '/usr/local/bin/q',             # 시스템 경로
-                    'q'                             # PATH에서 찾기
-                ]
-                
-                q_cmd = None
-                for path in q_paths:
-                    try:
-                        if path == 'q':
-                            # PATH에서 찾기
-                            result = subprocess.run(['which', 'q'], capture_output=True, text=True)
-                            if result.returncode == 0:
-                                q_cmd = 'q'
+                    # Q CLI 경로 자동 감지 (권한에 따라)
+                    q_paths = [
+                        '/home/ec2-user/.local/bin/q',  # ec2-user 우선
+                        '/root/.local/bin/q',           # root 경로
+                        '/usr/local/bin/q',             # 시스템 경로
+                        'q'                             # PATH에서 찾기
+                    ]
+                    
+                    q_cmd = None
+                    for path in q_paths:
+                        try:
+                            if path == 'q':
+                                # PATH에서 찾기
+                                result = subprocess.run(['which', 'q'], capture_output=True, text=True)
+                                if result.returncode == 0:
+                                    q_cmd = 'q'
+                                    break
+                            elif os.path.exists(path) and os.access(path, os.X_OK):
+                                q_cmd = path
                                 break
-                        elif os.path.exists(path) and os.access(path, os.X_OK):
-                            q_cmd = path
-                            break
-                    except Exception as e:
-                        print(f"[DEBUG] 경로 {path} 확인 실패: {e}", flush=True)
-                        continue
-                
-                if not q_cmd:
-                    raise FileNotFoundError("실행 가능한 Q CLI를 찾을 수 없습니다")
-                
-                # Q CLI 실행 전 환경 변수 디버깅
-                print(f"[DEBUG] Q CLI 실행 환경:", flush=True)
-                print(f"[DEBUG] - 명령어: {q_cmd}", flush=True)
-                print(f"[DEBUG] - AWS_ACCESS_KEY_ID: {env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:10]}...", flush=True)
-                print(f"[DEBUG] - AWS_DEFAULT_REGION: {env_vars.get('AWS_DEFAULT_REGION', 'None')}", flush=True)
-                print(f"[DEBUG] - 질문 길이: {len(korean_prompt)}", flush=True)
-                
+                        except Exception as e:
+                            print(f"[DEBUG] 경로 {path} 확인 실패: {e}", flush=True)
+                            continue
+                    
+                    if not q_cmd:
+                        raise FileNotFoundError("실행 가능한 Q CLI를 찾을 수 없습니다")
+                    
+                    # Q CLI 실행 전 환경 변수 디버깅
+                    print(f"[DEBUG] Q CLI 실행 환경:", flush=True)
+                    print(f"[DEBUG] - 명령어: {q_cmd}", flush=True)
+                    print(f"[DEBUG] - AWS_ACCESS_KEY_ID: {env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:10]}...", flush=True)
+                    print(f"[DEBUG] - AWS_DEFAULT_REGION: {env_vars.get('AWS_DEFAULT_REGION', 'None')}", flush=True)
+                    print(f"[DEBUG] - 질문 길이: {len(korean_prompt)}", flush=True)
+                    
                     # Q CLI 실행 (Slack bot과 동일한 명령어 및 타임아웃)
                     cmd = [q_cmd, 'chat', '--no-interactive', '--trust-all-tools', korean_prompt]
                     print(f"[DEBUG] 실행 명령어: {' '.join(cmd)}", flush=True)
@@ -1703,7 +1703,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                         env=env_vars,
                         timeout=600  # Slack bot과 동일한 10분 타임아웃
                     )
-                
+                    
                     print(f"[DEBUG] Q CLI 실행 완료:", flush=True)
                     print(f"[DEBUG] - 반환 코드: {q_result.returncode}", flush=True)
                     print(f"[DEBUG] - stdout 길이: {len(q_result.stdout) if q_result.stdout else 0}", flush=True)
@@ -1725,28 +1725,28 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                         print(f"[ERROR] Q CLI 실행 실패:", flush=True)
                         print(f"[ERROR] - 반환 코드: {q_result.returncode}", flush=True)
                         print(f"[ERROR] - 에러 메시지: {error_msg}", flush=True)
-                    
-                    # 폴백: AWS CLI로 실제 리소스 조회
-                    try:
-                        print(f"[DEBUG] Q CLI 실패, AWS CLI로 폴백 시도", flush=True)
                         
-                        # 기본 계정 정보 조회
-                        aws_result = subprocess.run(
-                            ['aws', 'sts', 'get-caller-identity'],
-                            capture_output=True,
-                            text=True,
-                            env=env_vars,
-                            timeout=30
-                        )
-                        
-                        if aws_result.returncode == 0:
-                            caller_info = json.loads(aws_result.stdout)
-                            account = caller_info.get('Account', 'Unknown')
-                            user_arn = caller_info.get('Arn', 'Unknown')
+                        # 폴백: AWS CLI로 실제 리소스 조회
+                        try:
+                            print(f"[DEBUG] Q CLI 실패, AWS CLI로 폴백 시도", flush=True)
                             
-                            # 질문에 따라 실제 AWS 리소스 조회 (Slack bot 수준 상세 정보)
-                            resource_info = ""
-                            if any(keyword in query.lower() for keyword in ['ec2', '인스턴스', 'instance', '러닝', 'running']):
+                            # 기본 계정 정보 조회
+                            aws_result = subprocess.run(
+                                ['aws', 'sts', 'get-caller-identity'],
+                                capture_output=True,
+                                text=True,
+                                env=env_vars,
+                                timeout=30
+                            )
+                            
+                            if aws_result.returncode == 0:
+                                caller_info = json.loads(aws_result.stdout)
+                                account = caller_info.get('Account', 'Unknown')
+                                user_arn = caller_info.get('Arn', 'Unknown')
+                                
+                                # 질문에 따라 실제 AWS 리소스 조회 (Slack bot 수준 상세 정보)
+                                resource_info = ""
+                                if any(keyword in query.lower() for keyword in ['ec2', '인스턴스', 'instance', '러닝', 'running']):
                                 # EC2 인스턴스 상세 조회 (JSON 형태로)
                                 try:
                                     ec2_result = subprocess.run(
@@ -1881,17 +1881,17 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 emit_progress(100, '시간 초과로 분석을 중단했습니다.')
                 emit_result({'summary': account_prefix + timeout_response})
                 
-            except Exception as e:
-                print(f"[ERROR] Q CLI 실행 중 예외: {str(e)}", flush=True)
-                error_response = f"""❌ 분석 중 오류가 발생했습니다.
+                except Exception as e:
+                    print(f"[ERROR] Q CLI 실행 중 예외: {str(e)}", flush=True)
+                    error_response = f"""❌ 분석 중 오류가 발생했습니다.
 
 질문: {query}
 오류: {str(e)}
 
 시스템 관리자에게 문의하거나 잠시 후 다시 시도해주세요."""
-                
-                emit_progress(100, '오류가 발생했습니다.')
-                emit_result({'summary': account_prefix + error_response})
+                    
+                    emit_progress(100, '오류가 발생했습니다.')
+                    emit_result({'summary': account_prefix + error_response})
         
     except Exception as e:
         print(f"[ERROR] AWS 질문 처리 중 오류: {str(e)}", flush=True)
