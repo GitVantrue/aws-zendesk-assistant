@@ -1324,6 +1324,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
         env_vars['Q_MCP_INIT_TIMEOUT'] = '10000'  # 10초
         
         account_prefix = ""
+        korean_prompt = ""  # 변수 초기화
         
         if account_id:
             print(f"[DEBUG] 계정 ID 발견: {account_id}", flush=True)
@@ -1675,8 +1676,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 
                 # 실제 Q CLI 실행
                 print(f"[DEBUG] Q CLI 실행 시작 - 질문 유형: {question_type}", flush=True)
-            
-            try:
+                
+                try:
                 # Q CLI 경로 자동 감지 (권한에 따라)
                 q_paths = [
                     '/home/ec2-user/.local/bin/q',  # ec2-user 우선
