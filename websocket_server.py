@@ -337,553 +337,577 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
     
     Args:
         account_id (str): AWS 계정 ID
-        start_date_str (str): 시작 날짜 (YYYY-MM-DD)
-        end_date_str (str): 종료 날짜 (YYYY-MM-DD)
+        start_date_str (str): 시작 날짜 (YYYY-MM-DD) - UTC+9 기준
+        end_date_str (str): 종료 날짜 (YYYY-MM-DD) - UTC+9 기준
         region (str): AWS 리전
-        credentials (dict): AWS 자격증명 (선택사항)
+        credentials (dict): AWS 자격증명 (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)
     
     Returns:
-        dict: 수집된 보안 데이터
+        dict: Raw 보안 데이터 JSON
     """
+    print(f"[DEBUG] ✅ boto3로 raw 데이터 수집 시작: 계정 {account_id}, 리전 {region}", flush=True)
+    print(f"[DEBUG] 분석 기간: {start_date_str} ~ {end_date_str} (UTC+9)", flush=True)
+    
+    # 자격증명 가져오기 (파라미터 우선, 없으면 환경 변수)
+    if credentials:
+        access_key = credentials.get('AWS_ACCESS_KEY_ID')
+        secret_key = credentials.get('AWS_SECRET_ACCESS_KEY')
+        session_token = credentials.get('AWS_SESSION_TOKEN')
+    else:
+        access_key = os.environ.get('AWS_ACCESS_KEY_ID')
+        secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
+        session_token = os.environ.get('AWS_SESSION_TOKEN')
+    
+    print(f"[DEBUG] 자격증명 확인: ACCESS_KEY={access_key[:20] if access_key else 'None'}..., SESSION_TOKEN={'있음' if session_token else '없음'}", flush=True)
+    
+    # boto3 세션 생성 (환경 변수의 임시 자격증명 사용)
+    session = boto3.Session(
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        aws_session_token=session_token,
+        region_name=region
+    )
+    
+    # boto3 클라이언트 생성
+    ec2 = session.client('ec2', region_name=region)
+    s3 = session.client('s3', region_name=region)
+    iam = session.client('iam', region_name=region)
+    support = session.client('support', region_name='us-east-1')  # TA는 us-east-1만 지원
+    cloudtrail = session.client('cloudtrail', region_name=region)
+    cloudwatch = session.client('cloudwatch', region_name=region)
+    
+    print(f"[DEBUG] boto3 클라이언트 생성 완료 (임시 자격증명 사용)", flush=True)
+    
+    report_data = {
+        "metadata": {
+            "account_id": account_id,
+            "report_date": datetime.now().strftime("%Y-%m-%d"),
+            "period_start": start_date_str,
+            "period_end": end_date_str,
+            "region": region
+        },
+        "resources": {},
+        "iam_security": {},
+        "security_groups": {},
+        "encryption": {},
+        "trusted_advisor": {},
+        "cloudtrail_events": {},
+        "cloudwatch": {},
+        "recommendations": []
+    }
+    
+    # 1. EC2 인스턴스 수집 (Raw 데이터 저장)
+    print(f"[DEBUG] 📦 EC2 인스턴스 수집 중...", flush=True)
     try:
-        print(f"[DEBUG] Raw 보안 데이터 수집 시작: {account_id}, {start_date_str} ~ {end_date_str}", flush=True)
+        ec2_response = ec2.describe_instances()
         
-        # boto3 세션 생성
-        if credentials:
-            session = boto3.Session(
-                aws_access_key_id=credentials['AWS_ACCESS_KEY_ID'],
-                aws_secret_access_key=credentials['AWS_SECRET_ACCESS_KEY'],
-                aws_session_token=credentials['AWS_SESSION_TOKEN'],
-                region_name=region
-            )
-        else:
-            session = boto3.Session(region_name=region)
+        # Raw 인스턴스 데이터 추출 (모든 필드 포함)
+        instances_raw = []
+        for reservation in ec2_response['Reservations']:
+            for instance in reservation['Instances']:
+                instances_raw.append(instance)
         
-        # 클라이언트 생성
-        ec2 = session.client('ec2')
-        s3 = session.client('s3')
-        iam = session.client('iam')
-        cloudtrail = session.client('cloudtrail')
-        cloudwatch = session.client('cloudwatch')
+        # 요약 정보 계산
+        total = len(instances_raw)
+        running = sum(1 for i in instances_raw if i['State']['Name'] == 'running')
+        stopped = sum(1 for i in instances_raw if i['State']['Name'] == 'stopped')
         
-        # 메타데이터
-        metadata = {
-            'account_id': account_id,
-            'report_date': datetime.now().strftime('%Y-%m-%d'),
-            'period_start': start_date_str,
-            'period_end': end_date_str,
-            'region': region
+        report_data['resources']['ec2'] = {
+            "summary": {
+                "total": total,
+                "running": running,
+                "stopped": stopped
+            },
+            "instances": instances_raw  # Raw 데이터 (datetime 변환은 나중에 일괄 처리)
         }
-        
-        # EC2 인스턴스 수집
-        print(f"[DEBUG] EC2 인스턴스 수집 중...", flush=True)
-        ec2_instances = []
-        try:
-            response = ec2.describe_instances()
-            for reservation in response['Reservations']:
-                for instance in reservation['Instances']:
-                    # 인스턴스 이름 추출
-                    name = 'N/A'
-                    for tag in instance.get('Tags', []):
-                        if tag['Key'] == 'Name':
-                            name = tag['Value']
-                            break
-                    
-                    ec2_instances.append({
-                        'id': instance['InstanceId'],
-                        'name': name,
-                        'type': instance['InstanceType'],
-                        'state': instance['State']['Name'],
-                        'private_ip': instance.get('PrivateIpAddress', 'N/A'),
-                        'public_ip': instance.get('PublicIpAddress', 'N/A'),
-                        'launch_time': instance.get('LaunchTime')
-                    })
-        except Exception as e:
-            print(f"[ERROR] EC2 데이터 수집 실패: {e}", flush=True)
-        
-        # S3 버킷 수집
-        print(f"[DEBUG] S3 버킷 수집 중...", flush=True)
-        s3_buckets = []
-        try:
-            response = s3.list_buckets()
-            for bucket in response['Buckets']:
-                bucket_name = bucket['Name']
-                
-                # 암호화 상태 확인
-                encrypted = False
-                try:
-                    s3.get_bucket_encryption(Bucket=bucket_name)
-                    encrypted = True
-                except:
-                    pass
-                
-                s3_buckets.append({
-                    'name': bucket_name,
-                    'creation_date': bucket['CreationDate'],
-                    'encrypted': encrypted,
-                    'region': region
-                })
-        except Exception as e:
-            print(f"[ERROR] S3 데이터 수집 실패: {e}", flush=True)
-        
-        # IAM 사용자 수집
-        print(f"[DEBUG] IAM 사용자 수집 중...", flush=True)
-        iam_users = []
-        try:
-            response = iam.list_users()
-            for user in response['Users']:
-                username = user['UserName']
-                
-                # MFA 디바이스 확인
-                mfa_devices = iam.list_mfa_devices(UserName=username)
-                has_mfa = len(mfa_devices['MFADevices']) > 0
-                
-                # 액세스 키 확인
-                access_keys = iam.list_access_keys(UserName=username)
-                
-                iam_users.append({
-                    'username': username,
-                    'creation_date': user['CreateDate'],
-                    'mfa': has_mfa,
-                    'access_keys': [key['AccessKeyId'] for key in access_keys['AccessKeyMetadata']]
-                })
-        except Exception as e:
-            print(f"[ERROR] IAM 데이터 수집 실패: {e}", flush=True)
-        
-        # 보안 그룹 수집
-        print(f"[DEBUG] 보안 그룹 수집 중...", flush=True)
-        security_groups = []
-        try:
-            response = ec2.describe_security_groups()
-            for sg in response['SecurityGroups']:
-                # 위험한 규칙 확인 (0.0.0.0/0 허용)
-                risky_rules = []
-                for rule in sg.get('IpPermissions', []):
-                    for ip_range in rule.get('IpRanges', []):
-                        if ip_range.get('CidrIp') == '0.0.0.0/0':
-                            risky_rules.append({
-                                'protocol': rule.get('IpProtocol'),
-                                'port': rule.get('FromPort'),
-                                'cidr': '0.0.0.0/0'
-                            })
-                
-                security_groups.append({
-                    'id': sg['GroupId'],
-                    'name': sg['GroupName'],
-                    'description': sg['Description'],
-                    'risky_rules': risky_rules,
-                    'is_risky': len(risky_rules) > 0
-                })
-        except Exception as e:
-            print(f"[ERROR] 보안 그룹 데이터 수집 실패: {e}", flush=True)
-        
-        # 데이터 구조화
-        raw_data = {
-            'metadata': metadata,
-            'resources': {
-                'ec2': {
-                    'total': len(ec2_instances),
-                    'running': len([i for i in ec2_instances if i['state'] == 'running']),
-                    'instances': ec2_instances
-                },
-                's3': {
-                    'total': len(s3_buckets),
-                    'encrypted': len([b for b in s3_buckets if b['encrypted']]),
-                    'buckets': s3_buckets
-                },
-                'lambda': {'total': 0, 'functions': []},  # 추후 구현
-                'rds': {'total': 0, 'instances': []}  # 추후 구현
-            },
-            'iam_security': {
-                'users': {
-                    'total': len(iam_users),
-                    'mfa_enabled': len([u for u in iam_users if u['mfa']]),
-                    'details': iam_users
-                },
-                'issues': []  # 추후 분석
-            },
-            'security_groups': {
-                'total': len(security_groups),
-                'risky': len([sg for sg in security_groups if sg['is_risky']]),
-                'details': security_groups
-            },
-            'encryption': {
-                'ebs': {'total': 0, 'encrypted': 0, 'unencrypted_volumes': []},
-                's3': {
-                    'total': len(s3_buckets),
-                    'encrypted': len([b for b in s3_buckets if b['encrypted']]),
-                    'encrypted_rate': (len([b for b in s3_buckets if b['encrypted']]) / len(s3_buckets) * 100) if s3_buckets else 0
-                },
-                'rds': {'total': 0, 'encrypted': 0, 'encrypted_rate': 0.0}
-            },
-            'trusted_advisor': {'available': False, 'checks': []},
-            'cloudtrail_events': {
-                'period_days': 30,
-                'total_events': 0,
-                'critical_events': [],
-                'failed_logins': 0,
-                'permission_changes': 0,
-                'resource_deletions': 0
-            },
-            'cloudwatch': {
-                'alarms': {'total': 0, 'in_alarm': 0, 'ok': 0, 'insufficient_data': 0, 'details': []},
-                'high_cpu_instances': []
-            },
-            'recommendations': []
-        }
-        
-        print(f"[DEBUG] Raw 보안 데이터 수집 완료", flush=True)
-        return raw_data
-        
+        print(f"[DEBUG] ✅ EC2 수집 완료: {total}개 (running: {running}, stopped: {stopped})", flush=True)
     except Exception as e:
-        print(f"[ERROR] Raw 보안 데이터 수집 중 오류: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
-        return {}
-
-
-
-def generate_html_from_json(data):
-    """JSON 데이터를 HTML 보고서로 변환 (Slack bot 템플릿 사용)"""
+        print(f"[ERROR] ❌ EC2 수집 실패: {e}", flush=True)
+        report_data['resources']['ec2'] = {"summary": {"total": 0, "running": 0, "stopped": 0}, "instances": []}
+    
+    # 2. S3 버킷 수집 (Raw 데이터 + 추가 정보)
+    print(f"[DEBUG] 📦 S3 버킷 수집 중...", flush=True)
     try:
-        # 템플릿 파일 로드 시도
-        template_paths = [
-            'reference_templates/json_report_template.html',
-            '/tmp/reports/json_report_template.html',
-            'json_report_template.html'
-        ]
+        s3_response = s3.list_buckets()
+        buckets_raw = []
         
-        template = None
-        for template_path in template_paths:
+        for bucket in s3_response['Buckets']:
+            bucket_name = bucket['Name']
+            bucket_data = bucket.copy()  # 기본 정보 복사
+            
             try:
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    template = f.read()
-                print(f"[DEBUG] 템플릿 로드 성공: {template_path}", flush=True)
-                break
-            except FileNotFoundError:
-                continue
+                # 버킷 리전 확인
+                location = s3.get_bucket_location(Bucket=bucket_name)
+                bucket_data['Location'] = location.get('LocationConstraint') or 'us-east-1'
+                
+                # 암호화 확인
+                try:
+                    encryption_response = s3.get_bucket_encryption(Bucket=bucket_name)
+                    bucket_data['Encryption'] = encryption_response.get('ServerSideEncryptionConfiguration')
+                except:
+                    bucket_data['Encryption'] = None
+                
+                # 버저닝 확인
+                try:
+                    versioning_response = s3.get_bucket_versioning(Bucket=bucket_name)
+                    bucket_data['Versioning'] = versioning_response
+                except:
+                    bucket_data['Versioning'] = None
+                
+                # 퍼블릭 액세스 블록 확인
+                try:
+                    public_access_response = s3.get_public_access_block(Bucket=bucket_name)
+                    bucket_data['PublicAccessBlock'] = public_access_response.get('PublicAccessBlockConfiguration')
+                except:
+                    bucket_data['PublicAccessBlock'] = None  # 블록 설정 없음 = 퍼블릭 가능
+                
+                buckets_raw.append(bucket_data)
+            except Exception as e:
+                print(f"[DEBUG] 버킷 {bucket_name} 상세 정보 수집 실패: {e}", flush=True)
+                buckets_raw.append(bucket_data)  # 기본 정보라도 저장
         
-        # 템플릿이 없으면 기본 HTML 사용
-        if not template:
-            print(f"[DEBUG] 템플릿 파일 없음, 기본 HTML 생성", flush=True)
-            template = """<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AWS 월간 보안 점검 보고서 - {report_date}</title>
-    <style>
-        body {{ font-family: 'Malgun Gothic', sans-serif; margin: 20px; }}
-        .header {{ background: #232F3E; color: white; padding: 20px; border-radius: 5px; }}
-        .summary {{ background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; }}
-        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-        th {{ background-color: #f2f2f2; }}
-        .section {{ margin: 30px 0; }}
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>AWS 월간 보안 점검 보고서</h1>
-        <p>계정: {account_id} | 보고서 생성일: {report_date}</p>
-        <p>분석 기간: {period_start} ~ {period_end}</p>
-    </div>
-    <div class="summary">
-        <h2>📊 요약</h2>
-        <ul>
-            <li><strong>EC2 인스턴스:</strong> 총 {ec2_total}개 (실행 중: {ec2_running}개)</li>
-            <li><strong>S3 버킷:</strong> 총 {s3_total}개 (암호화: {s3_encrypted}개)</li>
-            <li><strong>IAM 사용자:</strong> 총 {iam_users_total}개 (MFA 활성화: {iam_mfa_enabled}개)</li>
-            <li><strong>보안 그룹:</strong> 총 {sg_total}개 (위험: {sg_risky}개)</li>
-        </ul>
-    </div>
-    <div class="section">
-        <h2>�️ EC2 인스턴스2</h2>
-        {ec2_rows}
-    </div>
-    <div class="section">
-        <h2>🪣 S3 버킷</h2>
-        {s3_rows}
-    </div>
-    <div class="section">
-        <h2>👤 IAM 보안</h2>
-        {iam_users_rows}
-    </div>
-</body>
-</html>"""
+        # 요약 정보 계산
+        encrypted_count = sum(1 for b in buckets_raw if b.get('Encryption') is not None)
+        public_count = sum(1 for b in buckets_raw if b.get('PublicAccessBlock') is None)
         
-        # 데이터 추출
-        metadata = data.get('metadata', {})
-        resources = data.get('resources', {})
-        iam_data = data.get('iam_security', {})
-        sg_data = data.get('security_groups', {})
+        report_data['resources']['s3'] = {
+            "summary": {
+                "total": len(buckets_raw),
+                "encrypted": encrypted_count,
+                "public": public_count
+            },
+            "buckets": buckets_raw  # Raw 데이터 (모든 버킷, 모든 필드)
+        }
+        print(f"[DEBUG] ✅ S3 수집 완료: {len(buckets_raw)}개 (암호화: {encrypted_count}, 퍼블릭: {public_count})", flush=True)
+    except Exception as e:
+        print(f"[ERROR] ❌ S3 수집 실패: {e}", flush=True)
+        report_data['resources']['s3'] = {"summary": {"total": 0, "encrypted": 0, "public": 0}, "buckets": []}
+    
+    # 3. Lambda 함수 수집 (Raw 데이터 저장)
+    print(f"[DEBUG] 📦 Lambda 함수 수집 중...", flush=True)
+    try:
+        lambda_client = session.client('lambda', region_name=region)
+        lambda_response = lambda_client.list_functions()
+        functions_raw = lambda_response.get('Functions', [])
         
-        # EC2 데이터
-        ec2_data = resources.get('ec2', {})
-        ec2_total = ec2_data.get('total', 0)
-        ec2_running = ec2_data.get('running', 0)
-        ec2_stopped = ec2_total - ec2_running
+        report_data['resources']['lambda'] = {
+            "summary": {
+                "total": len(functions_raw)
+            },
+            "functions": functions_raw  # Raw 데이터 (모든 필드 포함)
+        }
+        print(f"[DEBUG] ✅ Lambda 수집 완료: {len(functions_raw)}개", flush=True)
+    except Exception as e:
+        print(f"[ERROR] ❌ Lambda 수집 실패: {e}", flush=True)
+        report_data['resources']['lambda'] = {"summary": {"total": 0}, "functions": []}
+    
+    # 4. RDS 인스턴스 수집 (Raw 데이터 저장 - Multi-AZ, 엔진, 백업 등 모든 정보 포함)
+    print(f"[DEBUG] 📦 RDS 인스턴스 수집 중...", flush=True)
+    try:
+        rds_client = session.client('rds', region_name=region)
+        rds_response = rds_client.describe_db_instances()
+        db_instances_raw = rds_response.get('DBInstances', [])
         
-        # S3 데이터
-        s3_data = resources.get('s3', {})
-        s3_total = s3_data.get('total', 0)
-        s3_encrypted = s3_data.get('encrypted', 0)
-        s3_encrypted_rate = round((s3_encrypted / max(s3_total, 1)) * 100, 1) if s3_total > 0 else 0
+        report_data['resources']['rds'] = {
+            "summary": {
+                "total": len(db_instances_raw)
+            },
+            "instances": db_instances_raw  # Raw 데이터 (Multi-AZ, Engine, BackupRetentionPeriod 등 모두 포함)
+        }
+        print(f"[DEBUG] ✅ RDS 수집 완료: {len(db_instances_raw)}개", flush=True)
+    except Exception as e:
+        print(f"[ERROR] ❌ RDS 수집 실패: {e}", flush=True)
+        report_data['resources']['rds'] = {"summary": {"total": 0}, "instances": []}
+    
+    # 5. IAM 사용자 수집
+    print(f"[DEBUG] 📦 IAM 사용자 수집 중...", flush=True)
+    try:
+        iam_response = iam.list_users()
+        users = []
+        issues = []
         
-        # RDS 데이터
-        rds_data = resources.get('rds', {})
-        rds_total = rds_data.get('total', 0)
-        rds_multi_az = 0
+        for user in iam_response['Users']:
+            username = user['UserName']
+            
+            # MFA 확인
+            mfa_devices = iam.list_mfa_devices(UserName=username)
+            has_mfa = len(mfa_devices['MFADevices']) > 0
+            
+            # 액세스 키 확인
+            access_keys = iam.list_access_keys(UserName=username)
+            
+            users.append({
+                "username": username,
+                "mfa": has_mfa,
+                "access_keys": access_keys['AccessKeyMetadata'],
+                "policies": [],
+                "groups": []
+            })
+            
+            # MFA 미설정 이슈
+            if not has_mfa:
+                issues.append({
+                    "severity": "critical",
+                    "type": "no_mfa",
+                    "user": username,
+                    "description": "MFA 미설정"
+                })
         
-        # Lambda 데이터
-        lambda_data = resources.get('lambda', {})
-        lambda_total = lambda_data.get('total', 0)
+        report_data['iam_security'] = {
+            "users": {
+                "total": len(users),
+                "mfa_enabled": sum(1 for u in users if u['mfa']),
+                "details": users
+            },
+            "issues": issues
+        }
+        print(f"[DEBUG] ✅ IAM 수집 완료: {len(users)}명 (MFA 활성화: {sum(1 for u in users if u['mfa'])}명)", flush=True)
+    except Exception as e:
+        print(f"[ERROR] ❌ IAM 수집 실패: {e}", flush=True)
+        report_data['iam_security'] = {"users": {"total": 0, "mfa_enabled": 0, "details": []}, "issues": []}
+    
+    # 6. 보안 그룹 수집
+    print(f"[DEBUG] 📦 보안 그룹 수집 중...", flush=True)
+    try:
+        sg_response = ec2.describe_security_groups()
+        risky_sgs = []
+        total_risky_rules = 0
         
-        # IAM 데이터
-        iam_users = iam_data.get('users', {})
-        iam_total = iam_users.get('total', 0)
-        iam_mfa_enabled = iam_users.get('mfa_enabled', 0)
-        iam_mfa_rate = round((iam_mfa_enabled / max(iam_total, 1)) * 100, 1) if iam_total > 0 else 0
+        for sg in sg_response['SecurityGroups']:
+            risky_rules = []
+            for rule in sg.get('IpPermissions', []):
+                for ip_range in rule.get('IpRanges', []):
+                    if ip_range.get('CidrIp') == '0.0.0.0/0':
+                        port = rule.get('FromPort', 'all')
+                        risky_rules.append({
+                            "port": port,
+                            "protocol": rule.get('IpProtocol', 'all'),
+                            "source": "0.0.0.0/0",
+                            "risk_level": "high" if port in [22, 3389, 3306, 5432] else "medium",
+                            "description": f"포트 {port} 전체 오픈"
+                        })
+            
+            if risky_rules:
+                risky_sgs.append({
+                    "id": sg['GroupId'],
+                    "name": sg['GroupName'],
+                    "vpc": sg.get('VpcId', 'N/A'),
+                    "risky_rules": risky_rules
+                })
+                total_risky_rules += len(risky_rules)
         
-        # 보안 그룹 데이터
-        sg_total = sg_data.get('total', 0)
-        sg_risky = sg_data.get('risky', 0)
+        report_data['security_groups'] = {
+            "total": len(sg_response['SecurityGroups']),
+            "risky": total_risky_rules,
+            "details": risky_sgs[:5]  # 처음 5개만 표시
+        }
+        print(f"[DEBUG] ✅ 보안 그룹 수집 완료: {len(sg_response['SecurityGroups'])}개 (위험 규칙: {total_risky_rules}개)", flush=True)
+    except Exception as e:
+        print(f"[ERROR] ❌ 보안 그룹 수집 실패: {e}", flush=True)
+        report_data['security_groups'] = {"total": 0, "risky": 0, "details": []}
+    
+    # 7. 암호화 상태 수집
+    print(f"[DEBUG] 📦 암호화 상태 수집 중...", flush=True)
+    try:
+        volumes_response = ec2.describe_volumes()
+        volumes = volumes_response['Volumes']
+        encrypted_volumes = [v for v in volumes if v.get('Encrypted', False)]
+        unencrypted_volumes = [v['VolumeId'] for v in volumes if not v.get('Encrypted', False)]
         
-        # 암호화 데이터
-        encryption_data = data.get('encryption', {})
-        ebs_data = encryption_data.get('ebs', {})
-        rds_encryption = encryption_data.get('rds', {})
+        # S3, RDS 요약 정보 가져오기 (새 구조 반영)
+        s3_total = report_data['resources']['s3']['summary']['total']
+        s3_encrypted = report_data['resources']['s3']['summary']['encrypted']
+        rds_total = report_data['resources']['rds']['summary']['total']
         
-        ebs_total = ebs_data.get('total', 0)
-        ebs_encrypted = ebs_data.get('encrypted', 0)
-        ebs_rate = round((ebs_encrypted / max(ebs_total, 1)) * 100, 1) if ebs_total > 0 else 0
+        # RDS 암호화 상태 계산
+        rds_instances = report_data['resources']['rds'].get('instances', [])
+        rds_encrypted = sum(1 for instance in rds_instances if instance.get('StorageEncrypted', False))
+        rds_encrypted_rate = rds_encrypted / rds_total if rds_total > 0 else 0.0
         
-        rds_encrypted = rds_encryption.get('encrypted', 0)
-        rds_encrypted_rate = round(rds_encryption.get('encrypted_rate', 0) * 100, 1)
+        report_data['encryption'] = {
+            "ebs": {
+                "total": len(volumes),
+                "encrypted": len(encrypted_volumes),
+                "unencrypted_volumes": unencrypted_volumes[:16]  # 처음 16개만
+            },
+            "s3": {
+                "total": s3_total,
+                "encrypted": s3_encrypted,
+                "encrypted_rate": s3_encrypted / s3_total if s3_total > 0 else 0.0
+            },
+            "rds": {
+                "total": rds_total,
+                "encrypted": rds_encrypted,
+                "encrypted_rate": rds_encrypted_rate
+            }
+        }
+        print(f"[DEBUG] ✅ 암호화 수집 완료: EBS {len(encrypted_volumes)}/{len(volumes)} 암호화됨", flush=True)
+    except Exception as e:
+        print(f"[ERROR] ❌ 암호화 상태 수집 실패: {e}", flush=True)
+        report_data['encryption'] = {"ebs": {"total": 0, "encrypted": 0, "unencrypted_volumes": []}, "s3": {"total": 0, "encrypted": 0, "encrypted_rate": 0.0}, "rds": {"total": 0, "encrypted": 0, "encrypted_rate": 0.0}}
+    
+    # 8. Trusted Advisor 수집 (가장 중요!)
+    print(f"[DEBUG] 🔍 Trusted Advisor 수집 중... (이게 핵심!)", flush=True)
+    try:
+        # TA 체크 목록 가져오기
+        ta_checks_response = support.describe_trusted_advisor_checks(language='en')
+        checks = ta_checks_response['checks']
+        print(f"[DEBUG] TA 전체 체크 개수: {len(checks)}개", flush=True)
         
-        # 행 생성
-        ec2_rows = generate_ec2_rows(ec2_data.get('instances', []))
-        s3_rows = generate_s3_rows(s3_data.get('buckets', []))
-        iam_users_rows = generate_iam_users_rows(iam_users.get('details', []))
-        sg_risky_rows = generate_sg_risky_rows(sg_data.get('details', []))
+        ta_results = []
+        for check in checks:
+            check_id = check['id']
+            check_name = check['name']
+            check_category = check['category']
+            
+            try:
+                # 각 체크 결과 가져오기
+                result_response = support.describe_trusted_advisor_check_result(checkId=check_id, language='en')
+                result = result_response['result']
+                
+                status = result['status']
+                flagged_resources = len(result.get('flaggedResources', []))
+                
+                # 문제가 있는 체크만 포함
+                if status in ['warning', 'error'] and flagged_resources > 0:
+                    # 한글 번역
+                    category_kr = {
+                        'security': '보안',
+                        'cost_optimizing': '비용 최적화',
+                        'performance': '성능',
+                        'fault_tolerance': '내결함성',
+                        'service_limits': '서비스 한도'
+                    }.get(check_category, check_category)
+                    
+                    ta_results.append({
+                        "category": category_kr,
+                        "name": check_name,  # 영문 그대로 (한글 번역은 템플릿에서)
+                        "status": status,
+                        "flagged_resources": flagged_resources,
+                        "details": []  # 상세 정보는 생략 (개수만 표시)
+                    })
+                    print(f"[DEBUG] TA 이슈 발견: [{category_kr}] {check_name} - {flagged_resources}개", flush=True)
+            except Exception as e:
+                print(f"[DEBUG] TA 체크 {check_name} 결과 수집 실패: {e}", flush=True)
         
-        # 템플릿 변수 생성
-        template_vars = {
-            'account_id': metadata.get('account_id', 'Unknown'),
-            'region': metadata.get('region', 'ap-northeast-2'),
-            'report_date': metadata.get('report_date', ''),
-            'period_start': metadata.get('period_start', ''),
-            'period_end': metadata.get('period_end', ''),
-            'ec2_total': ec2_total,
-            'ec2_running': ec2_running,
-            'ec2_stopped': ec2_stopped,
-            'ec2_rows': ec2_rows,
-            's3_total': s3_total,
-            's3_encrypted': s3_encrypted,
-            's3_encrypted_rate': s3_encrypted_rate,
-            's3_rows': s3_rows,
-            'rds_total': rds_total,
-            'rds_multi_az': rds_multi_az,
-            'rds_content': generate_rds_content(rds_data.get('instances', [])),
-            'lambda_total': lambda_total,
-            'lambda_content': generate_lambda_content(lambda_data.get('functions', [])),
-            'iam_users_total': iam_total,
-            'iam_mfa_enabled': iam_mfa_enabled,
-            'iam_mfa_rate': iam_mfa_rate,
-            'iam_users_rows': iam_users_rows,
-            'sg_total': sg_total,
-            'sg_risky': sg_risky,
-            'sg_risky_rows': sg_risky_rows,
-            'ebs_total': ebs_total,
-            'ebs_encrypted': ebs_encrypted,
-            'ebs_rate': ebs_rate,
-            'ebs_compliance_class': get_compliance_class(ebs_rate),
-            'rds_encrypted': rds_encrypted,
-            'rds_encrypted_rate': rds_encrypted_rate,
-            'rds_compliance_class': get_compliance_class(rds_encrypted_rate),
-            's3_compliance_class': get_compliance_class(s3_encrypted_rate),
-            'critical_issues_count': 0,
-            'critical_issues_section': '<div class="no-data">Critical 이슈가 없습니다</div>',
-            'ta_security_error': 0,
-            'ta_security_warning': 0,
-            'ta_fault_tolerance_error': 0,
-            'ta_fault_tolerance_warning': 0,
-            'ta_cost_warning': 0,
-            'ta_performance_warning': 0,
-            'ta_error_rows': '<tr><td colspan="4" class="no-data">Trusted Advisor 데이터 없음</td></tr>',
-            'cloudtrail_days': 30,
-            'cloudtrail_critical_rows': '<tr><td colspan="5" class="no-data">CloudTrail 데이터 없음</td></tr>',
-            'cloudwatch_alarms_total': 0,
-            'cloudwatch_alarms_in_alarm': 0,
-            'cloudwatch_alarms_ok': 0,
-            'cloudwatch_alarms_insufficient': 0,
-            'cloudwatch_alarm_rows': '<tr><td colspan="4" class="no-data">CloudWatch 알람 없음</td></tr>',
-            'ebs_unencrypted_section': '<div class="no-data">EBS 미암호화 볼륨이 없습니다</div>',
-            's3_security_issues_section': '<div class="no-data">S3 보안 이슈가 없습니다</div>',
+        report_data['trusted_advisor'] = {
+            "available": True,
+            "checks": ta_results
+        }
+        print(f"[DEBUG] ✅ Trusted Advisor 수집 완료: {len(ta_results)}개 이슈 발견!", flush=True)
+    except Exception as e:
+        print(f"[ERROR] ❌ Trusted Advisor 수집 실패: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        report_data['trusted_advisor'] = {"available": False, "checks": []}
+    
+    # 9. CloudTrail 이벤트 수집 (정확한 기간, UTC+9)
+    print(f"[DEBUG] 📦 CloudTrail 이벤트 수집 중 ({start_date_str} ~ {end_date_str})...", flush=True)
+    try:
+        from datetime import datetime as dt, timezone
+        
+        # UTC+9 (한국 시간) 적용
+        kst = timezone(timedelta(hours=9))
+        
+        # 시작일 00:00:00 KST → UTC 변환
+        start_time_kst = dt.strptime(start_date_str, "%Y-%m-%d").replace(hour=0, minute=0, second=0, tzinfo=kst)
+        start_time_utc = start_time_kst.astimezone(timezone.utc)
+        
+        # 종료일 23:59:59 KST → UTC 변환
+        end_time_kst = dt.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=kst)
+        end_time_utc = end_time_kst.astimezone(timezone.utc)
+        
+        print(f"[DEBUG] CloudTrail 조회 기간 (UTC): {start_time_utc} ~ {end_time_utc}", flush=True)
+        
+        # 보안 관점에서 중요한 이벤트 목록 (우선순위 순)
+        critical_events = {
+            # 🔴 Critical - 데이터 손실 및 서비스 중단
+            'DeleteBucket': {'severity': 'critical', 'category': 'data_loss', 'description': 'S3 버킷 삭제'},
+            'DeleteDBInstance': {'severity': 'critical', 'category': 'data_loss', 'description': 'RDS 인스턴스 삭제'},
+            'TerminateInstances': {'severity': 'critical', 'category': 'service_disruption', 'description': 'EC2 인스턴스 종료'},
+            'DeleteUser': {'severity': 'critical', 'category': 'account_security', 'description': 'IAM 사용자 삭제'},
+            'DeleteAccessKey': {'severity': 'critical', 'category': 'account_security', 'description': 'IAM 액세스 키 삭제'},
+            
+            # 🟡 High - 보안 설정 변경
+            'PutBucketPolicy': {'severity': 'high', 'category': 'permission_change', 'description': 'S3 버킷 정책 변경'},
+            'AuthorizeSecurityGroupIngress': {'severity': 'high', 'category': 'network_security', 'description': '보안 그룹 인바운드 규칙 추가'},
+            'CreateAccessKey': {'severity': 'high', 'category': 'account_security', 'description': '새 액세스 키 생성'},
+            'PutUserPolicy': {'severity': 'high', 'category': 'permission_change', 'description': 'IAM 사용자 정책 변경'},
+            'AttachUserPolicy': {'severity': 'high', 'category': 'permission_change', 'description': 'IAM 사용자 정책 연결'},
         }
         
-        # 템플릿에 변수 적용
-        html_content = template.format(**template_vars)
+        # 각 중요 이벤트별로 수집
+        critical_events_data = {}
+        total_collected = 0
         
-        return html_content
+        for event_name, event_info in critical_events.items():
+            print(f"[DEBUG] 🔍 {event_name} 이벤트 조회 중...", flush=True)
+            
+            try:
+                # 해당 이벤트만 조회 (최대 50개)
+                events_response = cloudtrail.lookup_events(
+                    StartTime=start_time_utc,
+                    EndTime=end_time_utc,
+                    LookupAttributes=[
+                        {'AttributeKey': 'EventName', 'AttributeValue': event_name}
+                    ],
+                    MaxResults=50
+                )
+                
+                events = events_response.get('Events', [])
+                
+                if events:
+                    critical_events_data[event_name] = {
+                        'severity': event_info['severity'],
+                        'category': event_info['category'],
+                        'description': event_info['description'],
+                        'count': len(events),
+                        'events': events  # Raw 이벤트 데이터
+                    }
+                    total_collected += len(events)
+                    print(f"[DEBUG] ✅ {event_name}: {len(events)}개 발견", flush=True)
+                else:
+                    # 이벤트가 없어도 기록 (0건)
+                    critical_events_data[event_name] = {
+                        'severity': event_info['severity'],
+                        'category': event_info['category'],
+                        'description': event_info['description'],
+                        'count': 0,
+                        'events': []
+                    }
+                    
+            except Exception as e:
+                print(f"[DEBUG] ⚠️ {event_name} 조회 실패: {e}", flush=True)
+                critical_events_data[event_name] = {
+                    'severity': event_info['severity'],
+                    'category': event_info['category'],
+                    'description': event_info['description'],
+                    'count': 0,
+                    'events': [],
+                    'error': str(e)
+                }
         
+        period_days = (end_time_kst - start_time_kst).days + 1
+        
+        report_data['cloudtrail_events'] = {
+            "summary": {
+                "period_days": period_days,
+                "total_critical_events": total_collected,
+                "monitored_event_types": len(critical_events)
+            },
+            "critical_events": critical_events_data  # 이벤트 타입별로 구조화된 데이터
+        }
+        print(f"[DEBUG] ✅ CloudTrail 중요 이벤트 수집 완료: {total_collected}개 ({period_days}일간)", flush=True)
     except Exception as e:
-        print(f"[ERROR] HTML 생성 실패: {e}", flush=True)
+        print(f"[ERROR] ❌ CloudTrail 수집 실패: {e}", flush=True)
         import traceback
         traceback.print_exc()
-        return "<html><body><h1>보고서 생성 실패</h1></body></html>"
-
-def generate_s3_rows(buckets):
-    """S3 버킷 테이블 행 생성"""
-    if not buckets:
-        return '<tr><td colspan="6" class="no-data">S3 버킷이 없습니다</td></tr>'
+        report_data['cloudtrail_events'] = {"summary": {"period_days": 30, "total_critical_events": 0, "monitored_event_types": 0}, "critical_events": {}}
     
-    rows = []
-    for bucket in buckets:
-        encryption = bucket.get('encryption', {})
-        encrypted = encryption.get('enabled', False) or bucket.get('encrypted', False)
-        encryption_icon = '🔒' if encrypted else '🔓'
-        encryption_text = '활성화' if encrypted else '비활성화'
-        
-        versioning = bucket.get('versioning', {})
-        versioning_enabled = versioning.get('enabled', False)
-        versioning_icon = '✅' if versioning_enabled else '❌'
-        
-        public_access = bucket.get('public_access', {})
-        is_public = public_access.get('is_public', False)
-        public_icon = '⚠️' if is_public else '🔒'
-        public_text = '퍼블릭' if is_public else '프라이빗'
-        
-        creation_date = bucket.get('creation_date', 'N/A')
-        if hasattr(creation_date, 'strftime'):
-            creation_date = creation_date.strftime('%Y-%m-%d')
-        
-        rows.append(f"""
-        <tr>
-            <td>{bucket.get('name', 'Unknown')}</td>
-            <td>{bucket.get('region', 'Unknown')}</td>
-            <td>{encryption_icon} {encryption_text}</td>
-            <td>{versioning_icon} {'활성화' if versioning_enabled else '비활성화'}</td>
-            <td>{public_icon} {public_text}</td>
-            <td>{creation_date}</td>
-        </tr>
-        """)
-    
-    return ''.join(rows)
-
-def convert_qcli_json_to_template_format(data):
-    """Q CLI가 생성한 JSON 구조를 템플릿 형식으로 변환 (Slack bot과 동일)"""
+    # 10. CloudWatch 알람 수집 (Raw 데이터 저장)
+    print(f"[DEBUG] 📦 CloudWatch 알람 수집 중...", flush=True)
     try:
-        print(f"[DEBUG] JSON 구조 변환 시작", flush=True)
+        alarms_response = cloudwatch.describe_alarms()
+        alarms_raw = alarms_response['MetricAlarms']
         
-        # resources 섹션 변환
-        if 'resources' in data:
-            resources = data['resources']
-            new_resources = {}
-            
-            # ec2_instances → ec2
-            if 'ec2_instances' in resources:
-                new_resources['ec2'] = resources['ec2_instances']
-            elif 'ec2' in resources:
-                new_resources['ec2'] = resources['ec2']
-            else:
-                new_resources['ec2'] = {'total': 0, 'running': 0, 'instances': []}
-            
-            # s3_buckets → s3
-            if 's3_buckets' in resources:
-                new_resources['s3'] = resources['s3_buckets']
-            elif 's3' in resources:
-                new_resources['s3'] = resources['s3']
-            else:
-                new_resources['s3'] = {'total': 0, 'encrypted': 0, 'buckets': []}
-            
-            # lambda 함수
-            if 'lambda' in resources or 'lambda_functions' in resources:
-                new_resources['lambda'] = resources.get('lambda') or resources.get('lambda_functions', {'total': 0, 'functions': []})
-            else:
-                new_resources['lambda'] = {'total': 0, 'functions': []}
-            
-            # rds_instances → rds
-            if 'rds_instances' in resources:
-                new_resources['rds'] = resources['rds_instances']
-            elif 'rds' in resources:
-                new_resources['rds'] = resources['rds']
-            else:
-                new_resources['rds'] = {'total': 0, 'instances': []}
-            
-            data['resources'] = new_resources
+        # 요약 정보 계산
+        total = len(alarms_raw)
+        in_alarm = sum(1 for a in alarms_raw if a['StateValue'] == 'ALARM')
+        ok = sum(1 for a in alarms_raw if a['StateValue'] == 'OK')
+        insufficient_data = sum(1 for a in alarms_raw if a['StateValue'] == 'INSUFFICIENT_DATA')
         
-        # 기본값 설정 (누락된 섹션)
-        if 'iam_security' not in data:
-            data['iam_security'] = {'users': {'total': 0, 'mfa_enabled': 0, 'details': []}, 'issues': []}
-        
-        if 'security_groups' not in data:
-            data['security_groups'] = {'total': 0, 'risky': 0, 'details': []}
-        
-        if 'encryption' not in data:
-            data['encryption'] = {
-                'ebs': {'total': 0, 'encrypted': 0, 'unencrypted_volumes': []},
-                's3': {'total': 0, 'encrypted': 0, 'encrypted_rate': 0.0},
-                'rds': {'total': 0, 'encrypted': 0, 'encrypted_rate': 0.0}
-            }
-        
-        if 'trusted_advisor' not in data:
-            data['trusted_advisor'] = {'available': False, 'checks': []}
-        
-        if 'cloudtrail_events' not in data:
-            data['cloudtrail_events'] = {
-                'period_days': 30, 'total_events': 0, 'critical_events': [],
-                'failed_logins': 0, 'permission_changes': 0, 'resource_deletions': 0
-            }
-        
-        if 'cloudwatch' not in data:
-            data['cloudwatch'] = {
-                'alarms': {'total': 0, 'in_alarm': 0, 'ok': 0, 'insufficient_data': 0, 'details': []},
-                'high_cpu_instances': []
-            }
-        
-        if 'recommendations' not in data:
-            data['recommendations'] = []
-        
-        print(f"[DEBUG] JSON 구조 변환 완료", flush=True)
-        return data
-        
+        report_data['cloudwatch'] = {
+            "summary": {
+                "total": total,
+                "in_alarm": in_alarm,
+                "ok": ok,
+                "insufficient_data": insufficient_data
+            },
+            "alarms": alarms_raw  # Raw 데이터 (AlarmName, StateValue, MetricName, Threshold 등 모든 필드)
+        }
+        print(f"[DEBUG] ✅ CloudWatch 수집 완료: {total}개 알람 (ALARM: {in_alarm}, OK: {ok})", flush=True)
     except Exception as e:
-        print(f"[ERROR] JSON 구조 변환 실패: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
-        return data
+        print(f"[ERROR] ❌ CloudWatch 수집 실패: {e}", flush=True)
+        report_data['cloudwatch'] = {"summary": {"total": 0, "in_alarm": 0, "ok": 0, "insufficient_data": 0}, "alarms": []}
+    
+    # 11. 권장사항 생성
+    print(f"[DEBUG] 📝 권장사항 생성 중...", flush=True)
+    recommendations = []
+    
+    # MFA 권장사항
+    if report_data['iam_security']['users']['mfa_enabled'] < report_data['iam_security']['users']['total']:
+        recommendations.append({
+            "priority": "critical",
+            "category": "security",
+            "title": "모든 IAM 사용자에 MFA 설정 필요",
+            "description": f"{report_data['iam_security']['users']['total'] - report_data['iam_security']['users']['mfa_enabled']}명의 IAM 사용자가 MFA를 설정하지 않았습니다.",
+            "affected_resources": [u['username'] for u in report_data['iam_security']['users']['details'] if not u['mfa']],
+            "action": "모든 IAM 사용자에 대해 MFA를 활성화하고 정기적으로 검토하세요."
+        })
+    
+    # 보안 그룹 권장사항
+    if report_data['security_groups']['risky'] > 0:
+        recommendations.append({
+            "priority": "critical",
+            "category": "security",
+            "title": "보안 그룹 규칙 강화 필요",
+            "description": f"{report_data['security_groups']['risky']}개의 위험한 보안 그룹 규칙이 발견되었습니다.",
+            "affected_resources": [sg['id'] for sg in report_data['security_groups']['details']],
+            "action": "보안 그룹 규칙을 검토하고 필요한 IP 범위로만 제한하세요."
+        })
+    
+    # EBS 암호화 권장사항
+    if report_data['encryption']['ebs']['total'] > 0 and report_data['encryption']['ebs']['encrypted'] < report_data['encryption']['ebs']['total']:
+        recommendations.append({
+            "priority": "high",
+            "category": "security",
+            "title": "EBS 볼륨 암호화 활성화",
+            "description": f"{report_data['encryption']['ebs']['total'] - report_data['encryption']['ebs']['encrypted']}개의 EBS 볼륨이 암호화되지 않았습니다.",
+            "affected_resources": report_data['encryption']['ebs']['unencrypted_volumes'][:5],
+            "action": "새로운 EBS 볼륨에 대해 기본 암호화를 활성화하고 기존 볼륨을 암호화된 볼륨으로 마이그레이션하세요."
+        })
+    
+    # S3 암호화 권장사항 (새 구조 반영)
+    s3_total = report_data['resources']['s3']['summary']['total']
+    s3_encrypted = report_data['resources']['s3']['summary']['encrypted']
+    if s3_total > 0 and s3_encrypted < s3_total:
+        # 암호화되지 않은 버킷 찾기
+        unencrypted_buckets = [b['Name'] for b in report_data['resources']['s3']['buckets'] if b.get('Encryption') is None]
+        recommendations.append({
+            "priority": "high",
+            "category": "security",
+            "title": "S3 버킷 암호화 설정",
+            "description": f"{s3_total - s3_encrypted}개의 S3 버킷이 암호화되지 않았습니다.",
+            "affected_resources": unencrypted_buckets[:5],
+            "action": "모든 S3 버킷에 대해 서버 측 암호화(SSE)를 활성화하세요."
+        })
+    
+    report_data['recommendations'] = recommendations
+    print(f"[DEBUG] ✅ 권장사항 생성 완료: {len(recommendations)}개", flush=True)
+    
+    print(f"[DEBUG] 🎉 boto3 데이터 수집 완료! 정확한 데이터를 수집했습니다.", flush=True)
+    
+    # datetime 객체를 JSON 직렬화 가능한 형식으로 변환
+    print(f"[DEBUG] 📝 datetime 객체 변환 중...", flush=True)
+    report_data = convert_datetime_to_json_serializable(report_data)
+    print(f"[DEBUG] ✅ datetime 변환 완료", flush=True)
+    
+    return report_data
+
+
+
+
 
 def generate_html_report(json_file_path):
-    """JSON 데이터를 월간 보안 점검 HTML 보고서로 변환 (Slack bot과 동일)"""
+    """JSON 데이터를 월간 보안 점검 HTML 보고서로 변환"""
     try:
         with open(json_file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        # JSON 구조 변환
-        data = convert_qcli_json_to_template_format(data)
-
         # HTML 템플릿 읽기
-        # 여러 경로 시도 (상대경로, 절대경로)
-        template_paths = [
-            'reference_templates/json_report_template.html',
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reference_templates', 'json_report_template.html'),
-            '/home/ec2-user/aws-zendesk-assistant/reference_templates/json_report_template.html',
-        ]
-        
-        template = None
-        for template_path in template_paths:
-            try:
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    template = f.read()
-                print(f"[DEBUG] 템플릿 로드 성공: {template_path}", flush=True)
-                break
-            except FileNotFoundError:
-                print(f"[DEBUG] 템플릿 파일 없음: {template_path}", flush=True)
-                continue
-        
-        if not template:
-            raise FileNotFoundError("템플릿 파일을 찾을 수 없습니다")
+        template_path = os.path.join(os.path.dirname(__file__), 'templates', 'json_report_template.html')
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template = f.read()
 
         # 기본 메타데이터
         metadata = data.get('metadata', {})
@@ -1003,25 +1027,13 @@ def generate_html_report(json_file_path):
         
         # CloudWatch 데이터 처리
         cw_data = data.get('cloudwatch', {})
-        cw_alarms = cw_data.get('alarms', {})
-        if isinstance(cw_alarms, dict):
-            cw_alarms_list = cw_alarms.get('details', [])
-            cw_summary = {
-                'total': cw_alarms.get('total', 0),
-                'in_alarm': cw_alarms.get('in_alarm', 0),
-                'ok': cw_alarms.get('ok', 0),
-                'insufficient_data': cw_alarms.get('insufficient_data', 0),
-            }
-        else:
-            cw_alarms_list = cw_alarms if isinstance(cw_alarms, list) else []
-            cw_summary = cw_data.get('summary', {})
-        
+        cw_summary = cw_data.get('summary', {})
         template_vars.update({
             'cloudwatch_alarms_total': cw_summary.get('total', 0),
             'cloudwatch_alarms_in_alarm': cw_summary.get('in_alarm', 0),
             'cloudwatch_alarms_ok': cw_summary.get('ok', 0),
             'cloudwatch_alarms_insufficient': cw_summary.get('insufficient_data', 0),
-            'cloudwatch_alarm_rows': generate_cloudwatch_rows(cw_alarms_list),
+            'cloudwatch_alarm_rows': generate_cloudwatch_rows(cw_data.get('alarms', [])),
         })
         
         # EBS 미암호화 섹션
@@ -1051,1162 +1063,4 @@ def generate_html_report(json_file_path):
         print(f"[ERROR] {traceback.format_exc()}", flush=True)
         return None
 
-# 월간 보고서 생성에 필요한 헬퍼 함수들 (Slack bot에서 복사)
-def generate_ec2_rows(instances):
-    """EC2 인스턴스 테이블 행 생성"""
-    if not instances:
-        return '<tr><td colspan="6" class="no-data">EC2 인스턴스가 없습니다</td></tr>'
-    
-    rows = []
-    for instance in instances:
-        # 인스턴스 이름 추출
-        name = "이름 없음"
-        for tag in instance.get('Tags', []):
-            if tag.get('Key') == 'Name':
-                name = tag.get('Value', '이름 없음')
-                break
-        
-        # 상태에 따른 아이콘
-        state = instance.get('State', {}).get('Name', 'unknown')
-        state_icon = '🟢' if state == 'running' else '🔴' if state == 'stopped' else '🟡'
-        
-        # 보안 그룹 정보
-        security_groups = []
-        for sg in instance.get('SecurityGroups', []):
-            security_groups.append(sg.get('GroupName', 'Unknown'))
-        sg_text = ', '.join(security_groups[:2])  # 최대 2개만 표시
-        if len(security_groups) > 2:
-            sg_text += f" 외 {len(security_groups) - 2}개"
-        
-        rows.append(f"""
-        <tr>
-            <td>{name}</td>
-            <td>{instance.get('InstanceId', 'Unknown')}</td>
-            <td>{state_icon} {state}</td>
-            <td>{instance.get('InstanceType', 'Unknown')}</td>
-            <td>{instance.get('Placement', {}).get('AvailabilityZone', 'Unknown')}</td>
-            <td>{sg_text}</td>
-        </tr>
-        """)
-    
-    return ''.join(rows)
-
-def generate_s3_rows(buckets):
-    """S3 버킷 테이블 행 생성"""
-    if not buckets:
-        return '<tr><td colspan="5" class="no-data">S3 버킷이 없습니다</td></tr>'
-    
-    rows = []
-    for bucket in buckets:
-        # 암호화 상태
-        encryption = bucket.get('encryption', {})
-        encrypted = encryption.get('enabled', False)
-        encryption_icon = '🔒' if encrypted else '🔓'
-        encryption_text = '활성화' if encrypted else '비활성화'
-        
-        # 버전 관리
-        versioning = bucket.get('versioning', {})
-        versioning_enabled = versioning.get('enabled', False)
-        versioning_icon = '✅' if versioning_enabled else '❌'
-        
-        # 퍼블릭 액세스
-        public_access = bucket.get('public_access', {})
-        is_public = public_access.get('is_public', False)
-        public_icon = '⚠️' if is_public else '🔒'
-        public_text = '퍼블릭' if is_public else '프라이빗'
-        
-        rows.append(f"""
-        <tr>
-            <td>{bucket.get('name', 'Unknown')}</td>
-            <td>{bucket.get('region', 'Unknown')}</td>
-            <td>{encryption_icon} {encryption_text}</td>
-            <td>{versioning_icon} {'활성화' if versioning_enabled else '비활성화'}</td>
-            <td>{public_icon} {public_text}</td>
-        </tr>
-        """)
-    
-    return ''.join(rows)
-
-def generate_rds_content(instances):
-    """RDS 인스턴스 콘텐츠 생성"""
-    if not instances:
-        return '<div class="no-data">RDS 인스턴스가 없습니다</div>'
-    
-    table = '<table class="data-table">'
-    table += '''
-    <thead>
-        <tr>
-            <th>인스턴스 ID</th>
-            <th>엔진</th>
-            <th>상태</th>
-            <th>Multi-AZ</th>
-            <th>암호화</th>
-        </tr>
-    </thead>
-    <tbody>
-    '''
-    
-    for instance in instances:
-        multi_az = instance.get('MultiAZ', False)
-        multi_az_icon = '✅' if multi_az else '❌'
-        
-        encrypted = instance.get('StorageEncrypted', False)
-        encryption_icon = '🔒' if encrypted else '🔓'
-        
-        table += f'''
-        <tr>
-            <td>{instance.get('DBInstanceIdentifier', 'Unknown')}</td>
-            <td>{instance.get('Engine', 'Unknown')}</td>
-            <td>{instance.get('DBInstanceStatus', 'Unknown')}</td>
-            <td>{multi_az_icon} {'활성화' if multi_az else '비활성화'}</td>
-            <td>{encryption_icon} {'활성화' if encrypted else '비활성화'}</td>
-        </tr>
-        '''
-    
-    table += '</tbody></table>'
-    return table
-
-def generate_lambda_content(functions):
-    """Lambda 함수 콘텐츠 생성"""
-    if not functions:
-        return '<div class="no-data">Lambda 함수가 없습니다</div>'
-    return '<div class="no-data">Lambda 함수가 없습니다</div>'
-
-def generate_iam_users_rows(users):
-    """IAM 사용자 테이블 행 생성"""
-    if not users:
-        return '<tr><td colspan="4" class="no-data">IAM 사용자가 없습니다</td></tr>'
-    
-    rows = []
-    for user in users:
-        mfa_enabled = user.get('mfa_enabled', False)
-        mfa_icon = '✅' if mfa_enabled else '❌'
-        
-        # 마지막 로그인 시간
-        last_login = user.get('password_last_used', 'N/A')
-        if last_login and last_login != 'N/A':
-            try:
-                # ISO 형식 날짜를 파싱하여 표시
-                from datetime import datetime
-                login_date = datetime.fromisoformat(last_login.replace('Z', '+00:00'))
-                last_login = login_date.strftime('%Y-%m-%d')
-            except:
-                pass
-        
-        rows.append(f"""
-        <tr>
-            <td>{user.get('username', 'Unknown')}</td>
-            <td>{mfa_icon} {'활성화' if mfa_enabled else '비활성화'}</td>
-            <td>{user.get('access_keys_count', 0)}</td>
-            <td>{last_login}</td>
-        </tr>
-        """)
-    
-    return ''.join(rows)
-
-def generate_sg_risky_rows(security_groups):
-    """보안 그룹 위험 규칙 테이블 행 생성"""
-    rows = []
-    for sg in security_groups:
-        if not sg.get('risky_rules'):
-            continue
-            
-        for rule in sg.get('risky_rules', []):
-            risk_level = rule.get('risk_level', 'medium')
-            risk_icon = '🔴' if risk_level == 'high' else '🟡'
-            
-            rows.append(f"""
-            <tr>
-                <td>{sg.get('group_name', 'Unknown')}</td>
-                <td>{rule.get('protocol', 'Unknown')}</td>
-                <td>{rule.get('port_range', 'Unknown')}</td>
-                <td>{rule.get('source', 'Unknown')}</td>
-                <td>{risk_icon} {risk_level.upper()}</td>
-            </tr>
-            """)
-    
-    return ''.join(rows)
-
-def get_compliance_class(rate):
-    """준수율에 따른 CSS 클래스 반환"""
-    if rate >= 90:
-        return 'good'
-    elif rate >= 70:
-        return 'warning'
-    else:
-        return 'critical'
-
-def calculate_critical_issues(data):
-    """Critical 이슈 계산"""
-    issues = []
-    # 간단한 구현 - 실제로는 더 복잡한 로직 필요
-    return issues
-
-def generate_critical_issues_section(issues):
-    """Critical 이슈 섹션 생성"""
-    if not issues:
-        return '<div class="no-data">Critical 이슈가 없습니다</div>'
-    return '<div class="no-data">Critical 이슈가 없습니다</div>'
-
-def process_trusted_advisor_data(checks):
-    """Trusted Advisor 데이터 처리"""
-    return {
-        'ta_security_error': 0,
-        'ta_security_warning': 0,
-        'ta_fault_tolerance_error': 0,
-        'ta_fault_tolerance_warning': 0,
-        'ta_cost_warning': 0,
-        'ta_performance_warning': 0,
-        'ta_error_rows': '<tr><td colspan="4" class="no-data">Trusted Advisor 데이터 없음</td></tr>',
-    }
-
-def generate_cloudtrail_rows(critical_events):
-    """CloudTrail 중요 이벤트 테이블 행 생성"""
-    if not critical_events:
-        return '<tr><td colspan="3" class="no-data">중요 이벤트가 없습니다</td></tr>'
-    
-    rows = []
-    for event_name, count in critical_events.items():
-        if count > 0:
-            rows.append(f"""
-            <tr>
-                <td>{event_name}</td>
-                <td>{count}</td>
-                <td>{'🔴 높음' if count > 10 else '🟡 보통'}</td>
-            </tr>
-            """)
-    
-    return ''.join(rows) if rows else '<tr><td colspan="3" class="no-data">중요 이벤트가 없습니다</td></tr>'
-
-def generate_cloudwatch_rows(alarms):
-    """CloudWatch 알람 테이블 행 생성"""
-    if not alarms:
-        return '<tr><td colspan="4" class="no-data">CloudWatch 알람이 없습니다</td></tr>'
-    
-    rows = []
-    for alarm in alarms:
-        # 문자열이 아닌 딕셔너리인지 확인
-        if not isinstance(alarm, dict):
-            continue
-        
-        name = alarm.get('AlarmName', alarm.get('name', 'N/A'))
-        state = alarm.get('StateValue', alarm.get('state', 'UNKNOWN'))
-        metric = alarm.get('MetricName', alarm.get('metric_name', 'N/A'))
-        threshold = alarm.get('Threshold', alarm.get('threshold', 'N/A'))
-        
-        state_class = {
-            'OK': 'ok',
-            'ALARM': 'error',
-            'INSUFFICIENT_DATA': 'warning'
-        }.get(state, 'warning')
-        
-        rows.append(f"""
-        <tr>
-            <td>{name}</td>
-            <td><span class="badge badge-{state_class}">{state}</span></td>
-            <td>{metric}</td>
-            <td>{threshold}</td>
-        </tr>
-        """)
-    
-    return ''.join(rows)
-
-def generate_ebs_unencrypted_section(ebs_data):
-    """EBS 미암호화 섹션 생성"""
-    return '<div class="no-data">EBS 미암호화 볼륨이 없습니다</div>'
-
-def generate_s3_security_issues_section(buckets):
-    """S3 보안 이슈 섹션 생성"""
-    return '<div class="no-data">S3 보안 이슈가 없습니다</div>'
-
-# Flask 라우트: 보고서 파일 제공 (여러 경로 지원)
-def serve_report_impl(filename):
-    """보고서 파일 제공 구현"""
-    try:
-        from flask import send_file, abort
-        
-        # 보안: 경로 조작 방지
-        if '..' in filename or filename.startswith('/'):
-            abort(400)
-        
-        file_path = os.path.join('/tmp/reports', filename)
-        
-        # 파일 존재 여부 확인
-        if not os.path.exists(file_path):
-            print(f"[DEBUG] 보고서 파일 없음: {file_path}", flush=True)
-            abort(404)
-        
-        # 디렉터리인 경우 index.html 제공
-        if os.path.isdir(file_path):
-            index_path = os.path.join(file_path, 'index.html')
-            if os.path.exists(index_path):
-                print(f"[DEBUG] 디렉터리 인덱스 제공: {index_path}", flush=True)
-                return send_file(index_path, mimetype='text/html')
-            else:
-                abort(404)
-        
-        # 파일 제공
-        print(f"[DEBUG] 보고서 파일 제공: {file_path}", flush=True)
-        
-        # MIME 타입 결정
-        if filename.endswith('.html'):
-            mimetype = 'text/html'
-        elif filename.endswith('.css'):
-            mimetype = 'text/css'
-        elif filename.endswith('.js'):
-            mimetype = 'application/javascript'
-        elif filename.endswith('.json'):
-            mimetype = 'application/json'
-        elif filename.endswith('.png'):
-            mimetype = 'image/png'
-        elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
-            mimetype = 'image/jpeg'
-        elif filename.endswith('.gif'):
-            mimetype = 'image/gif'
-        elif filename.endswith('.svg'):
-            mimetype = 'image/svg+xml'
-        else:
-            mimetype = 'application/octet-stream'
-        
-        return send_file(file_path, mimetype=mimetype)
-        
-    except Exception as e:
-        print(f"[ERROR] 보고서 파일 제공 중 오류: {str(e)}", flush=True)
-        abort(500)
-
-# 경로 1: /reports/
-@app.route('/reports/<path:filename>')
-def serve_report(filename):
-    """보고서 파일 제공 (/reports/)"""
-    return serve_report_impl(filename)
-
-# 경로 2: /zendesk/reports/ (ALB가 /zendesk/ 경로를 라우팅하는 경우)
-@app.route('/zendesk/reports/<path:filename>')
-def serve_report_zendesk(filename):
-    """보고서 파일 제공 (/zendesk/reports/)"""
-    return serve_report_impl(filename)
-
-@socketio.on('connect', namespace='/zendesk')
-def handle_connect():
-    """클라이언트 연결 시"""
-    from flask import request
-    print(f"[DEBUG] 클라이언트 연결됨: {request.sid}", flush=True)
-    active_sessions.add(request.sid)
-    print(f"[DEBUG] 활성 세션 목록: {active_sessions}", flush=True)
-    
-    # 진행 중인 작업이 있는지 확인하고 상태 복구
-    ongoing_tasks = [q for q in processing_questions if q.startswith('zendesk_user:')]
-    if ongoing_tasks:
-        print(f"[DEBUG] 진행 중인 작업 발견: {ongoing_tasks}", flush=True)
-        
-        # 가장 최근 진행 상태 찾기
-        latest_progress = None
-        for task in ongoing_tasks:
-            if task in current_progress:
-                latest_progress = current_progress[task]
-                break
-        
-        if latest_progress:
-            print(f"[DEBUG] 최근 진행 상태 복구: {latest_progress}", flush=True)
-            emit('progress', latest_progress)
-        else:
-            emit('progress', {'progress': 50, 'message': '이전 작업을 계속 진행하고 있습니다...'})
-    
-    emit('connected', {'message': 'Saltware AWS Assistant에 연결되었습니다!'})
-
-@socketio.on('disconnect', namespace='/zendesk')
-def handle_disconnect():
-    """클라이언트 연결 해제 시"""
-    from flask import request
-    print(f"[DEBUG] 클라이언트 연결 해제됨: {request.sid}", flush=True)
-    active_sessions.discard(request.sid)
-    print(f"[DEBUG] 활성 세션 목록: {active_sessions}", flush=True)
-
-@socketio.on('aws_query', namespace='/zendesk')
-def handle_aws_query(data):
-    """AWS 질문 처리"""
-    try:
-        from flask import request
-        
-        query = data.get('query', '').strip()
-        user_id = data.get('user_id', 'unknown')
-        ticket_id = data.get('ticket_id', 'unknown')
-        
-        if not query:
-            emit('error', {'message': '질문을 입력해주세요.'})
-            return
-        
-        # 질문 고유 키 생성
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        question_key = f"{user_id}:{ticket_id}:{timestamp}"
-        
-        if question_key in processing_questions:
-            emit('error', {'message': '이미 처리 중인 질문입니다.'})
-            return
-        
-        print(f"[DEBUG] 새 질문 처리: {question_key}", flush=True)
-        print(f"[DEBUG] 질문 내용: {query}", flush=True)
-        processing_questions.add(question_key)
-        
-        # 진행률 0% 전송
-        emit('progress', {'progress': 0, 'message': '질문을 분석하고 있습니다...'}, namespace='/zendesk')
-        
-        # 백그라운드에서 처리
-        thread = threading.Thread(
-            target=process_aws_question_async, 
-            args=(query, question_key, user_id, ticket_id, request.sid)
-        )
-        thread.daemon = True
-        thread.start()
-        
-    except Exception as e:
-        print(f"[ERROR] AWS 질문 처리 중 오류: {str(e)}", flush=True)
-        emit('error', {'message': f'질문 처리 중 오류가 발생했습니다: {str(e)}'}, namespace='/zendesk')
-
-def process_aws_question_async(query, question_key, user_id, ticket_id, session_id):
-    """비동기로 AWS 질문 처리 (기존 Slack bot 로직 포팅)"""
-    temp_dir = None
-    
-    def emit_to_client(event_type, data):
-        """클라이언트에게 이벤트 전송하는 통합 헬퍼 함수 (중복 전송 방지)"""
-        try:
-            print(f"[DEBUG] 이벤트 전송 시도: {event_type}, 데이터: {data}", flush=True)
-            
-            # 현재 활성 세션 확인
-            print(f"[DEBUG] 현재 활성 세션: {active_sessions}", flush=True)
-            print(f"[DEBUG] 대상 세션: {session_id}", flush=True)
-            
-            # 특정 세션으로만 전송 (중복 방지)
-            if session_id in active_sessions:
-                try:
-                    socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
-                    print(f"[DEBUG] ✅ 세션별 전송 완료: {event_type} -> 세션 {session_id}", flush=True)
-                except Exception as e:
-                    print(f"[WARNING] 세션별 전송 실패: {e}", flush=True)
-                    # 세션별 전송 실패 시에만 브로드캐스트로 폴백
-                    try:
-                        socketio.emit(event_type, data, namespace='/zendesk')
-                        print(f"[DEBUG] ✅ 폴백 브로드캐스트 전송 완료: {event_type}", flush=True)
-                    except Exception as fallback_error:
-                        print(f"[ERROR] 폴백 브로드캐스트도 실패: {fallback_error}", flush=True)
-            else:
-                print(f"[WARNING] 세션 {session_id}가 활성 목록에 없음, 브로드캐스트로 전송", flush=True)
-                # 세션이 없을 때만 브로드캐스트
-                try:
-                    socketio.emit(event_type, data, namespace='/zendesk')
-                    print(f"[DEBUG] ✅ 브로드캐스트 전송 완료: {event_type}", flush=True)
-                except Exception as e:
-                    print(f"[ERROR] 브로드캐스트 전송 실패: {e}", flush=True)
-            
-        except Exception as e:
-            print(f"[ERROR] 이벤트 전송 실패: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
-    
-    def emit_progress(progress, message):
-        """진행률 전송 헬퍼 함수"""
-        # 진행 상태 저장
-        current_progress[question_key] = {'progress': progress, 'message': message}
-        emit_to_client('progress', {'progress': progress, 'message': message})
-    
-    def emit_result(data):
-        """결과 전송 헬퍼 함수"""
-        emit_to_client('result', data)
-    
-    def emit_error(message):
-        """에러 전송 헬퍼 함수"""
-        emit_to_client('error', {'message': message})
-    
-    try:
-        print(f"[DEBUG] 질문 처리 중: {query} (세션: {session_id})", flush=True)
-        
-        # 진행률 10% - 계정 ID 추출
-        emit_progress(10, '계정 정보를 확인하고 있습니다...')
-        
-        # 계정 ID 추출
-        account_id = extract_account_id(query)
-        env_vars = os.environ.copy()
-        
-        # MCP 서버 초기화 타임아웃 설정
-        env_vars['Q_MCP_INIT_TIMEOUT'] = '10000'  # 10초
-        
-        account_prefix = ""
-        korean_prompt = ""  # 변수 초기화
-        context_content = ""  # 컨텍스트 내용 초기화
-        
-        if account_id:
-            print(f"[DEBUG] 계정 ID 발견: {account_id}", flush=True)
-            
-            # 진행률 20% - Cross-account 세션 생성
-            emit_progress(20, f'계정 {account_id} 접근 권한을 확인하고 있습니다...')
-            
-            # Cross-account 세션 생성
-            credentials = get_crossaccount_session(account_id)
-            if credentials:
-                # 세션 격리: 임시 디렉터리 생성
-                temp_dir = tempfile.mkdtemp(prefix=f'q_session_{account_id}_{question_key.replace(":", "_")}_')
-                print(f"[DEBUG] 임시 세션 디렉터리 생성: {temp_dir}", flush=True)
-                
-                # Q CLI 캐시 무효화
-                q_cache_dirs = [
-                    os.path.expanduser('~/.cache/q'),
-                    os.path.expanduser('~/.q'),
-                    '/tmp/q-cache'
-                ]
-                
-                for cache_dir in q_cache_dirs:
-                    if os.path.exists(cache_dir):
-                        try:
-                            shutil.rmtree(cache_dir)
-                            print(f"[DEBUG] Q CLI 캐시 삭제: {cache_dir}", flush=True)
-                        except Exception as e:
-                            print(f"[DEBUG] 캐시 삭제 실패 (무시): {cache_dir} - {e}", flush=True)
-                
-                # 환경 변수 설정
-                env_vars['AWS_CONFIG_FILE'] = os.path.join(temp_dir, 'config')
-                env_vars['AWS_SHARED_CREDENTIALS_FILE'] = os.path.join(temp_dir, 'credentials')
-                env_vars['AWS_ACCESS_KEY_ID'] = credentials['AWS_ACCESS_KEY_ID']
-                env_vars['AWS_SECRET_ACCESS_KEY'] = credentials['AWS_SECRET_ACCESS_KEY']
-                env_vars['AWS_SESSION_TOKEN'] = credentials['AWS_SESSION_TOKEN']
-                env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
-                env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
-                env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
-                
-                # 진행률 30% - 계정 검증
-                emit_progress(30, '계정 접근을 검증하고 있습니다...')
-                
-                # 계정 검증
-                verify_cmd = ['aws', 'sts', 'get-caller-identity', '--query', 'Account', '--output', 'text']
-                verify_result = subprocess.run(
-                    verify_cmd,
-                    capture_output=True,
-                    text=True,
-                    env=env_vars,
-                    timeout=10
-                )
-                
-                if verify_result.returncode == 0:
-                    actual_account = verify_result.stdout.strip()
-                    print(f"[DEBUG] 계정 검증 - 요청: {account_id}, 실제: {actual_account}", flush=True)
-                    
-                    if actual_account != account_id:
-                        print(f"[ERROR] 계정 불일치! 요청: {account_id}, 실제: {actual_account}", flush=True)
-                        emit_error(f'계정 자격증명 오류\n요청: {account_id}\n실제: {actual_account}')
-                        return
-                    else:
-                        print(f"[DEBUG] ✅ 계정 검증 성공: {actual_account}", flush=True)
-                else:
-                    print(f"[ERROR] 계정 검증 실패: {verify_result.stderr}", flush=True)
-                    emit_error(f'계정 검증 실패: {verify_result.stderr[:200]}')
-                    return
-                
-                account_prefix = f"🏢 계정 {account_id} 결과:\n\n"
-                query = re.sub(r'\b\d{12}\b', '', query).strip()
-                query = re.sub(r'계정\s*', '', query).strip()
-                query = re.sub(r'account\s*', '', query, flags=re.IGNORECASE).strip()
-                print(f"[DEBUG] 정리된 질문: {query}", flush=True)
-            else:
-                print(f"[DEBUG] 계정 {account_id} 접근 실패", flush=True)
-                emit_error(f'계정 {account_id}에 접근할 수 없습니다.')
-                return
-        
-        # 진행률 40% - 질문 유형 분석
-        emit_progress(40, '질문 유형을 분석하고 있습니다...')
-        
-        # 질문 유형 분석
-        question_type, context_path = analyze_question_type(query)
-        print(f"[DEBUG] 질문 유형: {question_type}, 컨텍스트: {context_path}", flush=True)
-        
-        # 컨텍스트 파일 로드 (모든 경우에 대해)
-        context_content = load_context_file(context_path) if context_path else ""
-        
-        # 기본 한국어 프롬프트 구성 (모든 경우에 대해)
-        korean_prompt = f"""다음 컨텍스트를 참고하여 질문에 답변해주세요:
-
-{context_content}
-
-=== 사용자 질문 ===
-{query}
-
-위 컨텍스트의 가이드라인을 따라 한국어로 답변해주세요."""
-        
-        # 진행률 50% - AWS 분석 시작
-        emit_progress(50, 'AWS 분석을 시작합니다...')
-        
-        # Service Screener 처리
-        if question_type == 'screener':
-            emit_progress(60, f'계정 {account_id} Service Screener 스캔을 시작합니다...')
-            
-            try:
-                # 기존 Service Screener 결과 삭제 (새로운 스캔을 위해)
-                old_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
-                if os.path.exists(old_result_dir):
-                    print(f"[DEBUG] 기존 결과 삭제: {old_result_dir}", flush=True)
-                    shutil.rmtree(old_result_dir)
-                
-                # Service Screener 직접 실행
-                emit_progress(70, 'Service Screener를 실행하고 있습니다...')
-                
-                cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
-                print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
-                
-                log_file = f'/tmp/screener_{account_id}.log'
-                with open(log_file, 'w') as f:
-                    result = subprocess.run(
-                        cmd,
-                        stdout=f,
-                        stderr=subprocess.STDOUT,
-                        env=env_vars,
-                        timeout=600,  # 10분 타임아웃
-                        cwd='/root/service-screener-v2'
-                    )
-                
-                print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
-                
-                emit_progress(80, '스캔 결과를 분석하고 있습니다...')
-                
-                # 결과 디렉터리 확인
-                account_result_dir = os.path.join('/root/service-screener-v2/adminlte/aws', account_id)
-                
-                if os.path.exists(account_result_dir):
-                    print(f"[DEBUG] Service Screener 결과 발견: {account_result_dir}", flush=True)
-                    
-                    # 전체 디렉터리를 /tmp/reports/로 복사
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    tmp_report_dir = f"/tmp/reports/screener_{account_id}_{timestamp}"
-                    
-                    # 기존 디렉터리가 있으면 삭제
-                    if os.path.exists(tmp_report_dir):
-                        shutil.rmtree(tmp_report_dir)
-                    
-                    # 전체 디렉터리 복사
-                    shutil.copytree(account_result_dir, tmp_report_dir)
-                    print(f"[DEBUG] 보고서 디렉터리 복사 완료: {tmp_report_dir}", flush=True)
-                    
-                    # res 디렉터리 복사 (CSS/JS 등)
-                    screener_res_dir = '/root/service-screener-v2/adminlte/aws/res'
-                    tmp_res_dir = '/tmp/reports/res'
-                    
-                    if os.path.exists(screener_res_dir):
-                        if os.path.exists(tmp_res_dir):
-                            shutil.rmtree(tmp_res_dir)
-                        shutil.copytree(screener_res_dir, tmp_res_dir)
-                        print(f"[DEBUG] res 디렉터리 복사 완료: {tmp_res_dir}", flush=True)
-                    
-                    # 결과 요약 생성 (간단한 파싱)
-                    summary = f"""📊 Service Screener 스캔 결과
-
-🏢 계정: {account_id}
-📍 스캔 리전: ap-northeast-2, us-east-1
-✅ 스캔이 성공적으로 완료되었습니다.
-
-상세한 분석 결과는 아래 보고서에서 확인하실 수 있습니다."""
-                    
-                    # 보고서 URL 생성
-                    report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/screener_{account_id}_{timestamp}/index.html"
-                    
-                    emit_progress(100, '스캔이 완료되었습니다!')
-                    emit_result({
-                        'summary': summary,
-                        'reports': [
-                            {
-                                'name': 'Service Screener 상세 보고서',
-                                'url': report_url
-                            }
-                        ]
-                    })
-                    
-                else:
-                    print(f"[DEBUG] Service Screener 결과 디렉터리 없음: {account_result_dir}", flush=True)
-                    
-                    # 로그 파일 내용 확인
-                    try:
-                        with open(log_file, 'r') as f:
-                            log_content = f.read()
-                        print(f"[DEBUG] Service Screener 로그:\n{log_content[-1000:]}", flush=True)
-                    except Exception as e:
-                        print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
-                    
-                    error_summary = f"""⚠️ Service Screener 실행 완료
-
-🏢 계정: {account_id}
-📍 스캔 리전: ap-northeast-2, us-east-1
-
-스캔은 실행되었으나 결과 파일을 찾을 수 없습니다.
-로그를 확인하여 문제를 진단해주세요."""
-                    
-                    emit_progress(100, '스캔 완료 (결과 확인 필요)')
-                    emit_result({'summary': error_summary})
-                    
-            except subprocess.TimeoutExpired:
-                print(f"[ERROR] Service Screener 타임아웃", flush=True)
-                timeout_summary = f"""⏰ Service Screener 타임아웃
-
-🏢 계정: {account_id}
-스캔 시간이 10분을 초과하여 중단되었습니다.
-계정 규모가 큰 경우 더 오래 걸릴 수 있습니다."""
-                
-                emit_progress(100, '스캔 시간 초과')
-                emit_result({'summary': timeout_summary})
-                
-            except Exception as e:
-                print(f"[ERROR] Service Screener 실행 중 오류: {str(e)}", flush=True)
-                import traceback
-                traceback.print_exc()
-                
-                error_summary = f"""❌ Service Screener 실행 오류
-
-🏢 계정: {account_id}
-오류: {str(e)}
-
-시스템 관리자에게 문의하거나 잠시 후 다시 시도해주세요."""
-                
-                emit_progress(100, '스캔 실행 오류')
-                emit_result({'summary': error_summary})
-            
-        else:
-            # 질문 유형에 따른 처리
-            if question_type == 'report':
-                # 월간 보고서 생성 처리
-                emit_progress(60, '보안 데이터를 수집하고 있습니다...')
-                
-                # 날짜 추출 로직 (Slack bot과 동일)
-                now = datetime.now()
-                target_account = account_id if account_id else "950027134314"
-                
-                # 질문에서 여러 월 추출 (9월, 10월 등)
-                month_matches = re.findall(r'(\d{1,2})월', query)
-                year_match = re.search(r'(\d{4})년?', query)
-                
-                if month_matches:
-                    # 여러 월이 있으면 범위로 처리
-                    months = [int(m) for m in month_matches]
-                    start_month = min(months)
-                    end_month = max(months)
-                    
-                    target_year = year_match.group(1) if year_match else str(now.year)
-                    target_year = int(target_year)
-                    
-                    # 시작일: 첫 번째 월의 1일
-                    start_date = date(target_year, start_month, 1)
-                    
-                    # 종료일: 마지막 월의 말일
-                    if end_month == 12:
-                        end_date = date(target_year + 1, 1, 1) - timedelta(days=1)
-                    else:
-                        end_date = date(target_year, end_month + 1, 1) - timedelta(days=1)
-                    
-                    start_date_str = start_date.strftime("%Y-%m-%d")
-                    end_date_str = end_date.strftime("%Y-%m-%d")
-                else:
-                    # 월 정보 없으면 최근 30일
-                    start_date = now.date() - timedelta(days=30)
-                    end_date = now.date()
-                    start_date_str = start_date.strftime("%Y-%m-%d")
-                    end_date_str = end_date.strftime("%Y-%m-%d")
-                
-                # 타임스탬프 생성 (파일명용)
-                from datetime import timezone
-                kst = timezone(timedelta(hours=9))
-                timestamp = datetime.now(kst).strftime("%Y%m%d_%H%M%S")
-                
-                raw_json_path = f"/tmp/reports/raw_security_data_{target_account}_{timestamp}.json"
-                
-                try:
-                    # 1단계: boto3로 raw 데이터 수집
-                    print(f"[DEBUG] 📦 1단계: boto3로 raw 데이터 수집 시작", flush=True)
-                    print(f"[DEBUG] 분석 기간: {start_date_str} ~ {end_date_str} (UTC+9)", flush=True)
-                    
-                    emit_progress(70, f'AWS 보안 데이터를 수집하고 있습니다... ({start_date_str} ~ {end_date_str})')
-                    
-                    # boto3로 raw 데이터 수집
-                    raw_data = collect_raw_security_data(
-                        target_account, 
-                        start_date_str, 
-                        end_date_str, 
-                        region='ap-northeast-2',
-                        credentials=credentials if account_id else None
-                    )
-                    
-                    # Raw JSON 파일로 저장
-                    with open(raw_json_path, 'w', encoding='utf-8') as f:
-                        json.dump(raw_data, f, indent=2, ensure_ascii=False, default=convert_datetime_to_json_serializable)
-                    print(f"[DEBUG] ✅ Raw JSON 저장 완료: {raw_json_path}", flush=True)
-                    
-                    emit_progress(80, 'HTML 보고서를 생성하고 있습니다...')
-                    
-                    # HTML 보고서 생성
-                    html_report_path = generate_html_report(raw_json_path)
-                    if html_report_path:
-                        print(f"[DEBUG] ✅ HTML 보고서 생성 완료: {html_report_path}", flush=True)
-                        
-                        # HTML 보고서 URL 생성
-                        html_filename = os.path.basename(html_report_path)
-                        html_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/{html_filename}"
-                        
-                        emit_progress(100, '보고서 생성이 완료되었습니다!')
-                        
-                        # 요약 정보 생성
-                        ec2_total = raw_data.get('resources', {}).get('ec2', {}).get('total', 0)
-                        s3_total = raw_data.get('resources', {}).get('s3', {}).get('total', 0)
-                        iam_total = raw_data.get('iam_security', {}).get('users', {}).get('total', 0)
-                        sg_risky = raw_data.get('security_groups', {}).get('risky', 0)
-                        
-                        summary = f"""✅ AWS 월간 보안 보고서 생성 완료!
-
-🏢 계정: {target_account}
-📅 분석 기간: {start_date_str} ~ {end_date_str}
-
-📊 주요 현황:
-• EC2 인스턴스: {ec2_total}개
-• S3 버킷: {s3_total}개  
-• IAM 사용자: {iam_total}개
-• 위험한 보안 그룹: {sg_risky}개
-
-📋 상세 보고서: {html_url}"""
-                        
-                        emit_result({'summary': account_prefix + summary})
-                    else:
-                        # HTML 보고서 생성 실패 - 기본 요약 정보만 제공
-                        print(f"[DEBUG] HTML 보고서 생성 실패, 기본 요약 정보 제공", flush=True)
-                        ec2_total = raw_data.get('resources', {}).get('ec2', {}).get('total', 0)
-                        s3_total = raw_data.get('resources', {}).get('s3', {}).get('total', 0)
-                        iam_total = raw_data.get('iam_security', {}).get('users', {}).get('total', 0)
-                        sg_risky = raw_data.get('security_groups', {}).get('risky', 0)
-                        
-                        summary = f"""⚠️ AWS 월간 보안 보고서 생성 중 오류 발생
-
-🏢 계정: {target_account}
-📅 분석 기간: {start_date_str} ~ {end_date_str}
-
-📊 수집된 데이터:
-• EC2 인스턴스: {ec2_total}개
-• S3 버킷: {s3_total}개  
-• IAM 사용자: {iam_total}개
-• 위험한 보안 그룹: {sg_risky}개
-
-⚠️ HTML 보고서 생성에 실패했습니다. 기본 데이터는 수집되었습니다."""
-                        
-                        emit_progress(100, '보고서 생성 완료 (오류 발생)')
-                        emit_result({'summary': account_prefix + summary})
-                    
-                except Exception as e:
-                    print(f"[ERROR] 월간 보고서 생성 중 오류: {str(e)}", flush=True)
-                    import traceback
-                    traceback.print_exc()
-                    
-                    # 오류 발생 시에도 진행률을 100%로 설정하고 결과 전송
-                    emit_progress(100, '보고서 생성 중 오류 발생')
-                    error_summary = f"""❌ AWS 월간 보안 보고서 생성 실패
-
-🏢 계정: {target_account}
-📅 분석 기간: {start_date_str} ~ {end_date_str}
-
-오류: {str(e)}
-
-시스템 관리자에게 문의하거나 잠시 후 다시 시도해주세요."""
-                    emit_result({'summary': account_prefix + error_summary})
-                
-            else:
-                # 일반 질문 처리 - 실제 Q CLI 실행
-                emit_progress(70, 'AWS API를 호출하고 있습니다...')
-                
-                emit_progress(90, 'AI가 결과를 분석하고 있습니다...')
-                
-                # 실제 Q CLI 실행
-                print(f"[DEBUG] Q CLI 실행 시작 - 질문 유형: {question_type}", flush=True)
-                
-                try:
-                    # Q CLI 경로 자동 감지 (권한에 따라)
-                    q_paths = [
-                        '/home/ec2-user/.local/bin/q',  # ec2-user 우선
-                        '/root/.local/bin/q',           # root 경로
-                        '/usr/local/bin/q',             # 시스템 경로
-                        'q'                             # PATH에서 찾기
-                    ]
-                    
-                    q_cmd = None
-                    for path in q_paths:
-                        try:
-                            if path == 'q':
-                                # PATH에서 찾기
-                                result = subprocess.run(['which', 'q'], capture_output=True, text=True)
-                                if result.returncode == 0:
-                                    q_cmd = 'q'
-                                    break
-                            elif os.path.exists(path) and os.access(path, os.X_OK):
-                                q_cmd = path
-                                break
-                        except Exception as e:
-                            print(f"[DEBUG] 경로 {path} 확인 실패: {e}", flush=True)
-                            continue
-                    
-                    if not q_cmd:
-                        raise FileNotFoundError("실행 가능한 Q CLI를 찾을 수 없습니다")
-                    
-                    # Q CLI 실행 전 환경 변수 디버깅
-                    print(f"[DEBUG] Q CLI 실행 환경:", flush=True)
-                    print(f"[DEBUG] - 명령어: {q_cmd}", flush=True)
-                    print(f"[DEBUG] - AWS_ACCESS_KEY_ID: {env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:10]}...", flush=True)
-                    print(f"[DEBUG] - AWS_DEFAULT_REGION: {env_vars.get('AWS_DEFAULT_REGION', 'None')}", flush=True)
-                    print(f"[DEBUG] - 질문 길이: {len(korean_prompt)}", flush=True)
-                    
-                    # Q CLI 실행 (Slack bot과 동일한 명령어 및 타임아웃)
-                    cmd = [q_cmd, 'chat', '--no-interactive', '--trust-all-tools', korean_prompt]
-                    print(f"[DEBUG] 실행 명령어: {' '.join(cmd)}", flush=True)
-                    print(f"[DEBUG] 타임아웃 설정: 600초 (질문 유형: {question_type})", flush=True)
-                    
-                    q_result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        env=env_vars,
-                        timeout=600  # Slack bot과 동일한 10분 타임아웃
-                    )
-                    
-                    print(f"[DEBUG] Q CLI 실행 완료:", flush=True)
-                    print(f"[DEBUG] - 반환 코드: {q_result.returncode}", flush=True)
-                    print(f"[DEBUG] - stdout 길이: {len(q_result.stdout) if q_result.stdout else 0}", flush=True)
-                    print(f"[DEBUG] - stderr 길이: {len(q_result.stderr) if q_result.stderr else 0}", flush=True)
-                    
-                    if q_result.stderr:
-                        print(f"[DEBUG] Q CLI stderr: {q_result.stderr[:500]}", flush=True)
-                    
-                    if q_result.returncode == 0 and q_result.stdout.strip():
-                        # 성공적인 응답
-                        clean_response = simple_clean_output(q_result.stdout.strip())
-                        print(f"[DEBUG] Q CLI 응답 성공 (길이: {len(clean_response)})", flush=True)
-                        
-                        emit_progress(100, '분석이 완료되었습니다!')
-                        emit_result({'summary': account_prefix + clean_response})
-                    else:
-                        # Q CLI 실행 실패
-                        error_msg = q_result.stderr.strip() if q_result.stderr else "Q CLI 실행 실패"
-                        print(f"[ERROR] Q CLI 실행 실패:", flush=True)
-                        print(f"[ERROR] - 반환 코드: {q_result.returncode}", flush=True)
-                        print(f"[ERROR] - 에러 메시지: {error_msg}", flush=True)
-                        
-                        # 폴백: AWS CLI로 실제 리소스 조회
-                        try:
-                            print(f"[DEBUG] Q CLI 실패, AWS CLI로 폴백 시도", flush=True)
-                            
-                            # 기본 계정 정보 조회
-                            aws_result = subprocess.run(
-                                ['aws', 'sts', 'get-caller-identity'],
-                                capture_output=True,
-                                text=True,
-                                env=env_vars,
-                                timeout=30
-                            )
-                            
-                            if aws_result.returncode == 0:
-                                caller_info = json.loads(aws_result.stdout)
-                                account = caller_info.get('Account', 'Unknown')
-                                user_arn = caller_info.get('Arn', 'Unknown')
-                                
-                                # 질문에 따라 실제 AWS 리소스 조회 (Slack bot 수준 상세 정보)
-                                resource_info = ""
-                                if any(keyword in query.lower() for keyword in ['ec2', '인스턴스', 'instance', '러닝', 'running']):
-                                    # EC2 인스턴스 상세 조회 (JSON 형태로)
-                                    try:
-                                        ec2_result = subprocess.run(
-                                            ['aws', 'ec2', 'describe-instances', 
-                                             '--filters', 'Name=instance-state-name,Values=running',
-                                             '--output', 'json'],
-                                            capture_output=True,
-                                            text=True,
-                                            env=env_vars,
-                                            timeout=30
-                                        )
-                                        if ec2_result.returncode == 0:
-                                            ec2_data = json.loads(ec2_result.stdout)
-                                            instances = []
-                                            
-                                            for reservation in ec2_data.get('Reservations', []):
-                                                for instance in reservation.get('Instances', []):
-                                                    # 인스턴스 이름 추출
-                                                    instance_name = "이름 없음"
-                                                    for tag in instance.get('Tags', []):
-                                                        if tag.get('Key') == 'Name':
-                                                            instance_name = tag.get('Value', '이름 없음')
-                                                            break
-                                                    
-                                                    # 보안 그룹 정보 추출
-                                                    security_groups = []
-                                                    for sg in instance.get('SecurityGroups', []):
-                                                        sg_name = sg.get('GroupName', 'Unknown')
-                                                        sg_id = sg.get('GroupId', 'Unknown')
-                                                        security_groups.append(f"{sg_name} ({sg_id})")
-                                                    
-                                                    # IAM 역할 추출
-                                                    iam_role = "없음"
-                                                    if instance.get('IamInstanceProfile'):
-                                                        iam_arn = instance['IamInstanceProfile'].get('Arn', '')
-                                                        if '/' in iam_arn:
-                                                            iam_role = iam_arn.split('/')[-1]
-                                                    
-                                                    instance_info = f"""🖥️ **{instance_name}**
-• **인스턴스 ID**: {instance.get('InstanceId', 'Unknown')}
-• **상태**: ✅ {instance.get('State', {}).get('Name', 'Unknown')}
-• **인스턴스 타입**: {instance.get('InstanceType', 'Unknown')}
-• **시작 시간**: {instance.get('LaunchTime', 'Unknown')}
-• **가용 영역**: {instance.get('Placement', {}).get('AvailabilityZone', 'Unknown')}
-
-**네트워크 정보**:
-• **프라이빗 IP**: {instance.get('PrivateIpAddress', '없음')}
-• **퍼블릭 IP**: {instance.get('PublicIpAddress', '없음')}
-• **VPC ID**: {instance.get('VpcId', 'Unknown')}
-• **서브넷 ID**: {instance.get('SubnetId', 'Unknown')}
-• **보안 그룹**: {', '.join(security_groups) if security_groups else '없음'}
-
-**기타 정보**:
-• **키 페어**: {instance.get('KeyName', '없음')}
-• **IAM 역할**: {iam_role}
-• **플랫폼**: {instance.get('Platform', 'Linux/UNIX')}
-• **모니터링**: {'활성화' if instance.get('Monitoring', {}).get('State') == 'enabled' else '비활성화'}
-• **EBS 최적화**: {'활성화' if instance.get('EbsOptimized', False) else '비활성화'}
-"""
-                                                    instances.append(instance_info)
-                                            
-                                            if instances:
-                                                total_count = len(instances)
-                                                resource_info = f"\n\n📊 **총 {total_count}개 인스턴스 실행 중**:\n\n" + "\n\n".join(instances)
-                                                resource_info += f"\n\n💡 **추가 정보가 필요하시면 특정 인스턴스 ID를 말씀해주세요!**"
-                                            else:
-                                                resource_info = f"\n\n📭 **실행 중인 EC2 인스턴스가 없습니다.**"
-                                        else:
-                                            resource_info = f"\n\n⚠️ EC2 인스턴스 조회 실패: {ec2_result.stderr[:200]}"
-                                    except Exception as e:
-                                        resource_info = f"\n\n⚠️ EC2 조회 중 오류: {str(e)}"
-                                
-                                fallback_response = f"""✅ AWS 리소스 조회 완료
-
-질문: {query}
-유형: {question_type}
-
-🔍 현재 AWS 환경:
-• 계정 ID: {account}
-• 사용자: {user_arn}
-• 리전: {env_vars.get('AWS_DEFAULT_REGION', 'ap-northeast-2')}
-
-{resource_info}
-
-💡 Q CLI가 정상 작동하면 더 자세한 AI 분석이 가능합니다:
-• 리소스 상세 분석 및 권장사항
-• 보안 취약점 분석
-• 비용 최적화 제안
-• CloudTrail 이벤트 분석"""
-                            else:
-                                fallback_response = f"""⚠️ AWS 접근 확인 필요
-
-질문: {query}
-유형: {question_type}
-
-현재 상태:
-• Q CLI: 설치 필요
-• AWS CLI: 설정 확인 필요
-
-설치 가이드:
-1. Q CLI 설치: curl -sSL https://install.q.dev | bash
-2. AWS 자격증명 확인
-3. 서비스 재시작"""
-                            
-                        except Exception as aws_error:
-                            print(f"[ERROR] AWS CLI 폴백도 실패: {aws_error}", flush=True)
-                            fallback_response = f"""⚠️ 시스템 설정 확인 필요
-
-질문: {query}
-
-현재 상태:
-• Q CLI: 미설치
-• AWS CLI: 설정 확인 필요
-
-관리자에게 문의하여 다음을 설치해주세요:
-1. Q CLI 설치 및 로그인
-2. AWS 자격증명 설정
-3. 컨텍스트 파일 복사"""
-                        
-                        emit_progress(100, '기본 분석이 완료되었습니다.')
-                        emit_result({'summary': account_prefix + fallback_response})
-                
-                except subprocess.TimeoutExpired:
-                    print(f"[ERROR] Q CLI 타임아웃 (5분)", flush=True)
-                    timeout_response = f"""⏰ 분석 시간이 초과되었습니다.
-
-질문: {query}
-
-복잡한 분석의 경우 시간이 오래 걸릴 수 있습니다. 
-더 구체적인 질문으로 다시 시도해보세요."""
-                    
-                    emit_progress(100, '시간 초과로 분석을 중단했습니다.')
-                    emit_result({'summary': account_prefix + timeout_response})
-                
-                except Exception as e:
-                    print(f"[ERROR] Q CLI 실행 중 예외: {str(e)}", flush=True)
-                    error_response = f"""❌ 분석 중 오류가 발생했습니다.
-
-질문: {query}
-오류: {str(e)}
-
-시스템 관리자에게 문의하거나 잠시 후 다시 시도해주세요."""
-                    
-                    emit_progress(100, '오류가 발생했습니다.')
-                    emit_result({'summary': account_prefix + error_response})
-        
-    except Exception as e:
-        print(f"[ERROR] AWS 질문 처리 중 오류: {str(e)}", flush=True)
-        import traceback
-        traceback.print_exc()
-        emit_error(f'처리 중 오류가 발생했습니다: {str(e)}')
-    finally:
-        # 정리 작업
-        processing_questions.discard(question_key)
-        current_progress.pop(question_key, None)  # 진행 상태도 정리
-        if temp_dir and os.path.exists(temp_dir):
-            try:
-                shutil.rmtree(temp_dir)
-                print(f"[DEBUG] 임시 디렉터리 삭제: {temp_dir}", flush=True)
-            except Exception as e:
-                print(f"[DEBUG] 임시 디렉터리 삭제 실패 (무시): {e}", flush=True)
-
-@app.before_request
-def handle_preflight():
-    """OPTIONS 요청 처리 (CORS preflight)"""
-    from flask import request, make_response
-    if request.method == "OPTIONS":
-        response = make_response()
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add('Access-Control-Allow-Headers', "*")
-        response.headers.add('Access-Control-Allow-Methods', "*")
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
-@app.after_request
-def after_request(response):
-    """모든 응답에 CORS 헤더 추가"""
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,HEAD')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    response.headers.add('Access-Control-Max-Age', '86400')
-    return response
-
-@app.route('/health')
-def health_check():
-    """헬스 체크 엔드포인트"""
-    return {'status': 'healthy', 'service': 'Saltware AWS Assistant WebSocket Server'}
-
-@app.route('/zendesk/health')
-def zendesk_health_check():
-    """Zendesk WebSocket 헬스 체크 엔드포인트"""
-    return {'status': 'healthy', 'service': 'Zendesk WebSocket Server'}
-
-
-
 if __name__ == '__main__':
-    print("🚀 Saltware AWS Assistant WebSocket Server 시작")
-    print("📡 WebSocket 서버: http://localhost:3001")
-    print("🔗 Zendesk 앱에서 연결 가능")
-    
-    # 개발 모드로 실행 (디버그 활성화)
-    socketio.run(app, host='0.0.0.0', port=3001, debug=False, allow_unsafe_werkzeug=True)
