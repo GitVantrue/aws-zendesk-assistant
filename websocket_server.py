@@ -604,8 +604,32 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
             print(f"[DEBUG] Q CLI 실행 시작 - 질문 유형: {question_type}", flush=True)
             
             try:
-                # Q CLI 실행 (Slack bot과 동일한 방식)
-                q_cmd = '/root/.local/bin/q'  # Slack bot과 동일한 경로 사용
+                # Q CLI 경로 자동 감지 (권한에 따라)
+                q_paths = [
+                    '/home/ec2-user/.local/bin/q',  # ec2-user 우선
+                    '/root/.local/bin/q',           # root 경로
+                    '/usr/local/bin/q',             # 시스템 경로
+                    'q'                             # PATH에서 찾기
+                ]
+                
+                q_cmd = None
+                for path in q_paths:
+                    try:
+                        if path == 'q':
+                            # PATH에서 찾기
+                            result = subprocess.run(['which', 'q'], capture_output=True, text=True)
+                            if result.returncode == 0:
+                                q_cmd = 'q'
+                                break
+                        elif os.path.exists(path) and os.access(path, os.X_OK):
+                            q_cmd = path
+                            break
+                    except Exception as e:
+                        print(f"[DEBUG] 경로 {path} 확인 실패: {e}", flush=True)
+                        continue
+                
+                if not q_cmd:
+                    raise FileNotFoundError("실행 가능한 Q CLI를 찾을 수 없습니다")
                 
                 # Q CLI 실행 전 환경 변수 디버깅
                 print(f"[DEBUG] Q CLI 실행 환경:", flush=True)
