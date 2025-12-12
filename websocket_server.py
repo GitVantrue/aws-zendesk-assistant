@@ -1606,11 +1606,22 @@ def generate_s3_security_issues_section(buckets):
     content += '</div>'
     return content
 
-def generate_html_report(json_file_path):
-    """JSON 데이터를 월간 보안 점검 HTML 보고서로 변환"""
+def generate_html_report(data):
+    """JSON 데이터를 월간 보안 점검 HTML 보고서로 변환
+    
+    Args:
+        data (dict): 보안 데이터 딕셔너리
+    
+    Returns:
+        str: HTML 보고서 파일 경로 또는 None
+    """
     try:
-        with open(json_file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        # data가 dict인지 확인
+        if not isinstance(data, dict):
+            raise TypeError(f"data는 dict여야 하는데 {type(data)}입니다")
+        
+        # datetime 객체를 JSON 직렬화 가능한 형식으로 변환
+        data = convert_datetime_to_json_serializable(data)
 
         # HTML 템플릿 읽기
         template_path = os.path.join(os.path.dirname(__file__), 'templates', 'json_report_template.html')
