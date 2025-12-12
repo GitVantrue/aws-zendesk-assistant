@@ -242,8 +242,7 @@ def handle_aws_query(data):
             
             emit('result', {
                 'summary': f'✅ 월간 보안 보고서 생성 완료\n\n📊 보고서: {report_url}',
-                'reports': [{'name': report_filename, 'url': report_url}],
-                'data': raw_data
+                'reports': [{'name': report_filename, 'url': report_url}]
             }, namespace='/zendesk')
         
         else:
