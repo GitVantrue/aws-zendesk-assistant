@@ -119,20 +119,24 @@ class SaltwareAWSAssistant {
             
             console.log('🔌 WebSocket 서버 연결 시도:', this.serverUrl);
             
-            // Socket.IO 클라이언트 생성 - 이벤트 수신 최적화
+            // Socket.IO 클라이언트 생성 - CORS 문제 해결 최적화
             this.socket = io(this.serverUrl, {
                 path: '/zendesk/socket.io',
                 transports: ['polling'],  // polling만 사용
-                timeout: 120000,  // 타임아웃 2분
+                timeout: 60000,  // 타임아웃 1분으로 단축
                 reconnection: true,
-                reconnectionAttempts: 5,
-                reconnectionDelay: 1000,
-                reconnectionDelayMax: 5000,
-                forceNew: true,
+                reconnectionAttempts: 10,  // 재연결 시도 증가
+                reconnectionDelay: 2000,   // 재연결 지연 증가
+                reconnectionDelayMax: 10000,
+                forceNew: false,  // 기존 연결 재사용 허용
                 upgrade: false,
                 rememberUpgrade: false,
                 autoConnect: true,
-                closeOnBeforeunload: false  // 페이지 언로드 시 연결 유지
+                closeOnBeforeunload: false,
+                withCredentials: false,  // CORS 자격증명 비활성화
+                extraHeaders: {
+                    'Access-Control-Allow-Origin': '*'
+                }
             });
             
             // WebSocket 이벤트 리스너 설정
