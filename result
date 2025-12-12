@@ -1,39 +1,103 @@
-🏢 계정 950027134314 결과:
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+[7] 51075
+Sb4gcvpBjA2HNNx-AAAC: Received packet PONG data
+172.16.2.81 - - [12/Dec/2025 07:58:20] "POST /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaMLf&sid=Sb4gcvpBjA2HNNx-AAAC HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:58:41] "GET /zendesk/health HTTP/1.1" 404 -
+172.16.0.30 - - [12/Dec/2025 07:58:42] "GET /zendesk/health HTTP/1.1" 404 -
+Sb4gcvpBjA2HNNx-AAAC: Sending packet PING data None
+172.16.2.81 - - [12/Dec/2025 07:58:45] "GET /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaMLg&sid=Sb4gcvpBjA2HNNx-AAAC HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:58:45] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaST9&sid=Sb4gcvpBjA2HNNx-AAAC HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:58:45] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaST9.0&sid=Sb4gcvpBjA2HNNx-AAAC HTTP/1.1" 200 -
+Sb4gcvpBjA2HNNx-AAAC: Received packet PONG data
+172.16.2.81 - - [12/Dec/2025 07:58:45] "POST /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaST9&sid=Sb4gcvpBjA2HNNx-AAAC HTTP/1.1" 200 -
+tail: /tmp/websocket_server.log: file truncated
+nohup: ignoring input
+Server initialized for threading.
+Werkzeug appears to be used in a production deployment. Consider switching to a production web server instead.
+ * Serving Flask app 'websocket_server'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:3001
+ * Running on http://172.16.6.36:3001
+Press CTRL+C to quit
+172.16.2.81 - - [12/Dec/2025 07:59:01] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWQ5 HTTP/1.1" 200 -
+eoGTJnTyGwOKDPzvAAAA: Sending packet OPEN data {'sid': 'eoGTJnTyGwOKDPzvAAAA', 'upgrades': [], 'pingTimeout': 60000, 'pingInterval': 25000}
+172.16.2.81 - - [12/Dec/2025 07:59:01] "GET /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWQ5 HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:01] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWR4&sid=eoGTJnTyGwOKDPzvAAAA HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:01] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWR4.0&sid=eoGTJnTyGwOKDPzvAAAA HTTP/1.1" 200 -
+eoGTJnTyGwOKDPzvAAAA: Received packet MESSAGE data 0/zendesk,
+[DEBUG] 클라이언트 연결됨: qi_tmYNTuRA9d_9uAAAB
+emitting event "response" to qi_tmYNTuRA9d_9uAAAB [/zendesk]
+eoGTJnTyGwOKDPzvAAAA: Sending packet MESSAGE data 2/zendesk,["response",{"data":"\uc5f0\uacb0\ub418\uc5c8\uc2b5\ub2c8\ub2e4"}]
+eoGTJnTyGwOKDPzvAAAA: Sending packet MESSAGE data 0/zendesk,{"sid":"qi_tmYNTuRA9d_9uAAAB"}
+172.16.2.81 - - [12/Dec/2025 07:59:01] "POST /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWR4&sid=eoGTJnTyGwOKDPzvAAAA HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:01] "GET /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWR4.0&sid=eoGTJnTyGwOKDPzvAAAA HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:01] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWR-&sid=eoGTJnTyGwOKDPzvAAAA HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:01] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWY4 HTTP/1.1" 200 -
+Hu9rYJLPiADVWdghAAAC: Sending packet OPEN data {'sid': 'Hu9rYJLPiADVWdghAAAC', 'upgrades': [], 'pingTimeout': 60000, 'pingInterval': 25000}
+172.16.2.81 - - [12/Dec/2025 07:59:01] "GET /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWY4 HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:01] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWYl&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:01] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWYl.0&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+Hu9rYJLPiADVWdghAAAC: Received packet MESSAGE data 0/zendesk,
+[DEBUG] 클라이언트 연결됨: Jl1RBsFDheSialW6AAAD
+emitting event "response" to Jl1RBsFDheSialW6AAAD [/zendesk]
+Hu9rYJLPiADVWdghAAAC: Sending packet MESSAGE data 2/zendesk,["response",{"data":"\uc5f0\uacb0\ub418\uc5c8\uc2b5\ub2c8\ub2e4"}]
+Hu9rYJLPiADVWdghAAAC: Sending packet MESSAGE data 0/zendesk,{"sid":"Jl1RBsFDheSialW6AAAD"}
+172.16.2.81 - - [12/Dec/2025 07:59:01] "POST /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWYl&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:01] "GET /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWYl.0&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:01] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWZL&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:03] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWvu&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+Hu9rYJLPiADVWdghAAAC: Received packet MESSAGE data 2/zendesk,["aws_query",{"query":"402010684322 스캔","timestamp":"2025-12-12T07:59:03.288Z","user_id":"zendesk_user","ticket_id":"test_ticket"}]
+received event "aws_query" from Jl1RBsFDheSialW6AAAD [/zendesk]
+[DEBUG] AWS 쿼리 수신: {'query': '402010684322 스캔', 'timestamp': '2025-12-12T07:59:03.288Z', 'user_id': 'zendesk_user', 'ticket_id': 'test_ticket'}
+172.16.2.81 - - [12/Dec/2025 07:59:03] "POST /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWvu&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+[DEBUG] 쿼리 처리 시작: 402010684322 스캔
+emitting event "progress" to Jl1RBsFDheSialW6AAAD [/zendesk]
+Hu9rYJLPiADVWdghAAAC: Sending packet MESSAGE data 2/zendesk,["progress",{"progress":10,"message":"\uc694\uccad \ubd84\uc11d \uc911..."}]
+[DEBUG] 질문 타입 분석 시작: '402010684322 스캔'
+172.16.2.81 - - [12/Dec/2025 07:59:03] "GET /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWZL&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+[DEBUG] 질문 타입: screener
+[DEBUG] 질문 유형: screener
+emitting event "progress" to Jl1RBsFDheSialW6AAAD [/zendesk]
+Hu9rYJLPiADVWdghAAAC: Sending packet MESSAGE data 2/zendesk,["progress",{"progress":20,"message":"\uacc4\uc815 \uc815\ubcf4 \ucd94\ucd9c \uc911..."}]
+[DEBUG] 계정 ID 추출 시도: '402010684322 스캔' -> '402010684322'
+[DEBUG] 추출된 계정 ID: 402010684322
+emitting event "progress" to Jl1RBsFDheSialW6AAAD [/zendesk]
+Hu9rYJLPiADVWdghAAAC: Sending packet MESSAGE data 2/zendesk,["progress",{"progress":30,"message":"AWS \uc790\uaca9\uc99d\uba85 \ud655\ubcf4 \uc911..."}]
+[DEBUG] 계정 402010684322에 대한 cross-account 세션 생성 시도
+[DEBUG] Parameter Store에서 cross-account 자격증명 로드 시도
+/home/ec2-user/.local/lib/python3.9/site-packages/boto3/compat.py:89: PythonDeprecationWarning: Boto3 will no longer support Python 3.9 starting April 29, 2026. To continue receiving service updates, bug fixes, and security updates please upgrade to Python 3.10 or later. More information can be found here: https://aws.amazon.com/blogs/developer/python-support-policy-updates-for-aws-sdks-and-tools/
+  warnings.warn(warning, PythonDeprecationWarning)
+172.16.2.81 - - [12/Dec/2025 07:59:03] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWwS&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:03] "GET /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWwS&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:03] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWxA&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+[DEBUG] Cross-account 자격증명 로드 성공
+[DEBUG] Cross-account 자격증명 확보, STS assume role 시도
+[DEBUG] Assume role: arn:aws:iam::402010684322:role/SaltwareCrossAccount
+[DEBUG] Cross-account 세션 생성 성공
+[DEBUG] Cross-account 세션 생성 성공
+emitting event "progress" to Jl1RBsFDheSialW6AAAD [/zendesk]
+Hu9rYJLPiADVWdghAAAC: Sending packet MESSAGE data 2/zendesk,["progress",{"progress":40,"message":"Service Screener \uc2a4\uce94 \uc911..."}]
+172.16.2.81 - - [12/Dec/2025 07:59:03] "GET /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaWxA&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+[DEBUG] 스캔 대상 리전: ap-northeast-2, us-east-1
+[DEBUG] crossAccounts.json 생성 완료: /tmp/crossAccounts_402010684322_20251212_075903.json
+[DEBUG] 환경 변수 확인: AWS_ACCESS_KEY_ID=ASIAV3GNUHORGGF6BGG4...
+[DEBUG] 환경 변수 확인: AWS_SESSION_TOKEN 존재=True
+[DEBUG] EC2 메타데이터 비활성화 설정
+[DEBUG] 실행 명령어: python3 /home/ec2-user/aws-zendesk-assistant/service-screener-v2/Screener.py --regions ap-northeast-2,us-east-1
+[DEBUG] 작업 디렉터리: /home/ec2-user/aws-zendesk-assistant/service-screener-v2
+172.16.2.81 - - [12/Dec/2025 07:59:03] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaW_W&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+[DEBUG] Service Screener 완료. 반환코드: 0
+[DEBUG] stdout (전체):
 
-> 📋 EC2 인스턴스 현황 (실행 중)
-📅 조회 시간: 2025-12-12 02:11:04 KST
-🌍 리전: ap-northeast-2 (서울)
+[DEBUG] stderr (전체):
 
-🛠️ Using tool: use_aws (trusted)
-⋮
-● Running aws cli command:
-
-Service name: ec2
-Operation name: describe-instances
-Parameters:
-- query: "Reservations[].Instances[].[InstanceId,InstanceType,State.Name,LaunchTime,Tags[?Key=='Name'].Value|[0]]"
-- filters: [{"name":"instance-state-name","values":["running"]}]
-Region: ap-northeast-2
-Label: 실행 중인 EC2 인스턴스 목록 조회
-
-🛠️ Using tool: use_aws (trusted)
-⋮
-● Running aws cli command:
-
-Service name: ec2
-Operation name: describe-instances
-Parameters:
-- query: "Reservations[].Instances[].[InstanceId,InstanceType,State.Name,LaunchTime,Tags[?Key=='Name'].Value|[0]]"
-- filters: [{"Name":"instance-state-name","Values":["running"]}]
-Region: ap-northeast-2
-Label: 실행 중인 EC2 인스턴스 목록 조회 ⋮
-● Completed in 0.947s
-
-> 총 1개 인스턴스가 실행 중입니다:
-
-🖥️ Amazon-Q-Slack-Bridge-SSH (i-0f021cd63ff2462b6)
-• 타입: t3.medium
-• 상태: running ✅
-• 시작일: 2025-10-30 10:21:06 KST
-
-💡 특정 인스턴스의 자세한 정보(보안그룹, 네트워크 등)를 보시겠어요?
+[DEBUG] 계정 결과 디렉터리 확인: /home/ec2-user/aws-zendesk-assistant/service-screener-v2/adminlte/aws/402010684322
+[ERROR] 결과 디렉터리 없음: /home/ec2-user/aws-zendesk-assistant/service-screener-v2/adminlte/aws/402010684322
+emitting event "result" to Jl1RBsFDheSialW6AAAD [/zendesk]
+Hu9rYJLPiADVWdghAAAC: Sending packet MESSAGE data 2/zendesk,["result",{"summary":"\u26a0\ufe0f \uc2a4\uce94\uc740 \uc644\ub8cc\ub418\uc5c8\uc73c\ub098 \uacb0\uacfc \ub514\ub809\ud130\ub9ac\ub97c \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4: /home/ec2-user/aws-zendesk-assistant/service-screener-v2/adminlte/aws/402010684322","reports":[],"data":{}}]
+emitting event "progress" to Jl1RBsFDheSialW6AAAD [/zendesk]
+Hu9rYJLPiADVWdghAAAC: Sending packet MESSAGE data 2/zendesk,["progress",{"progress":100,"message":"\uc644\ub8cc!"}]
+172.16.2.81 - - [12/Dec/2025 07:59:03] "GET /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaW_W&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -
+172.16.2.81 - - [12/Dec/2025 07:59:03] "OPTIONS /zendesk/socket.io/?EIO=4&transport=polling&t=PiHaX3V&sid=Hu9rYJLPiADVWdghAAAC HTTP/1.1" 200 -

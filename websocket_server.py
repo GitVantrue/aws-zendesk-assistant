@@ -287,6 +287,26 @@ def handle_aws_query(data):
                 screener_base = os.path.join(os.path.dirname(__file__), 'service-screener-v2')
                 screener_path = os.path.join(screener_base, 'Screener.py')
                 
+                # 0. Service Screener 의존성 설치 (처음 한 번만)
+                print(f"[DEBUG] Service Screener 의존성 확인 및 설치", flush=True)
+                requirements_path = os.path.join(screener_base, 'requirements.txt')
+                if os.path.exists(requirements_path):
+                    pip_install_cmd = [
+                        'pip3', 'install', '-q',
+                        '-r', requirements_path
+                    ]
+                    print(f"[DEBUG] 의존성 설치 명령어: {' '.join(pip_install_cmd)}", flush=True)
+                    pip_result = subprocess.run(
+                        pip_install_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=300
+                    )
+                    if pip_result.returncode == 0:
+                        print(f"[DEBUG] Service Screener 의존성 설치 완료", flush=True)
+                    else:
+                        print(f"[WARNING] 의존성 설치 중 경고: {pip_result.stderr[:500]}", flush=True)
+                
                 # 1. 현재 계정 스캔 설정 (이미 assume role 완료된 자격증명 사용)
                 temp_json_path = f'/tmp/crossAccounts_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
                 
