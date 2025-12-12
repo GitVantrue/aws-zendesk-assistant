@@ -1003,13 +1003,25 @@ def generate_html_report(json_file_path):
         
         # CloudWatch 데이터 처리
         cw_data = data.get('cloudwatch', {})
-        cw_summary = cw_data.get('summary', {})
+        cw_alarms = cw_data.get('alarms', {})
+        if isinstance(cw_alarms, dict):
+            cw_alarms_list = cw_alarms.get('details', [])
+            cw_summary = {
+                'total': cw_alarms.get('total', 0),
+                'in_alarm': cw_alarms.get('in_alarm', 0),
+                'ok': cw_alarms.get('ok', 0),
+                'insufficient_data': cw_alarms.get('insufficient_data', 0),
+            }
+        else:
+            cw_alarms_list = cw_alarms if isinstance(cw_alarms, list) else []
+            cw_summary = cw_data.get('summary', {})
+        
         template_vars.update({
             'cloudwatch_alarms_total': cw_summary.get('total', 0),
             'cloudwatch_alarms_in_alarm': cw_summary.get('in_alarm', 0),
             'cloudwatch_alarms_ok': cw_summary.get('ok', 0),
             'cloudwatch_alarms_insufficient': cw_summary.get('insufficient_data', 0),
-            'cloudwatch_alarm_rows': generate_cloudwatch_rows(cw_data.get('alarms', [])),
+            'cloudwatch_alarm_rows': generate_cloudwatch_rows(cw_alarms_list),
         })
         
         # EBS 미암호화 섹션
@@ -1239,11 +1251,13 @@ def generate_critical_issues_section(issues):
 def process_trusted_advisor_data(checks):
     """Trusted Advisor 데이터 처리"""
     return {
-        'ta_cost_optimization': 0,
-        'ta_security': 0,
-        'ta_fault_tolerance': 0,
-        'ta_performance': 0,
-        'ta_service_limits': 0,
+        'ta_security_error': 0,
+        'ta_security_warning': 0,
+        'ta_fault_tolerance_error': 0,
+        'ta_fault_tolerance_warning': 0,
+        'ta_cost_warning': 0,
+        'ta_performance_warning': 0,
+        'ta_error_rows': '<tr><td colspan="4" class="no-data">Trusted Advisor 데이터 없음</td></tr>',
     }
 
 def generate_cloudtrail_rows(critical_events):
@@ -1271,15 +1285,27 @@ def generate_cloudwatch_rows(alarms):
     
     rows = []
     for alarm in alarms:
-        state = alarm.get('state', 'UNKNOWN')
-        state_icon = '🔴' if state == 'ALARM' else '🟢' if state == 'OK' else '🟡'
+        # 문자열이 아닌 딕셔너리인지 확인
+        if not isinstance(alarm, dict):
+            continue
+        
+        name = alarm.get('AlarmName', alarm.get('name', 'N/A'))
+        state = alarm.get('StateValue', alarm.get('state', 'UNKNOWN'))
+        metric = alarm.get('MetricName', alarm.get('metric_name', 'N/A'))
+        threshold = alarm.get('Threshold', alarm.get('threshold', 'N/A'))
+        
+        state_class = {
+            'OK': 'ok',
+            'ALARM': 'error',
+            'INSUFFICIENT_DATA': 'warning'
+        }.get(state, 'warning')
         
         rows.append(f"""
         <tr>
-            <td>{alarm.get('name', 'Unknown')}</td>
-            <td>{state_icon} {state}</td>
-            <td>{alarm.get('metric_name', 'Unknown')}</td>
-            <td>{alarm.get('threshold', 'Unknown')}</td>
+            <td>{name}</td>
+            <td><span class="badge badge-{state_class}">{state}</span></td>
+            <td>{metric}</td>
+            <td>{threshold}</td>
         </tr>
         """)
     
