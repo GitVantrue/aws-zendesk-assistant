@@ -81,3 +81,7 @@ deploy.log
 .env.local
 .env.production
 .env.staging
+
+# 민감한 정보 포함 파일
+result
+result.bak

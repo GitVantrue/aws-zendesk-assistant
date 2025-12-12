@@ -65,12 +65,45 @@ tail -f /tmp/websocket_server.log
 
 - **WebSocket 서버**: `/home/ec2-user/aws-zendesk-assistant/websocket_server.py`
 - **Zendesk 앱**: `/home/ec2-user/aws-zendesk-assistant/zendesk-app/`
+- **Service Screener**: `/home/ec2-user/aws-zendesk-assistant/service-screener-v2/`
 - **보고서 저장소**: `/tmp/reports/`
 - **로그**: `/tmp/websocket_server.log`
+
+## ⚠️ 중요: 경로 설정 주의사항
+
+### Reference 코드 vs 현재 환경 경로 차이
+
+**Reference 코드 (reference_slack_bot.py):**
+- Service Screener 위치: `/root/service-screener-v2/`
+- 결과 디렉터리: `/root/service-screener-v2/aws/{account_id}/`
+- 실행 명령어: `python3 /root/service-screener-v2/Screener.py --crossAccounts {config.json}`
+
+**현재 EC2 환경:**
+- Service Screener 위치: `/home/ec2-user/aws-zendesk-assistant/service-screener-v2/`
+- 결과 디렉터리: `/home/ec2-user/aws-zendesk-assistant/service-screener-v2/aws/{account_id}/`
+- 실행 명령어: `python3 /home/ec2-user/aws-zendesk-assistant/service-screener-v2/main.py --regions {regions}`
+
+### 코드 작성 시 필수 사항
+
+1. **절대 경로 사용 금지** - 상대 경로 또는 `os.path.dirname(__file__)` 사용
+2. **Reference 코드 참고 시** - 경로를 현재 환경에 맞게 변환
+3. **Service Screener 실행** - `Screener.py` 사용 (main.py 아님)
+4. **결과 위치** - `adminlte/aws/{account_id}/` 또는 `aws/{account_id}/` 확인 필요
+
+### 경로 변환 예시
+
+```python
+# ❌ 잘못된 방식 (Reference 코드 그대로)
+screener_path = '/root/service-screener-v2/Screener.py'
+
+# ✅ 올바른 방식 (현재 환경)
+screener_base = os.path.join(os.path.dirname(__file__), 'service-screener-v2')
+screener_path = os.path.join(screener_base, 'Screener.py')
+```
 
 ## 다음 단계
 
 1. ✅ `/reports/` 라우트 구현 완료
-2. 테스트: 월간 보고서 생성 후 웹 접근 확인
-3. Service Screener 결과 디렉토리 웹 접근 확인
-4. 필요시 ALB 헬스 체크 설정 조정
+2. Service Screener 실행 로직 수정 (Screener.py + --crossAccounts 사용)
+3. 결과 디렉터리 경로 확인 및 복사 로직 수정
+4. 테스트: 월간 보고서 생성 후 웹 접근 확인

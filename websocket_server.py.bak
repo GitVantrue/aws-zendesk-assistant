@@ -11,12 +11,11 @@ import threading
 import re
 import boto3
 from datetime import datetime, timedelta, date
-from flask import Flask, request, Response, send_from_directory
+from flask import Flask, request, Response
 from flask_socketio import SocketIO, emit
 import requests
 import tempfile
 import shutil
-import glob
 
 # Flask 앱 및 SocketIO 설정
 app = Flask(__name__)
@@ -54,86 +53,6 @@ current_progress = {}
 # /tmp/reports 디렉터리 생성
 os.makedirs('/tmp/reports', exist_ok=True)
 
-# Flask 라우트: /reports/ 정적 파일 서빙
-@app.route('/reports/')
-def serve_reports_root():
-    """
-    /reports/ 루트 요청 처리
-    """
-    return send_from_directory('/tmp/reports', 'index.html', mimetype='text/html')
-
-@app.route('/reports/<path:filepath>')
-def serve_reports(filepath):
-    """
-    /tmp/reports 디렉터리의 파일을 웹으로 서빙
-    
-    Args:
-        filepath (str): 요청된 파일 경로
-    
-    Returns:
-        파일 또는 404 에러
-    """
-    try:
-        # 보안: 경로 이탈 방지
-        full_path = os.path.abspath(os.path.join('/tmp/reports', filepath))
-        if not full_path.startswith('/tmp/reports'):
-            print(f"[ERROR] 경로 이탈 시도: {filepath}", flush=True)
-            return '접근 거부', 403
-        
-        # 디렉터리인 경우 index.html 자동 제공
-        if os.path.isdir(full_path):
-            index_path = os.path.join(full_path, 'index.html')
-            if os.path.exists(index_path):
-                print(f"[DEBUG] 디렉터리 index.html 제공: {index_path}", flush=True)
-                return send_from_directory(full_path, 'index.html', mimetype='text/html')
-            else:
-                print(f"[ERROR] index.html 없음: {index_path}", flush=True)
-                return '디렉터리 목록', 403
-        
-        # 파일 제공
-        directory = os.path.dirname(full_path)
-        filename = os.path.basename(full_path)
-        
-        print(f"[DEBUG] 파일 제공: {full_path}", flush=True)
-        return send_from_directory(directory, filename)
-    
-    except Exception as e:
-        print(f"[ERROR] 파일 서빙 중 오류: {e}", flush=True)
-        return f'오류 발생: {str(e)}', 500
-
-def cleanup_old_reports(days=2):
-    """
-    2일 이상 된 보고서 파일 자동 삭제 (파일 로테이션)
-    
-    Args:
-        days (int): 유지할 일수 (기본값: 2일)
-    """
-    try:
-        reports_dir = '/tmp/reports'
-        if not os.path.exists(reports_dir):
-            return
-        
-        now = datetime.now()
-        cutoff_time = now - timedelta(days=days)
-        
-        deleted_count = 0
-        for report_file in glob.glob(os.path.join(reports_dir, '*.html')):
-            file_mtime = datetime.fromtimestamp(os.path.getmtime(report_file))
-            
-            if file_mtime < cutoff_time:
-                try:
-                    os.remove(report_file)
-                    deleted_count += 1
-                    print(f"[DEBUG] 오래된 보고서 삭제: {os.path.basename(report_file)}", flush=True)
-                except Exception as e:
-                    print(f"[ERROR] 보고서 삭제 실패: {report_file} - {e}", flush=True)
-        
-        if deleted_count > 0:
-            print(f"[DEBUG] ✅ 파일 로테이션 완료: {deleted_count}개 파일 삭제", flush=True)
-    
-    except Exception as e:
-        print(f"[ERROR] 파일 로테이션 중 오류: {e}", flush=True)
-
 # WebSocket 이벤트 핸들러
 @socketio.on('connect', namespace='/zendesk')
 def handle_connect():
@@ -159,9 +78,6 @@ def handle_message(data):
 def handle_aws_query(data):
     """AWS 쿼리 처리"""
     print(f"[DEBUG] AWS 쿼리 수신: {data}", flush=True)
-    
-    # 파일 로테이션 실행 (2일 이상 된 파일 삭제)
-    cleanup_old_reports(days=2)
     
     try:
         query = data.get('query', '')
@@ -209,218 +125,27 @@ def handle_aws_query(data):
         if question_type == 'screener':
             emit('progress', {'progress': 40, 'message': 'Service Screener 스캔 중...'}, namespace='/zendesk')
             
-            try:
-                # Service Screener 실행 (Reference 코드 기반, 경로만 현재 환경에 맞게 수정)
-                screener_base = os.path.join(os.path.dirname(__file__), 'service-screener-v2')
-                screener_path = os.path.join(screener_base, 'Screener.py')
-                
-                # 스캔 설정 JSON 생성 (Reference 코드와 동일)
-                temp_json_path = f'/tmp/crossAccounts_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
-                
-                # 스캔할 리전 목록
-                scan_regions = ['ap-northeast-2', 'us-east-1', 'us-west-2', 'eu-west-1']
-                
-                cross_accounts_config = {
-                    "general": {
-                        "IncludeThisAccount": True,
-                        "Regions": scan_regions
-                    }
-                }
-                
-                # 임시 JSON 파일 생성
-                with open(temp_json_path, 'w', encoding='utf-8') as f:
-                    json.dump(cross_accounts_config, f, indent=2)
-                
-                print(f"[DEBUG] 스캔 설정 파일 생성: {temp_json_path}", flush=True)
-                print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
-                
-                # Service Screener 실행 (Screener.py + --crossAccounts 사용)
-                cmd = [
-                    'python3',
-                    screener_path,
-                    '--crossAccounts', temp_json_path
-                ]
-                
-                env = os.environ.copy()
-                env.update(credentials)
-                # EC2 메타데이터 서비스 비활성화 (환경 변수 자격증명 우선 사용)
-                env['AWS_EC2_METADATA_DISABLED'] = 'true'
-                
-                print(f"[DEBUG] Service Screener 실행 명령어: {' '.join(cmd)}", flush=True)
-                print(f"[DEBUG] 작업 디렉터리: {screener_base}", flush=True)
-                
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    env=env,
-                    timeout=600,  # 10분 타임아웃
-                    cwd=screener_base
-                )
-                
-                print(f"[DEBUG] Service Screener 실행 완료 (returncode: {result.returncode})", flush=True)
-                if result.stdout:
-                    print(f"[DEBUG] stdout (처음 500자): {result.stdout[:500]}", flush=True)
-                if result.stderr:
-                    print(f"[DEBUG] stderr (처음 500자): {result.stderr[:500]}", flush=True)
-                
-                # 임시 파일 삭제
-                try:
-                    os.remove(temp_json_path)
-                except:
-                    pass
-                
-                emit('progress', {'progress': 80, 'message': '결과 정리 중...'}, namespace='/zendesk')
-                
-                if result.returncode == 0:
-                    print(f"[DEBUG] ✅ Service Screener 스캔 완료", flush=True)
-                    
-                    # 결과 디렉터리 확인 (adminlte/aws/{account_id}/)
-                    account_result_dir = os.path.join(screener_base, 'adminlte', 'aws', account_id)
-                    
-                    if os.path.exists(account_result_dir):
-                        print(f"[DEBUG] 계정 디렉터리 발견: {account_result_dir}", flush=True)
-                        
-                        # index.html 찾기
-                        index_html_path = None
-                        for root, dirs, files in os.walk(account_result_dir):
-                            for file in files:
-                                if file.lower() == 'index.html':
-                                    index_html_path = os.path.join(root, file)
-                                    print(f"[DEBUG] index.html 발견: {index_html_path}", flush=True)
-                                    break
-                            if index_html_path:
-                                break
-                        
-                        if index_html_path:
-                            # 전체 디렉토리를 /tmp/reports로 복사 (ALB를 통해 제공하기 위함)
-                            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                            tmp_report_dir = f'/tmp/reports/screener_{account_id}_{timestamp}'
-                            
-                            try:
-                                # 기존 디렉토리가 있으면 삭제
-                                if os.path.exists(tmp_report_dir):
-                                    shutil.rmtree(tmp_report_dir)
-                                
-                                # 전체 디렉토리 복사 (index.html이 있는 디렉토리)
-                                source_dir = os.path.dirname(index_html_path)
-                                shutil.copytree(source_dir, tmp_report_dir)
-                                print(f"[DEBUG] 전체 디렉터리 복사 완료: {tmp_report_dir}", flush=True)
-                                
-                                # res 디렉토리 복사 (공유 리소스 - 한 번만 복사)
-                                # Reference 코드와 동일: adminlte 디렉토리를 res로 복사
-                                # 현재 환경에서는 adminlte/aws/res/ 가 실제 위치
-                                shared_res_dir = '/tmp/reports/res'
-                                
-                                # 공유 res/ 디렉토리가 없으면 복사
-                                if not os.path.exists(shared_res_dir):
-                                    print(f"[DEBUG] 공유 res 디렉토리 생성 시작", flush=True)
-                                    
-                                    # 현재 환경의 실제 경로: adminlte/aws/res/
-                                    res_source = os.path.join(screener_base, 'adminlte', 'aws', 'res')
-                                    print(f"[DEBUG] res 소스 경로 확인: {res_source}, 존재={os.path.exists(res_source)}", flush=True)
-                                    
-                                    if os.path.exists(res_source):
-                                        shutil.copytree(res_source, shared_res_dir)
-                                        print(f"[DEBUG] 공유 res 디렉터리 복사 완료: {shared_res_dir}", flush=True)
-                                    else:
-                                        print(f"[ERROR] res 소스 디렉터리를 찾을 수 없음: {res_source}", flush=True)
-                                        # Reference 코드의 대체 경로 시도 (현재 환경에 맞게 확장)
-                                        alt_paths = [
-                                            os.path.join(screener_base, 'adminlte'),  # Reference 코드 원본 경로
-                                            os.path.join(screener_base, 'res'),
-                                            os.path.join(screener_base, 'templates', 'res'),
-                                            os.path.join(screener_base, 'templates', 'adminlte'),
-                                            os.path.join(screener_base, 'adminlte', 'res'),
-                                            os.path.join(screener_base, 'aws', 'res')
-                                        ]
-                                        for alt_path in alt_paths:
-                                            print(f"[DEBUG] 대체 경로 확인: {alt_path}, 존재={os.path.exists(alt_path)}", flush=True)
-                                            if os.path.exists(alt_path):
-                                                shutil.copytree(alt_path, shared_res_dir)
-                                                print(f"[DEBUG] 대체 경로에서 공유 res 복사 완료: {alt_path} -> {shared_res_dir}", flush=True)
-                                                break
-                                else:
-                                    print(f"[DEBUG] 공유 res 디렉토리 이미 존재: {shared_res_dir}", flush=True)
-                                
-                                # 각 계정 보고서에서 공유 res/ 참조 (상대 경로)
-                                # HTML에서 ../res/ 로 참조하거나 /zendesk/reports/res/ 로 참조
-                                
-                                # HTML 파일의 res 경로 참조 수정 (상대 경로 → 절대 경로)
-                                # Service Screener HTML이 res/ 디렉토리를 상대 경로로 참조하는 경우 수정
-                                html_file_path = os.path.join(tmp_report_dir, 'index.html')
-                                if os.path.exists(html_file_path):
-                                    try:
-                                        with open(html_file_path, 'r', encoding='utf-8') as f:
-                                            html_content = f.read()
-                                        
-                                        # res/ 경로 참조를 /zendesk/reports/screener_{account_id}_{timestamp}/res/로 변경
-                                        # 이렇게 하면 HTML이 어느 깊이에 있든 상관없이 작동
-                                        modified_html = html_content.replace(
-                                            'href="res/',
-                                            f'href="/zendesk/reports/screener_{account_id}_{timestamp}/res/'
-                                        ).replace(
-                                            "href='res/",
-                                            f"href='/zendesk/reports/screener_{account_id}_{timestamp}/res/"
-                                        ).replace(
-                                            'src="res/',
-                                            f'src="/zendesk/reports/screener_{account_id}_{timestamp}/res/'
-                                        ).replace(
-                                            "src='res/",
-                                            f"src='/zendesk/reports/screener_{account_id}_{timestamp}/res/"
-                                        )
-                                        
-                                        with open(html_file_path, 'w', encoding='utf-8') as f:
-                                            f.write(modified_html)
-                                        
-                                        print(f"[DEBUG] HTML 파일의 res 경로 참조 수정 완료", flush=True)
-                                    except Exception as e:
-                                        print(f"[DEBUG] HTML 파일 수정 중 오류 (무시): {e}", flush=True)
-                                
-                                # 보고서 URL 생성
-                                report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/zendesk/reports/screener_{account_id}_{timestamp}/index.html"
-                                
-                                emit('result', {
-                                    'summary': f'✅ Service Screener 스캔 완료\n\n📊 상세 보고서: {report_url}',
-                                    'reports': [{'name': f'screener_{account_id}_{timestamp}', 'url': report_url}],
-                                    'data': {}
-                                }, namespace='/zendesk')
-                            except Exception as copy_error:
-                                print(f"[ERROR] 결과 복사 실패: {copy_error}", flush=True)
-                                emit('result', {
-                                    'summary': f'⚠️ 스캔은 완료되었으나 보고서 복사 중 오류 발생: {str(copy_error)}',
-                                    'reports': [],
-                                    'data': {}
-                                }, namespace='/zendesk')
-                        else:
-                            print(f"[ERROR] index.html을 찾을 수 없음: {account_result_dir}", flush=True)
-                            emit('result', {
-                                'summary': f'⚠️ 스캔은 완료되었으나 index.html을 찾을 수 없습니다.',
-                                'reports': [],
-                                'data': {}
-                            }, namespace='/zendesk')
-                    else:
-                        print(f"[ERROR] 결과 디렉터리 없음: {account_result_dir}", flush=True)
-                        emit('result', {
-                            'summary': f'⚠️ 스캔은 완료되었으나 결과 디렉터리를 찾을 수 없습니다: {account_result_dir}',
-                            'reports': [],
-                            'data': {}
-                        }, namespace='/zendesk')
-                else:
-                    error_msg = result.stderr.strip() if result.stderr else '알 수 없는 오류'
-                    print(f"[ERROR] ❌ Service Screener 스캔 실패: {error_msg}", flush=True)
-                    emit('result', {
-                        'summary': f'❌ Service Screener 스캔 실패:\n{error_msg[:500]}',
-                        'reports': [],
-                        'data': {}
-                    }, namespace='/zendesk')
+            # Q CLI 실행
+            q_path = '/home/ec2-user/.local/bin/q'
+            cmd = [q_path, 'scan', '--account', account_id, '--region', 'ap-northeast-2']
             
-            except Exception as e:
-                print(f"[ERROR] Service Screener 실행 중 오류: {e}", flush=True)
-                import traceback
-                traceback.print_exc()
+            env = os.environ.copy()
+            env.update(credentials)
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=300)
+            
+            emit('progress', {'progress': 80, 'message': '결과 정리 중...'}, namespace='/zendesk')
+            
+            if result.returncode == 0:
+                output = simple_clean_output(result.stdout)
                 emit('result', {
-                    'summary': f'❌ Service Screener 실행 중 오류: {str(e)}',
+                    'summary': f'✅ Service Screener 스캔 완료\n\n{output}',
+                    'reports': [],
+                    'data': {'raw_output': result.stdout}
+                }, namespace='/zendesk')
+            else:
+                emit('result', {
+                    'summary': f'❌ Service Screener 스캔 실패: {result.stderr}',
                     'reports': [],
                     'data': {}
                 }, namespace='/zendesk')
@@ -428,22 +153,13 @@ def handle_aws_query(data):
         elif question_type == 'report':
             emit('progress', {'progress': 40, 'message': '보안 데이터 수집 중...'}, namespace='/zendesk')
             
-            # 월간 보고서 생성 - 요청된 월 파싱
-            target_year, target_month = parse_month_from_query(query)
-            
-            # 지정된 월의 첫날과 마지막날 계산
-            if target_month == 12:
-                next_month_first = datetime(target_year + 1, 1, 1)
-            else:
-                next_month_first = datetime(target_year, target_month + 1, 1)
-            
-            start_date = datetime(target_year, target_month, 1)
-            end_date = next_month_first - timedelta(days=1)
+            # 월간 보고서 생성
+            today = datetime.now()
+            start_date = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+            end_date = today.replace(day=1) - timedelta(days=1)
             
             start_date_str = start_date.strftime('%Y-%m-%d')
             end_date_str = end_date.strftime('%Y-%m-%d')
-            
-            print(f"[DEBUG] 보고서 기간: {start_date_str} ~ {end_date_str}", flush=True)
             
             # Raw 데이터 수집
             raw_data = collect_raw_security_data(account_id, start_date_str, end_date_str, credentials=credentials)
@@ -480,7 +196,8 @@ def handle_aws_query(data):
             
             emit('result', {
                 'summary': f'✅ 월간 보안 보고서 생성 완료\n\n📊 보고서: {report_url}',
-                'reports': [{'name': report_filename, 'url': report_url}]
+                'reports': [{'name': report_filename, 'url': report_url}],
+                'data': raw_data
             }, namespace='/zendesk')
         
         else:
@@ -544,52 +261,6 @@ def extract_account_id(text):
     result = match.group() if match else None
     print(f"[DEBUG] 계정 ID 추출 시도: '{text}' -> '{result}'", flush=True)
     return result
-
-def parse_month_from_query(query):
-    """
-    쿼리에서 월 정보 추출
-    예: "8월 보고서", "2024년 8월", "August report" 등
-    
-    Returns:
-        tuple: (year, month) - 기본값은 지난달
-    """
-    query_lower = query.lower()
-    today = datetime.now()
-    
-    # 월 이름 매핑 (한글 + 영문)
-    month_map = {
-        '1월': 1, '2월': 2, '3월': 3, '4월': 4, '5월': 5, '6월': 6,
-        '7월': 7, '8월': 8, '9월': 9, '10월': 10, '11월': 11, '12월': 12,
-        'january': 1, 'february': 2, 'march': 3, 'april': 4, 'may': 5, 'june': 6,
-        'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12,
-        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-        'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
-    }
-    
-    # 월 추출 (먼저 월을 찾음)
-    target_month = None
-    for month_name, month_num in month_map.items():
-        if month_name in query_lower:
-            target_month = month_num
-            break
-    
-    # 연도 추출 (4자리 숫자, 1900~2100 범위만)
-    # 계정 ID(12자리)와 구분하기 위해 1900~2100 범위로 제한
-    year_match = re.search(r'\b(19\d{2}|20\d{2})\b', query)
-    target_year = int(year_match.group(1)) if year_match else today.year
-    
-    # 월을 찾지 못하면 지난달
-    if target_month is None:
-        # 지난달 계산
-        if today.month == 1:
-            target_year = today.year - 1
-            target_month = 12
-        else:
-            target_year = today.year
-            target_month = today.month - 1
-    
-    print(f"[DEBUG] 파싱된 월: {target_year}년 {target_month}월", flush=True)
-    return target_year, target_month
 
 def get_crossaccount_session(account_id):
     """Cross-account 세션 생성"""
@@ -897,6 +568,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
     }
     
     # 1. EC2 인스턴스 수집 (Raw 데이터 저장)
+    print(f"[DEBUG] 📦 EC2 인스턴스 수집 중...", flush=True)
     try:
         ec2_response = ec2.describe_instances()
         
@@ -925,6 +597,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['resources']['ec2'] = {"summary": {"total": 0, "running": 0, "stopped": 0}, "instances": []}
     
     # 2. S3 버킷 수집 (Raw 데이터 + 추가 정보)
+    print(f"[DEBUG] 📦 S3 버킷 수집 중...", flush=True)
     try:
         s3_response = s3.list_buckets()
         buckets_raw = []
@@ -961,6 +634,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
                 
                 buckets_raw.append(bucket_data)
             except Exception as e:
+                print(f"[DEBUG] 버킷 {bucket_name} 상세 정보 수집 실패: {e}", flush=True)
                 buckets_raw.append(bucket_data)  # 기본 정보라도 저장
         
         # 요약 정보 계산
@@ -981,6 +655,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['resources']['s3'] = {"summary": {"total": 0, "encrypted": 0, "public": 0}, "buckets": []}
     
     # 3. Lambda 함수 수집 (Raw 데이터 저장)
+    print(f"[DEBUG] 📦 Lambda 함수 수집 중...", flush=True)
     try:
         lambda_client = session.client('lambda', region_name=region)
         lambda_response = lambda_client.list_functions()
@@ -998,6 +673,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['resources']['lambda'] = {"summary": {"total": 0}, "functions": []}
     
     # 4. RDS 인스턴스 수집 (Raw 데이터 저장 - Multi-AZ, 엔진, 백업 등 모든 정보 포함)
+    print(f"[DEBUG] 📦 RDS 인스턴스 수집 중...", flush=True)
     try:
         rds_client = session.client('rds', region_name=region)
         rds_response = rds_client.describe_db_instances()
@@ -1015,6 +691,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['resources']['rds'] = {"summary": {"total": 0}, "instances": []}
     
     # 5. IAM 사용자 수집
+    print(f"[DEBUG] 📦 IAM 사용자 수집 중...", flush=True)
     try:
         iam_response = iam.list_users()
         users = []
@@ -1061,6 +738,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['iam_security'] = {"users": {"total": 0, "mfa_enabled": 0, "details": []}, "issues": []}
     
     # 6. 보안 그룹 수집
+    print(f"[DEBUG] 📦 보안 그룹 수집 중...", flush=True)
     try:
         sg_response = ec2.describe_security_groups()
         risky_sgs = []
@@ -1100,6 +778,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['security_groups'] = {"total": 0, "risky": 0, "details": []}
     
     # 7. 암호화 상태 수집
+    print(f"[DEBUG] 📦 암호화 상태 수집 중...", flush=True)
     try:
         volumes_response = ec2.describe_volumes()
         volumes = volumes_response['Volumes']
@@ -1139,10 +818,12 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['encryption'] = {"ebs": {"total": 0, "encrypted": 0, "unencrypted_volumes": []}, "s3": {"total": 0, "encrypted": 0, "encrypted_rate": 0.0}, "rds": {"total": 0, "encrypted": 0, "encrypted_rate": 0.0}}
     
     # 8. Trusted Advisor 수집 (가장 중요!)
+    print(f"[DEBUG] 🔍 Trusted Advisor 수집 중... (이게 핵심!)", flush=True)
     try:
         # TA 체크 목록 가져오기
         ta_checks_response = support.describe_trusted_advisor_checks(language='en')
         checks = ta_checks_response['checks']
+        print(f"[DEBUG] TA 전체 체크 개수: {len(checks)}개", flush=True)
         
         ta_results = []
         for check in checks:
@@ -1176,8 +857,9 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
                         "flagged_resources": flagged_resources,
                         "details": []  # 상세 정보는 생략 (개수만 표시)
                     })
+                    print(f"[DEBUG] TA 이슈 발견: [{category_kr}] {check_name} - {flagged_resources}개", flush=True)
             except Exception as e:
-                pass
+                print(f"[DEBUG] TA 체크 {check_name} 결과 수집 실패: {e}", flush=True)
         
         report_data['trusted_advisor'] = {
             "available": True,
@@ -1186,9 +868,12 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         print(f"[DEBUG] ✅ Trusted Advisor 수집 완료: {len(ta_results)}개 이슈 발견!", flush=True)
     except Exception as e:
         print(f"[ERROR] ❌ Trusted Advisor 수집 실패: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         report_data['trusted_advisor'] = {"available": False, "checks": []}
     
     # 9. CloudTrail 이벤트 수집 (정확한 기간, UTC+9)
+    print(f"[DEBUG] 📦 CloudTrail 이벤트 수집 중 ({start_date_str} ~ {end_date_str})...", flush=True)
     try:
         from datetime import datetime as dt, timezone
         
@@ -1202,6 +887,8 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         # 종료일 23:59:59 KST → UTC 변환
         end_time_kst = dt.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=kst)
         end_time_utc = end_time_kst.astimezone(timezone.utc)
+        
+        print(f"[DEBUG] CloudTrail 조회 기간 (UTC): {start_time_utc} ~ {end_time_utc}", flush=True)
         
         # 보안 관점에서 중요한 이벤트 목록 (우선순위 순)
         critical_events = {
@@ -1225,6 +912,8 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         total_collected = 0
         
         for event_name, event_info in critical_events.items():
+            print(f"[DEBUG] 🔍 {event_name} 이벤트 조회 중...", flush=True)
+            
             try:
                 # 해당 이벤트만 조회 (최대 50개)
                 events_response = cloudtrail.lookup_events(
@@ -1247,6 +936,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
                         'events': events  # Raw 이벤트 데이터
                     }
                     total_collected += len(events)
+                    print(f"[DEBUG] ✅ {event_name}: {len(events)}개 발견", flush=True)
                 else:
                     # 이벤트가 없어도 기록 (0건)
                     critical_events_data[event_name] = {
@@ -1258,6 +948,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
                     }
                     
             except Exception as e:
+                print(f"[DEBUG] ⚠️ {event_name} 조회 실패: {e}", flush=True)
                 critical_events_data[event_name] = {
                     'severity': event_info['severity'],
                     'category': event_info['category'],
@@ -1280,9 +971,12 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         print(f"[DEBUG] ✅ CloudTrail 중요 이벤트 수집 완료: {total_collected}개 ({period_days}일간)", flush=True)
     except Exception as e:
         print(f"[ERROR] ❌ CloudTrail 수집 실패: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         report_data['cloudtrail_events'] = {"summary": {"period_days": 30, "total_critical_events": 0, "monitored_event_types": 0}, "critical_events": {}}
     
     # 10. CloudWatch 알람 수집 (Raw 데이터 저장)
+    print(f"[DEBUG] 📦 CloudWatch 알람 수집 중...", flush=True)
     try:
         alarms_response = cloudwatch.describe_alarms()
         alarms_raw = alarms_response['MetricAlarms']
@@ -1308,6 +1002,7 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['cloudwatch'] = {"summary": {"total": 0, "in_alarm": 0, "ok": 0, "insufficient_data": 0}, "alarms": []}
     
     # 11. 권장사항 생성
+    print(f"[DEBUG] 📝 권장사항 생성 중...", flush=True)
     recommendations = []
     
     # MFA 권장사항
@@ -1359,11 +1054,14 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         })
     
     report_data['recommendations'] = recommendations
+    print(f"[DEBUG] ✅ 권장사항 생성 완료: {len(recommendations)}개", flush=True)
     
     print(f"[DEBUG] 🎉 boto3 데이터 수집 완료! 정확한 데이터를 수집했습니다.", flush=True)
     
     # datetime 객체를 JSON 직렬화 가능한 형식으로 변환
+    print(f"[DEBUG] 📝 datetime 객체 변환 중...", flush=True)
     report_data = convert_datetime_to_json_serializable(report_data)
+    print(f"[DEBUG] ✅ datetime 변환 완료", flush=True)
     
     return report_data
 
@@ -1935,6 +1633,8 @@ def generate_html_report(data):
         if not isinstance(data, dict):
             raise TypeError(f"data는 dict여야 하는데 {type(data)}입니다")
         
+        print(f"[DEBUG] HTML 보고서 생성 시작", flush=True)
+        
         # datetime 객체를 JSON 직렬화 가능한 형식으로 변환
         data = convert_datetime_to_json_serializable(data)
 
@@ -1942,6 +1642,8 @@ def generate_html_report(data):
         # 현재 스크립트 디렉토리 기준으로 템플릿 경로 설정
         script_dir = os.path.dirname(os.path.abspath(__file__))
         template_path = os.path.join(script_dir, 'templates', 'json_report_template.html')
+        
+        print(f"[DEBUG] 템플릿 경로: {template_path}", flush=True)
         
         # 템플릿 파일 로드 (필수)
         if not os.path.exists(template_path):
@@ -1951,6 +1653,7 @@ def generate_html_report(data):
         try:
             with open(template_path, 'r', encoding='utf-8') as f:
                 template = f.read()
+            print(f"[DEBUG] 템플릿 파일에서 로드 완료 (크기: {len(template)} bytes)", flush=True)
         except Exception as e:
             print(f"[ERROR] 템플릿 파일 로드 실패: {e}", flush=True)
             raise
@@ -1959,6 +1662,195 @@ def generate_html_report(data):
         if not template:
             raise ValueError("템플릿이 비어있습니다")
         
+        # 기본 메타데이터 처리 (이전 기본 템플릿 부분 제거됨)
+        # 이제 외부 템플릿 파일만 사용합니다
+        
+        # 기본 메타데이터
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>AWS 월간 보안 점검 보고서 - {account_id}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }}
+        .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }}
+        .header {{ background: #1a2332; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }}
+        .section {{ margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }}
+        .metric-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; }}
+        .metric-card {{ background: #f9f9f9; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #eee; }}
+        .metric-value {{ font-size: 2em; font-weight: bold; color: #1a2332; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+        th {{ background: #2c3e50; color: white; padding: 10px; text-align: left; }}
+        td {{ padding: 10px; border-bottom: 1px solid #ddd; }}
+        tr:hover {{ background: #f9f9f9; }}
+        .critical {{ color: #c0392b; font-weight: bold; }}
+        .warning {{ color: #f39c12; font-weight: bold; }}
+        .ok {{ color: #27ae60; font-weight: bold; }}
+        .footer {{ text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 AWS 월간 보안 점검 보고서</h1>
+            <p><strong>계정:</strong> {account_id} | <strong>리전:</strong> {region}</p>
+            <p><strong>보고서 생성일:</strong> {report_date}</p>
+            <p><strong>점검 기간:</strong> {period_start} ~ {period_end}</p>
+        </div>
+
+        {critical_issues_section}
+
+        <div class="section">
+            <h2>📊 전체 요약</h2>
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <h3>EC2 인스턴스</h3>
+                    <div class="metric-value">{ec2_total}</div>
+                    <p>실행 중: {ec2_running} | 중지: {ec2_stopped}</p>
+                </div>
+                <div class="metric-card">
+                    <h3>S3 버킷</h3>
+                    <div class="metric-value">{s3_total}</div>
+                    <p>암호화: {s3_encrypted} ({s3_encrypted_rate}%)</p>
+                </div>
+                <div class="metric-card">
+                    <h3>RDS 인스턴스</h3>
+                    <div class="metric-value">{rds_total}</div>
+                    <p>Multi-AZ: {rds_multi_az}</p>
+                </div>
+                <div class="metric-card">
+                    <h3>IAM 사용자</h3>
+                    <div class="metric-value">{iam_users_total}</div>
+                    <p>MFA: {iam_mfa_enabled} ({iam_mfa_rate}%)</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🔒 암호화 준수율</h2>
+            <p>EBS: {ebs_encrypted}/{ebs_total} ({ebs_rate}%)</p>
+            <p>S3: {s3_encrypted}/{s3_total} ({s3_encrypted_rate}%)</p>
+            <p>RDS: {rds_encrypted}/{rds_total} ({rds_encrypted_rate}%)</p>
+        </div>
+
+        <div class="section">
+            <h2>🖥️ EC2 인스턴스 ({ec2_total}개)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>이름</th>
+                        <th>인스턴스 ID</th>
+                        <th>타입</th>
+                        <th>상태</th>
+                        <th>퍼블릭 IP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {ec2_rows}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>💾 S3 버킷 ({s3_total}개)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>버킷 이름</th>
+                        <th>리전</th>
+                        <th>암호화</th>
+                        <th>버저닝</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {s3_rows}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>🗄️ RDS 인스턴스 ({rds_total}개)</h2>
+            {rds_content}
+        </div>
+
+        <div class="section">
+            <h2>⚡ Lambda 함수 ({lambda_total}개)</h2>
+            {lambda_content}
+        </div>
+
+        <div class="section">
+            <h2>🔐 IAM 사용자 보안 ({iam_users_total}명)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>사용자명</th>
+                        <th>MFA</th>
+                        <th>액세스 키</th>
+                        <th>보안 상태</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {iam_users_rows}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>🛡️ 보안 그룹 위험 규칙 ({sg_risky}개)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>보안 그룹 ID</th>
+                        <th>이름</th>
+                        <th>포트</th>
+                        <th>프로토콜</th>
+                        <th>소스</th>
+                        <th>위험도</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {sg_risky_rows}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>✅ Trusted Advisor 점검 결과</h2>
+            <p>보안 Error: {ta_security_error} | Warning: {ta_security_warning}</p>
+            <p>내결함성 Error: {ta_fault_tolerance_error} | Warning: {ta_fault_tolerance_warning}</p>
+            <p>비용 최적화 Warning: {ta_cost_warning}</p>
+            <p>성능 Warning: {ta_performance_warning}</p>
+        </div>
+
+        <div class="section">
+            <h2>📋 CloudTrail 중요 이벤트 (최근 {cloudtrail_days}일)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>이벤트 타입</th>
+                        <th>심각도</th>
+                        <th>발생 횟수</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {cloudtrail_critical_rows}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>📈 CloudWatch 알람 ({cloudwatch_alarms_total}개)</h2>
+            <p>발생 중: {cloudwatch_alarms_in_alarm} | 정상: {cloudwatch_alarms_ok} | 데이터 부족: {cloudwatch_alarms_insufficient}</p>
+        </div>
+
+        <div class="footer">
+            <p>🤖 이 보고서는 AWS Boto3 API를 통해 자동으로 생성되었습니다</p>
+            <p>생성 시간: {report_date} | 계정: {account_id} | 리전: {region}</p>
+        </div>
+    </div>
+</body>
+</html>"""
+            print(f"[DEBUG] 기본 HTML 템플릿 생성 완료", flush=True)
+
         # 기본 메타데이터
         metadata = data.get('metadata', {})
         
@@ -2100,6 +1992,8 @@ def generate_html_report(data):
         
     except Exception as e:
         print(f"[ERROR] ❌ HTML 보고서 생성 실패: {str(e)}", flush=True)
+        import traceback
+        print(f"[ERROR] {traceback.format_exc()}", flush=True)
         return None
 
 # Flask 라우트: 보고서 파일 제공
@@ -2117,22 +2011,27 @@ def serve_report(filename):
     try:
         # 보안: 파일명에 경로 조작 문자 제거
         if '..' in filename or '/' in filename:
+            print(f"[ERROR] 보안 위반: 부적절한 파일명 {filename}", flush=True)
             return "파일을 찾을 수 없습니다", 404
         
         report_path = os.path.join('/tmp/reports', filename)
         
         # 파일 존재 확인
         if not os.path.exists(report_path):
+            print(f"[ERROR] 보고서 파일 없음: {report_path}", flush=True)
             return "파일을 찾을 수 없습니다", 404
         
         # 파일 읽기
         with open(report_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
+        print(f"[DEBUG] 보고서 파일 제공: {report_path} (크기: {len(content)} bytes)", flush=True)
+        
         # HTML 파일로 반환
         return Response(content, mimetype='text/html; charset=utf-8')
     
     except Exception as e:
+        print(f"[ERROR] 보고서 파일 제공 중 오류: {e}", flush=True)
         return "파일을 읽을 수 없습니다", 500
 
 if __name__ == '__main__':
