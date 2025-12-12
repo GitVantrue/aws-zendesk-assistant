@@ -321,6 +321,8 @@ def handle_aws_query(data):
                 
                 print(f"[DEBUG] Service Screener 실행 명령어: {' '.join(cmd)}", flush=True)
                 print(f"[DEBUG] 작업 디렉터리: {screener_base}", flush=True)
+                print(f"[DEBUG] Screener.py 존재 여부: {os.path.exists(screener_path)}", flush=True)
+                print(f"[DEBUG] screener_base 존재 여부: {os.path.exists(screener_base)}", flush=True)
                 
                 result = subprocess.run(
                     cmd,
