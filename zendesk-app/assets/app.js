@@ -119,17 +119,17 @@ class SaltwareAWSAssistant {
             
             console.log('🔌 WebSocket 서버 연결 시도:', this.serverUrl);
             
-            // Socket.IO 클라이언트 생성
+            // Socket.IO 클라이언트 생성 - 안정성 우선 설정
             this.socket = io(this.serverUrl, {
                 path: '/zendesk/socket.io',
-                transports: ['websocket', 'polling'],  // websocket을 우선으로 (더 빠름)
-                timeout: 30000,  // 타임아웃 증가
+                transports: ['polling'],  // polling만 사용 (안정성 우선)
+                timeout: 60000,  // 타임아웃 대폭 증가
                 reconnection: true,
-                reconnectionAttempts: 5,  // 재연결 시도 감소 (안정성)
-                reconnectionDelay: 2000,  // 재연결 지연 증가
-                reconnectionDelayMax: 5000,
-                maxReconnectionAttempts: 5,
-                forceNew: false  // 기존 연결 재사용 허용
+                reconnectionAttempts: 3,
+                reconnectionDelay: 3000,
+                reconnectionDelayMax: 10000,
+                forceNew: true,  // 새 연결 강제
+                upgrade: false  // 업그레이드 비활성화
             });
             
             // WebSocket 이벤트 리스너 설정
@@ -194,7 +194,7 @@ class SaltwareAWSAssistant {
             this.updateConnectionStatus(false, '연결 오류');
         });
         
-        // 진행률 업데이트
+        // 진행률 업데이트 - 강화된 디버깅
         this.socket.on('progress', (data) => {
             console.log('📊 진행률 업데이트 수신:', data);
             console.log('📊 현재 연결 상태:', this.socket.connected);
@@ -206,6 +206,14 @@ class SaltwareAWSAssistant {
             
             // 브라우저 제목도 변경해서 확실히 확인
             document.title = `AWS Assistant - ${data.progress}%`;
+            
+            // 강제 알림으로 이벤트 수신 확인
+            if (window.Notification && Notification.permission === 'granted') {
+                new Notification(`진행률 ${data.progress}%`, { 
+                    body: data.message,
+                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📊</text></svg>'
+                });
+            }
             
             try {
                 this.updateProgress(data.progress, data.message);
@@ -236,15 +244,25 @@ class SaltwareAWSAssistant {
             this.hideProgress();
         });
         
-        // 모든 이벤트 디버깅 (강화)
+        // 모든 이벤트 디버깅 (강화) - 이벤트 손실 추적
         this.socket.onAny((eventName, ...args) => {
-            console.log('🔍 WebSocket 이벤트 수신:', eventName, args);
+            const timestamp = new Date().toLocaleTimeString();
+            console.log(`🔍 [${timestamp}] WebSocket 이벤트 수신:`, eventName, args);
             
             // 특별히 progress 이벤트 강조
             if (eventName === 'progress') {
                 console.log('🎯 PROGRESS 이벤트 감지!', args[0]);
                 // 브라우저 콘솔에 큰 메시지로 표시
                 console.log('%c🚨 PROGRESS: ' + args[0]?.progress + '%', 'color: red; font-size: 20px; font-weight: bold;');
+                
+                // 페이지 배경색도 변경해서 시각적으로 확인
+                document.body.style.backgroundColor = `hsl(${args[0]?.progress * 3.6}, 50%, 95%)`;
+            }
+            
+            // result 이벤트도 강조
+            if (eventName === 'result') {
+                console.log('%c🎯 RESULT 이벤트 감지!', 'color: green; font-size: 20px; font-weight: bold;');
+                document.body.style.backgroundColor = '#e8f5e8';
             }
         });
         
