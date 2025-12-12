@@ -210,6 +210,8 @@ def handle_disconnect():
 def handle_aws_query(data):
     """AWS 질문 처리"""
     try:
+        from flask import request
+        
         query = data.get('query', '').strip()
         user_id = data.get('user_id', 'unknown')
         ticket_id = data.get('ticket_id', 'unknown')
