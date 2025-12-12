@@ -288,8 +288,10 @@ def handle_aws_query(data):
                 screener_path = os.path.join(screener_base, 'Screener.py')
                 screener_requirements = os.path.join(screener_base, 'requirements.txt')
                 
-                # Service Screener 의존성 설치 (첫 실행 시에만)
+                # Service Screener 의존성 설치 (개발 모드 + requirements)
                 print(f"[DEBUG] Service Screener 의존성 설치 시작", flush=True)
+                
+                # 1단계: 기본 requirements 설치
                 pip_install_cmd = [
                     'pip3', 'install', '-q',
                     '-r', screener_requirements
@@ -303,9 +305,28 @@ def handle_aws_query(data):
                 )
                 
                 if pip_result.returncode == 0:
-                    print(f"[DEBUG] Service Screener 의존성 설치 완료", flush=True)
+                    print(f"[DEBUG] Service Screener requirements 설치 완료", flush=True)
                 else:
-                    print(f"[WARNING] Service Screener 의존성 설치 경고: {pip_result.stderr[:500]}", flush=True)
+                    print(f"[WARNING] Service Screener requirements 설치 경고: {pip_result.stderr[:500]}", flush=True)
+                
+                # 2단계: 개발 모드 설치 (setup.py -e .)
+                print(f"[DEBUG] Service Screener 개발 모드 설치 시작", flush=True)
+                setup_install_cmd = [
+                    'pip3', 'install', '-q', '-e', screener_base
+                ]
+                
+                setup_result = subprocess.run(
+                    setup_install_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    cwd=screener_base
+                )
+                
+                if setup_result.returncode == 0:
+                    print(f"[DEBUG] Service Screener 개발 모드 설치 완료", flush=True)
+                else:
+                    print(f"[WARNING] Service Screener 개발 모드 설치 경고: {setup_result.stderr[:500]}", flush=True)
                 
                 # 스캔 설정 JSON 생성 (Reference 코드와 동일)
                 temp_json_path = f'/tmp/crossAccounts_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
