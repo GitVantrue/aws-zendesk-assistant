@@ -331,6 +331,421 @@ def convert_local_paths_to_urls(text):
         print(f"[ERROR] URL 변환 중 오류: {e}", flush=True)
         return text
 
+def collect_raw_security_data(account_id, start_date_str, end_date_str, region='ap-northeast-2', credentials=None):
+    """
+    boto3를 사용하여 AWS raw 보안 데이터를 수집 (Q CLI 분석용)
+    
+    Args:
+        account_id (str): AWS 계정 ID
+        start_date_str (str): 시작 날짜 (YYYY-MM-DD)
+        end_date_str (str): 종료 날짜 (YYYY-MM-DD)
+        region (str): AWS 리전
+        credentials (dict): AWS 자격증명 (선택사항)
+    
+    Returns:
+        dict: 수집된 보안 데이터
+    """
+    try:
+        print(f"[DEBUG] Raw 보안 데이터 수집 시작: {account_id}, {start_date_str} ~ {end_date_str}", flush=True)
+        
+        # boto3 세션 생성
+        if credentials:
+            session = boto3.Session(
+                aws_access_key_id=credentials['AWS_ACCESS_KEY_ID'],
+                aws_secret_access_key=credentials['AWS_SECRET_ACCESS_KEY'],
+                aws_session_token=credentials['AWS_SESSION_TOKEN'],
+                region_name=region
+            )
+        else:
+            session = boto3.Session(region_name=region)
+        
+        # 클라이언트 생성
+        ec2 = session.client('ec2')
+        s3 = session.client('s3')
+        iam = session.client('iam')
+        cloudtrail = session.client('cloudtrail')
+        cloudwatch = session.client('cloudwatch')
+        
+        # 메타데이터
+        metadata = {
+            'account_id': account_id,
+            'report_date': datetime.now().strftime('%Y-%m-%d'),
+            'period_start': start_date_str,
+            'period_end': end_date_str,
+            'region': region
+        }
+        
+        # EC2 인스턴스 수집
+        print(f"[DEBUG] EC2 인스턴스 수집 중...", flush=True)
+        ec2_instances = []
+        try:
+            response = ec2.describe_instances()
+            for reservation in response['Reservations']:
+                for instance in reservation['Instances']:
+                    # 인스턴스 이름 추출
+                    name = 'N/A'
+                    for tag in instance.get('Tags', []):
+                        if tag['Key'] == 'Name':
+                            name = tag['Value']
+                            break
+                    
+                    ec2_instances.append({
+                        'id': instance['InstanceId'],
+                        'name': name,
+                        'type': instance['InstanceType'],
+                        'state': instance['State']['Name'],
+                        'private_ip': instance.get('PrivateIpAddress', 'N/A'),
+                        'public_ip': instance.get('PublicIpAddress', 'N/A'),
+                        'launch_time': instance.get('LaunchTime')
+                    })
+        except Exception as e:
+            print(f"[ERROR] EC2 데이터 수집 실패: {e}", flush=True)
+        
+        # S3 버킷 수집
+        print(f"[DEBUG] S3 버킷 수집 중...", flush=True)
+        s3_buckets = []
+        try:
+            response = s3.list_buckets()
+            for bucket in response['Buckets']:
+                bucket_name = bucket['Name']
+                
+                # 암호화 상태 확인
+                encrypted = False
+                try:
+                    s3.get_bucket_encryption(Bucket=bucket_name)
+                    encrypted = True
+                except:
+                    pass
+                
+                s3_buckets.append({
+                    'name': bucket_name,
+                    'creation_date': bucket['CreationDate'],
+                    'encrypted': encrypted,
+                    'region': region
+                })
+        except Exception as e:
+            print(f"[ERROR] S3 데이터 수집 실패: {e}", flush=True)
+        
+        # IAM 사용자 수집
+        print(f"[DEBUG] IAM 사용자 수집 중...", flush=True)
+        iam_users = []
+        try:
+            response = iam.list_users()
+            for user in response['Users']:
+                username = user['UserName']
+                
+                # MFA 디바이스 확인
+                mfa_devices = iam.list_mfa_devices(UserName=username)
+                has_mfa = len(mfa_devices['MFADevices']) > 0
+                
+                # 액세스 키 확인
+                access_keys = iam.list_access_keys(UserName=username)
+                
+                iam_users.append({
+                    'username': username,
+                    'creation_date': user['CreateDate'],
+                    'mfa': has_mfa,
+                    'access_keys': [key['AccessKeyId'] for key in access_keys['AccessKeyMetadata']]
+                })
+        except Exception as e:
+            print(f"[ERROR] IAM 데이터 수집 실패: {e}", flush=True)
+        
+        # 보안 그룹 수집
+        print(f"[DEBUG] 보안 그룹 수집 중...", flush=True)
+        security_groups = []
+        try:
+            response = ec2.describe_security_groups()
+            for sg in response['SecurityGroups']:
+                # 위험한 규칙 확인 (0.0.0.0/0 허용)
+                risky_rules = []
+                for rule in sg.get('IpPermissions', []):
+                    for ip_range in rule.get('IpRanges', []):
+                        if ip_range.get('CidrIp') == '0.0.0.0/0':
+                            risky_rules.append({
+                                'protocol': rule.get('IpProtocol'),
+                                'port': rule.get('FromPort'),
+                                'cidr': '0.0.0.0/0'
+                            })
+                
+                security_groups.append({
+                    'id': sg['GroupId'],
+                    'name': sg['GroupName'],
+                    'description': sg['Description'],
+                    'risky_rules': risky_rules,
+                    'is_risky': len(risky_rules) > 0
+                })
+        except Exception as e:
+            print(f"[ERROR] 보안 그룹 데이터 수집 실패: {e}", flush=True)
+        
+        # 데이터 구조화
+        raw_data = {
+            'metadata': metadata,
+            'resources': {
+                'ec2': {
+                    'total': len(ec2_instances),
+                    'running': len([i for i in ec2_instances if i['state'] == 'running']),
+                    'instances': ec2_instances
+                },
+                's3': {
+                    'total': len(s3_buckets),
+                    'encrypted': len([b for b in s3_buckets if b['encrypted']]),
+                    'buckets': s3_buckets
+                },
+                'lambda': {'total': 0, 'functions': []},  # 추후 구현
+                'rds': {'total': 0, 'instances': []}  # 추후 구현
+            },
+            'iam_security': {
+                'users': {
+                    'total': len(iam_users),
+                    'mfa_enabled': len([u for u in iam_users if u['mfa']]),
+                    'details': iam_users
+                },
+                'issues': []  # 추후 분석
+            },
+            'security_groups': {
+                'total': len(security_groups),
+                'risky': len([sg for sg in security_groups if sg['is_risky']]),
+                'details': security_groups
+            },
+            'encryption': {
+                'ebs': {'total': 0, 'encrypted': 0, 'unencrypted_volumes': []},
+                's3': {
+                    'total': len(s3_buckets),
+                    'encrypted': len([b for b in s3_buckets if b['encrypted']]),
+                    'encrypted_rate': (len([b for b in s3_buckets if b['encrypted']]) / len(s3_buckets) * 100) if s3_buckets else 0
+                },
+                'rds': {'total': 0, 'encrypted': 0, 'encrypted_rate': 0.0}
+            },
+            'trusted_advisor': {'available': False, 'checks': []},
+            'cloudtrail_events': {
+                'period_days': 30,
+                'total_events': 0,
+                'critical_events': [],
+                'failed_logins': 0,
+                'permission_changes': 0,
+                'resource_deletions': 0
+            },
+            'cloudwatch': {
+                'alarms': {'total': 0, 'in_alarm': 0, 'ok': 0, 'insufficient_data': 0, 'details': []},
+                'high_cpu_instances': []
+            },
+            'recommendations': []
+        }
+        
+        print(f"[DEBUG] Raw 보안 데이터 수집 완료", flush=True)
+        return raw_data
+        
+    except Exception as e:
+        print(f"[ERROR] Raw 보안 데이터 수집 중 오류: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return {}
+
+def generate_html_report(json_file_path):
+    """JSON 데이터를 월간 보안 점검 HTML 보고서로 변환"""
+    try:
+        print(f"[DEBUG] HTML 보고서 생성 시작: {json_file_path}", flush=True)
+        
+        # JSON 파일 로드
+        with open(json_file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # HTML 템플릿 경로
+        template_path = 'reference_templates/json_report_template.html'
+        
+        # 템플릿 로드
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template = f.read()
+        
+        # 메타데이터 추출
+        metadata = data.get('metadata', {})
+        account_id = metadata.get('account_id', 'Unknown')
+        
+        # HTML 생성
+        html_content = generate_html_from_json(data)
+        
+        # 파일 저장
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        html_filename = f"security_report_{account_id}_{timestamp}.html"
+        html_path = f"/tmp/reports/{html_filename}"
+        
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        print(f"[DEBUG] HTML 보고서 생성 완료: {html_path}", flush=True)
+        return html_path
+        
+    except Exception as e:
+        print(f"[ERROR] HTML 보고서 생성 실패: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return None
+
+def generate_html_from_json(data):
+    """JSON 데이터를 HTML 보고서로 변환 (Slack bot과 동일한 로직)"""
+    try:
+        # 기본 HTML 템플릿
+        html_template = """<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS 월간 보안 점검 보고서 - {report_date}</title>
+    <style>
+        body {{ font-family: 'Malgun Gothic', sans-serif; margin: 20px; }}
+        .header {{ background: #232F3E; color: white; padding: 20px; border-radius: 5px; }}
+        .summary {{ background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background-color: #f2f2f2; }}
+        .alert {{ padding: 15px; margin: 20px 0; border-radius: 5px; }}
+        .alert-danger {{ background-color: #f8d7da; border: 1px solid #f5c6cb; }}
+        .section {{ margin: 30px 0; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>AWS 월간 보안 점검 보고서</h1>
+        <p>계정: {account_id} | 보고서 생성일: {report_date}</p>
+        <p>분석 기간: {period_start} ~ {period_end}</p>
+    </div>
+    
+    <div class="summary">
+        <h2>📊 요약</h2>
+        <ul>
+            <li><strong>EC2 인스턴스:</strong> 총 {ec2_total}개 (실행 중: {ec2_running}개)</li>
+            <li><strong>S3 버킷:</strong> 총 {s3_total}개 (암호화: {s3_encrypted}개)</li>
+            <li><strong>IAM 사용자:</strong> 총 {iam_total}개 (MFA 활성화: {iam_mfa}개)</li>
+            <li><strong>보안 그룹:</strong> 총 {sg_total}개 (위험: {sg_risky}개)</li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h2>🖥️ EC2 인스턴스</h2>
+        {ec2_table}
+    </div>
+    
+    <div class="section">
+        <h2>🪣 S3 버킷</h2>
+        {s3_table}
+    </div>
+    
+    <div class="section">
+        <h2>👤 IAM 보안</h2>
+        {iam_table}
+    </div>
+    
+    <div class="section">
+        <h2>🛡️ 보안 그룹</h2>
+        {sg_table}
+    </div>
+</body>
+</html>"""
+        
+        # 데이터 추출
+        metadata = data.get('metadata', {})
+        resources = data.get('resources', {})
+        iam = data.get('iam_security', {})
+        sg = data.get('security_groups', {})
+        
+        # 테이블 생성
+        ec2_table = generate_ec2_table(resources.get('ec2', {}).get('instances', []))
+        s3_table = generate_s3_table(resources.get('s3', {}).get('buckets', []))
+        iam_table = generate_iam_table(iam.get('users', {}).get('details', []))
+        sg_table = generate_sg_table(sg.get('details', []))
+        
+        # HTML 생성
+        html = html_template.format(
+            account_id=metadata.get('account_id', 'Unknown'),
+            report_date=metadata.get('report_date', 'Unknown'),
+            period_start=metadata.get('period_start', 'Unknown'),
+            period_end=metadata.get('period_end', 'Unknown'),
+            ec2_total=resources.get('ec2', {}).get('total', 0),
+            ec2_running=resources.get('ec2', {}).get('running', 0),
+            s3_total=resources.get('s3', {}).get('total', 0),
+            s3_encrypted=resources.get('s3', {}).get('encrypted', 0),
+            iam_total=iam.get('users', {}).get('total', 0),
+            iam_mfa=iam.get('users', {}).get('mfa_enabled', 0),
+            sg_total=sg.get('total', 0),
+            sg_risky=sg.get('risky', 0),
+            ec2_table=ec2_table,
+            s3_table=s3_table,
+            iam_table=iam_table,
+            sg_table=sg_table
+        )
+        
+        return html
+        
+    except Exception as e:
+        print(f"[ERROR] HTML 생성 실패: {e}", flush=True)
+        return "<html><body><h1>보고서 생성 실패</h1></body></html>"
+
+def generate_ec2_table(instances):
+    """EC2 인스턴스 테이블 생성"""
+    if not instances:
+        return '<p>EC2 인스턴스가 없습니다.</p>'
+    
+    html = '<table><thead><tr><th>ID</th><th>이름</th><th>타입</th><th>상태</th><th>IP</th></tr></thead><tbody>'
+    for inst in instances:
+        html += f'''<tr>
+            <td>{inst.get('id', 'N/A')}</td>
+            <td>{inst.get('name', 'N/A')}</td>
+            <td>{inst.get('type', 'N/A')}</td>
+            <td>{inst.get('state', 'N/A')}</td>
+            <td>{inst.get('private_ip', 'N/A')}</td>
+        </tr>'''
+    html += '</tbody></table>'
+    return html
+
+def generate_s3_table(buckets):
+    """S3 버킷 테이블 생성"""
+    if not buckets:
+        return '<p>S3 버킷이 없습니다.</p>'
+    
+    html = '<table><thead><tr><th>이름</th><th>리전</th><th>암호화</th><th>생성일</th></tr></thead><tbody>'
+    for bucket in buckets:
+        html += f'''<tr>
+            <td>{bucket.get('name', 'N/A')}</td>
+            <td>{bucket.get('region', 'N/A')}</td>
+            <td>{'예' if bucket.get('encrypted') else '아니오'}</td>
+            <td>{bucket.get('creation_date', 'N/A')}</td>
+        </tr>'''
+    html += '</tbody></table>'
+    return html
+
+def generate_iam_table(users):
+    """IAM 사용자 테이블 생성"""
+    if not users:
+        return '<p>IAM 사용자가 없습니다.</p>'
+    
+    html = '<table><thead><tr><th>사용자명</th><th>MFA</th><th>액세스 키</th><th>생성일</th></tr></thead><tbody>'
+    for user in users:
+        html += f'''<tr>
+            <td>{user.get('username', 'N/A')}</td>
+            <td>{'활성화' if user.get('mfa') else '비활성화'}</td>
+            <td>{len(user.get('access_keys', []))}개</td>
+            <td>{user.get('creation_date', 'N/A')}</td>
+        </tr>'''
+    html += '</tbody></table>'
+    return html
+
+def generate_sg_table(security_groups):
+    """보안 그룹 테이블 생성"""
+    if not security_groups:
+        return '<p>보안 그룹이 없습니다.</p>'
+    
+    html = '<table><thead><tr><th>ID</th><th>이름</th><th>설명</th><th>위험 규칙</th></tr></thead><tbody>'
+    for sg in security_groups:
+        risky_count = len(sg.get('risky_rules', []))
+        html += f'''<tr>
+            <td>{sg.get('id', 'N/A')}</td>
+            <td>{sg.get('name', 'N/A')}</td>
+            <td>{sg.get('description', 'N/A')}</td>
+            <td>{risky_count}개</td>
+        </tr>'''
+    html += '</tbody></table>'
+    return html
+
 def generate_html_report(json_file_path):
     """JSON 데이터를 월간 보안 점검 HTML 보고서로 변환 (Slack bot과 동일)"""
     try:
@@ -1114,14 +1529,125 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 emit_result({'summary': error_summary})
             
         else:
-            # 일반 질문 처리 - 실제 Q CLI 실행
-            emit_progress(70, 'AWS API를 호출하고 있습니다...')
-            
-            # 컨텍스트 파일 로드
-            context_content = load_context_file(context_path) if context_path else ""
-            
-            # 한국어 프롬프트 구성
-            korean_prompt = f"""다음 컨텍스트를 참고하여 질문에 답변해주세요:
+            # 질문 유형에 따른 처리
+            if question_type == 'report':
+                # 월간 보고서 생성 처리
+                emit_progress(60, '보안 데이터를 수집하고 있습니다...')
+                
+                # 날짜 추출 로직 (Slack bot과 동일)
+                now = datetime.now()
+                target_account = account_id if account_id else "950027134314"
+                
+                # 질문에서 여러 월 추출 (9월, 10월 등)
+                month_matches = re.findall(r'(\d{1,2})월', query)
+                year_match = re.search(r'(\d{4})년?', query)
+                
+                if month_matches:
+                    # 여러 월이 있으면 범위로 처리
+                    months = [int(m) for m in month_matches]
+                    start_month = min(months)
+                    end_month = max(months)
+                    
+                    target_year = year_match.group(1) if year_match else str(now.year)
+                    target_year = int(target_year)
+                    
+                    # 시작일: 첫 번째 월의 1일
+                    start_date = date(target_year, start_month, 1)
+                    
+                    # 종료일: 마지막 월의 말일
+                    if end_month == 12:
+                        end_date = date(target_year + 1, 1, 1) - timedelta(days=1)
+                    else:
+                        end_date = date(target_year, end_month + 1, 1) - timedelta(days=1)
+                    
+                    start_date_str = start_date.strftime("%Y-%m-%d")
+                    end_date_str = end_date.strftime("%Y-%m-%d")
+                else:
+                    # 월 정보 없으면 최근 30일
+                    start_date = now.date() - timedelta(days=30)
+                    end_date = now.date()
+                    start_date_str = start_date.strftime("%Y-%m-%d")
+                    end_date_str = end_date.strftime("%Y-%m-%d")
+                
+                # 타임스탬프 생성 (파일명용)
+                from datetime import timezone
+                kst = timezone(timedelta(hours=9))
+                timestamp = datetime.now(kst).strftime("%Y%m%d_%H%M%S")
+                
+                raw_json_path = f"/tmp/reports/raw_security_data_{target_account}_{timestamp}.json"
+                
+                try:
+                    # 1단계: boto3로 raw 데이터 수집
+                    print(f"[DEBUG] 📦 1단계: boto3로 raw 데이터 수집 시작", flush=True)
+                    print(f"[DEBUG] 분석 기간: {start_date_str} ~ {end_date_str} (UTC+9)", flush=True)
+                    
+                    emit_progress(70, f'AWS 보안 데이터를 수집하고 있습니다... ({start_date_str} ~ {end_date_str})')
+                    
+                    # boto3로 raw 데이터 수집
+                    raw_data = collect_raw_security_data(
+                        target_account, 
+                        start_date_str, 
+                        end_date_str, 
+                        region='ap-northeast-2',
+                        credentials=credentials if account_id else None
+                    )
+                    
+                    # Raw JSON 파일로 저장
+                    with open(raw_json_path, 'w', encoding='utf-8') as f:
+                        json.dump(raw_data, f, indent=2, ensure_ascii=False, default=convert_datetime_to_json_serializable)
+                    print(f"[DEBUG] ✅ Raw JSON 저장 완료: {raw_json_path}", flush=True)
+                    
+                    emit_progress(80, 'HTML 보고서를 생성하고 있습니다...')
+                    
+                    # HTML 보고서 생성
+                    html_report_path = generate_html_report(raw_json_path)
+                    if html_report_path:
+                        print(f"[DEBUG] ✅ HTML 보고서 생성 완료: {html_report_path}", flush=True)
+                        
+                        # HTML 보고서 URL 생성
+                        html_filename = os.path.basename(html_report_path)
+                        html_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/{html_filename}"
+                        
+                        emit_progress(100, '보고서 생성이 완료되었습니다!')
+                        
+                        # 요약 정보 생성
+                        ec2_total = raw_data.get('resources', {}).get('ec2', {}).get('total', 0)
+                        s3_total = raw_data.get('resources', {}).get('s3', {}).get('total', 0)
+                        iam_total = raw_data.get('iam_security', {}).get('users', {}).get('total', 0)
+                        sg_risky = raw_data.get('security_groups', {}).get('risky', 0)
+                        
+                        summary = f"""✅ AWS 월간 보안 보고서 생성 완료!
+
+🏢 계정: {target_account}
+📅 분석 기간: {start_date_str} ~ {end_date_str}
+
+📊 주요 현황:
+• EC2 인스턴스: {ec2_total}개
+• S3 버킷: {s3_total}개  
+• IAM 사용자: {iam_total}개
+• 위험한 보안 그룹: {sg_risky}개
+
+📋 상세 보고서: {html_url}"""
+                        
+                        emit_result({'summary': account_prefix + summary})
+                    else:
+                        emit_error('HTML 보고서 생성에 실패했습니다.')
+                    
+                except Exception as e:
+                    print(f"[ERROR] 월간 보고서 생성 중 오류: {str(e)}", flush=True)
+                    import traceback
+                    traceback.print_exc()
+                    emit_error(f'보고서 생성 중 오류가 발생했습니다: {str(e)}')
+                
+            else:
+                # 일반 질문 처리 - 실제 Q CLI 실행
+                emit_progress(70, 'AWS API를 호출하고 있습니다...')
+                
+                # 컨텍스트 파일 로드
+                context_content = load_context_file(context_path) if context_path else ""
+                
+                # 한국어 프롬프트 구성
+                korean_prompt = f"""다음 컨텍스트를 참고하여 질문에 답변해주세요:
 
 {context_content}
 
@@ -1129,11 +1655,11 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 {query}
 
 위 컨텍스트의 가이드라인을 따라 한국어로 답변해주세요."""
-            
-            emit_progress(90, 'AI가 결과를 분석하고 있습니다...')
-            
-            # 실제 Q CLI 실행
-            print(f"[DEBUG] Q CLI 실행 시작 - 질문 유형: {question_type}", flush=True)
+                
+                emit_progress(90, 'AI가 결과를 분석하고 있습니다...')
+                
+                # 실제 Q CLI 실행
+                print(f"[DEBUG] Q CLI 실행 시작 - 질문 유형: {question_type}", flush=True)
             
             try:
                 # Q CLI 경로 자동 감지 (권한에 따라)
