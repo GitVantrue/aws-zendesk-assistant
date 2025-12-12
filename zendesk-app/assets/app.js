@@ -173,14 +173,16 @@ class SaltwareAWSAssistant {
             console.log('📊 현재 진행률 요소 존재:', !!this.elements.progressContainer);
             console.log('📊 현재 진행률 요소 표시 상태:', this.elements.progressContainer?.style.display);
             
-            // 강제 알림으로 이벤트 수신 확인
-            if (data.progress > 0) {
-                console.log('🚨 ALERT: 진행률', data.progress + '% 수신됨!');
-                // 브라우저 알림으로 강제 확인
-                if (window.Notification && Notification.permission === 'granted') {
-                    new Notification('진행률 업데이트', { body: data.progress + '% - ' + data.message });
-                }
+            // 모든 progress 이벤트에 대해 강제 알림
+            console.log('🚨 ALERT: 진행률', data.progress + '% 수신됨!');
+            
+            // 브라우저 알림으로 강제 확인 (모든 progress에 대해)
+            if (window.Notification && Notification.permission === 'granted') {
+                new Notification('진행률 업데이트', { body: data.progress + '% - ' + data.message });
             }
+            
+            // 브라우저 제목도 변경해서 확실히 확인
+            document.title = `AWS Assistant - ${data.progress}%`;
             
             try {
                 this.updateProgress(data.progress, data.message);
@@ -211,40 +213,19 @@ class SaltwareAWSAssistant {
             this.hideProgress();
         });
         
-        // 모든 이벤트 디버깅
+        // 모든 이벤트 디버깅 (강화)
         this.socket.onAny((eventName, ...args) => {
             console.log('🔍 WebSocket 이벤트 수신:', eventName, args);
+            
+            // 특별히 progress 이벤트 강조
+            if (eventName === 'progress') {
+                console.log('🎯 PROGRESS 이벤트 감지!', args[0]);
+                // 브라우저 콘솔에 큰 메시지로 표시
+                console.log('%c🚨 PROGRESS: ' + args[0]?.progress + '%', 'color: red; font-size: 20px; font-weight: bold;');
+            }
         });
         
-        // 추가 안전장치: 네임스페이스 없이도 이벤트 수신
-        try {
-            const globalServerUrl = this.serverUrl.replace('/zendesk', '');
-            console.log('🌐 글로벌 WebSocket 연결 시도:', globalServerUrl);
-            
-            this.globalSocket = io(globalServerUrl, {
-                transports: ['polling', 'websocket'],
-                timeout: 20000,
-                reconnection: true,
-                reconnectionAttempts: 10,
-                reconnectionDelay: 1000
-            });
-            
-            this.globalSocket.on('progress', (data) => {
-                console.log('🌐 글로벌 progress 이벤트 수신:', data);
-                if (data.progress > 0) {
-                    console.log('🚨 글로벌에서 진행률', data.progress + '% 수신됨!');
-                    this.updateProgress(data.progress, data.message);
-                }
-            });
-            
-            this.globalSocket.on('result', (data) => {
-                console.log('🌐 글로벌 result 이벤트 수신:', data);
-                this.showResult(data);
-                this.hideProgress();
-            });
-        } catch (error) {
-            console.warn('🌐 글로벌 WebSocket 연결 실패:', error);
-        }
+        // 글로벌 연결은 CORS 문제로 제거하고 메인 연결에 집중
     }
     
     /**
