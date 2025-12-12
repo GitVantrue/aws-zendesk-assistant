@@ -593,7 +593,7 @@ def generate_html_from_json(data):
         <ul>
             <li><strong>EC2 인스턴스:</strong> 총 {ec2_total}개 (실행 중: {ec2_running}개)</li>
             <li><strong>S3 버킷:</strong> 총 {s3_total}개 (암호화: {s3_encrypted}개)</li>
-            <li><strong>IAM 사용자:</strong> 총 {iam_total}개 (MFA 활성화: {iam_mfa}개)</li>
+            <li><strong>IAM 사용자:</strong> 총 {iam_users_total}개 (MFA 활성화: {iam_mfa_enabled}개)</li>
             <li><strong>보안 그룹:</strong> 총 {sg_total}개 (위험: {sg_risky}개)</li>
         </ul>
     </div>
@@ -1768,14 +1768,45 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                         
                         emit_result({'summary': account_prefix + summary})
                     else:
-                        emit_error('HTML 보고서 생성에 실패했습니다.')
+                        # HTML 보고서 생성 실패 - 기본 요약 정보만 제공
+                        print(f"[DEBUG] HTML 보고서 생성 실패, 기본 요약 정보 제공", flush=True)
+                        ec2_total = raw_data.get('resources', {}).get('ec2', {}).get('total', 0)
+                        s3_total = raw_data.get('resources', {}).get('s3', {}).get('total', 0)
+                        iam_total = raw_data.get('iam_security', {}).get('users', {}).get('total', 0)
+                        sg_risky = raw_data.get('security_groups', {}).get('risky', 0)
+                        
+                        summary = f"""⚠️ AWS 월간 보안 보고서 생성 중 오류 발생
+
+🏢 계정: {target_account}
+📅 분석 기간: {start_date_str} ~ {end_date_str}
+
+📊 수집된 데이터:
+• EC2 인스턴스: {ec2_total}개
+• S3 버킷: {s3_total}개  
+• IAM 사용자: {iam_total}개
+• 위험한 보안 그룹: {sg_risky}개
+
+⚠️ HTML 보고서 생성에 실패했습니다. 기본 데이터는 수집되었습니다."""
+                        
+                        emit_progress(100, '보고서 생성 완료 (오류 발생)')
+                        emit_result({'summary': account_prefix + summary})
                     
                 except Exception as e:
                     print(f"[ERROR] 월간 보고서 생성 중 오류: {str(e)}", flush=True)
                     import traceback
                     traceback.print_exc()
-                    emit_error(f'보고서 생성 중 오류가 발생했습니다: {str(e)}')
-                    return  # 오류 발생 시 함수 종료
+                    
+                    # 오류 발생 시에도 진행률을 100%로 설정하고 결과 전송
+                    emit_progress(100, '보고서 생성 중 오류 발생')
+                    error_summary = f"""❌ AWS 월간 보안 보고서 생성 실패
+
+🏢 계정: {target_account}
+📅 분석 기간: {start_date_str} ~ {end_date_str}
+
+오류: {str(e)}
+
+시스템 관리자에게 문의하거나 잠시 후 다시 시도해주세요."""
+                    emit_result({'summary': account_prefix + error_summary})
                 
             else:
                 # 일반 질문 처리 - 실제 Q CLI 실행
