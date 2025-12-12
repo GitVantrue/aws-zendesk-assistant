@@ -898,6 +898,556 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
 
 
 
+def generate_ec2_rows(instances):
+    """EC2 인스턴스 테이블 행 생성"""
+    if not instances:
+        return '<tr><td colspan="8" class="no-data">EC2 인스턴스가 없습니다</td></tr>'
+    
+    rows = []
+    for instance in instances:
+        name = next((tag['Value'] for tag in instance.get('Tags', []) if tag['Key'] == 'Name'), instance.get('InstanceId', 'N/A'))
+        instance_id = instance.get('InstanceId', 'N/A')
+        instance_type = instance.get('InstanceType', 'N/A')
+        state = instance.get('State', {}).get('Name', 'N/A')
+        public_ip = instance.get('PublicIpAddress', '없음')
+        
+        # IMDSv2 설정
+        metadata_options = instance.get('MetadataOptions', {})
+        imdsv2 = metadata_options.get('HttpTokens', 'optional')
+        imdsv2_class = 'ok' if imdsv2 == 'required' else 'warning'
+        
+        # 상세 모니터링
+        monitoring = instance.get('Monitoring', {}).get('State', 'disabled')
+        monitoring_class = 'ok' if monitoring == 'enabled' else 'warning'
+        
+        # EBS 삭제 방지
+        delete_protection = 'N/A'
+        for bdm in instance.get('BlockDeviceMappings', []):
+            if bdm.get('Ebs', {}).get('DeleteOnTermination') == False:
+                delete_protection = '설정됨'
+                break
+        else:
+            delete_protection = '미설정'
+        
+        delete_class = 'ok' if delete_protection == '설정됨' else 'warning'
+        
+        rows.append(f"""
+        <tr>
+            <td><strong>{name}</strong></td>
+            <td>{instance_id}</td>
+            <td>{instance_type}</td>
+            <td><span class="badge badge-{'ok' if state == 'running' else 'warning'}">{state}</span></td>
+            <td class="{'warning' if public_ip != '없음' else 'ok'}">{public_ip}</td>
+            <td class="{imdsv2_class}">{imdsv2}</td>
+            <td class="{monitoring_class}">{monitoring}</td>
+            <td class="{delete_class}">{delete_protection}</td>
+        </tr>
+        """)
+    
+    return ''.join(rows)
+
+def generate_s3_rows(buckets):
+    """S3 버킷 테이블 행 생성"""
+    if not buckets:
+        return '<tr><td colspan="6" class="no-data">S3 버킷이 없습니다</td></tr>'
+    
+    rows = []
+    for bucket in buckets:
+        name = bucket.get('Name', 'N/A')
+        location = bucket.get('Location', 'N/A')
+        
+        # 암호화 설정
+        encryption = bucket.get('Encryption', {})
+        if encryption.get('Rules'):
+            encryption_status = '설정됨'
+            encryption_class = 'ok'
+        else:
+            encryption_status = '미설정'
+            encryption_class = 'error'
+        
+        # 버저닝 설정
+        versioning = bucket.get('Versioning', {})
+        versioning_status = versioning.get('Status', '미설정')
+        versioning_class = 'ok' if versioning_status == 'Enabled' else 'warning'
+        
+        # 퍼블릭 액세스 차단
+        public_access = bucket.get('PublicAccessBlock')
+        if public_access and all([
+            public_access.get('BlockPublicAcls', False),
+            public_access.get('IgnorePublicAcls', False),
+            public_access.get('BlockPublicPolicy', False),
+            public_access.get('RestrictPublicBuckets', False)
+        ]):
+            public_status = '차단됨'
+            public_class = 'ok'
+        else:
+            public_status = '미차단'
+            public_class = 'error'
+        
+        creation_date = bucket.get('CreationDate', 'N/A')
+        if creation_date != 'N/A':
+            creation_date = creation_date.split('T')[0]
+        
+        rows.append(f"""
+        <tr>
+            <td><strong>{name}</strong></td>
+            <td>{location}</td>
+            <td class="{encryption_class}">{encryption_status}</td>
+            <td class="{versioning_class}">{versioning_status}</td>
+            <td class="{public_class}">{public_status}</td>
+            <td>{creation_date}</td>
+        </tr>
+        """)
+    
+    return ''.join(rows)
+
+def generate_rds_content(instances):
+    """RDS 인스턴스 콘텐츠 생성"""
+    if not instances:
+        return '<div class="no-data">RDS 인스턴스가 없습니다</div>'
+    
+    rows = []
+    for instance in instances:
+        db_id = instance.get('DBInstanceIdentifier', 'N/A')
+        engine = instance.get('Engine', 'N/A')
+        db_class = instance.get('DBInstanceClass', 'N/A')
+        multi_az = instance.get('MultiAZ', False)
+        encrypted = instance.get('StorageEncrypted', False)
+        backup_retention = instance.get('BackupRetentionPeriod', 0)
+        deletion_protection = instance.get('DeletionProtection', False)
+        public_access = instance.get('PubliclyAccessible', False)
+        status = instance.get('DBInstanceStatus', 'N/A')
+        
+        rows.append(f"""
+        <tr>
+            <td><strong>{db_id}</strong></td>
+            <td>{engine}</td>
+            <td>{db_class}</td>
+            <td class="{'ok' if multi_az else 'error'}">{'예' if multi_az else '아니오'}</td>
+            <td class="{'ok' if encrypted else 'error'}">{'예' if encrypted else '아니오'}</td>
+            <td class="{'ok' if backup_retention >= 30 else 'warning' if backup_retention >= 7 else 'error'}">{backup_retention}일</td>
+            <td class="{'ok' if deletion_protection else 'warning'}">{'예' if deletion_protection else '아니오'}</td>
+            <td class="{'error' if public_access else 'ok'}">{'예' if public_access else '아니오'}</td>
+            <td><span class="badge badge-{'ok' if status == 'available' else 'warning'}">{status}</span></td>
+        </tr>
+        """)
+    
+    table = f"""
+    <table>
+        <thead>
+            <tr>
+                <th>DB 식별자</th>
+                <th>엔진</th>
+                <th>타입</th>
+                <th>Multi-AZ</th>
+                <th>암호화</th>
+                <th>백업 보관</th>
+                <th>삭제 방지</th>
+                <th>퍼블릭 액세스</th>
+                <th>상태</th>
+            </tr>
+        </thead>
+        <tbody>
+            {''.join(rows)}
+        </tbody>
+    </table>
+    """
+    
+    return table
+
+def generate_lambda_content(functions):
+    """Lambda 함수 콘텐츠 생성"""
+    if not functions:
+        return '<div class="no-data">Lambda 함수가 없습니다</div>'
+    
+    rows = []
+    for func in functions:
+        func_name = func.get('FunctionName', 'N/A')
+        runtime = func.get('Runtime', 'N/A')
+        memory = func.get('MemorySize', 'N/A')
+        timeout = func.get('Timeout', 'N/A')
+        
+        rows.append(f"""
+        <tr>
+            <td><strong>{func_name}</strong></td>
+            <td>{runtime}</td>
+            <td>{memory}MB</td>
+            <td>{timeout}s</td>
+        </tr>
+        """)
+    
+    table = f"""
+    <table>
+        <thead>
+            <tr>
+                <th>함수명</th>
+                <th>런타임</th>
+                <th>메모리</th>
+                <th>타임아웃</th>
+            </tr>
+        </thead>
+        <tbody>
+            {''.join(rows)}
+        </tbody>
+    </table>
+    """
+    
+    return table
+
+def generate_iam_users_rows(users):
+    """IAM 사용자 테이블 행 생성"""
+    if not users:
+        return '<tr><td colspan="5" class="no-data">IAM 사용자가 없습니다</td></tr>'
+    
+    rows = []
+    for user in users:
+        username = user.get('username', 'N/A')
+        mfa = user.get('mfa', False)
+        access_keys = user.get('access_keys', [])
+        
+        key_count = len(access_keys)
+        key_date = 'N/A'
+        key_age_class = 'ok'
+        
+        if access_keys:
+            oldest_key = min(access_keys, key=lambda k: k.get('CreateDate', ''))
+            key_date = oldest_key.get('CreateDate', 'N/A')
+            if key_date != 'N/A':
+                key_date = key_date.split('T')[0]
+                from datetime import datetime, timedelta
+                try:
+                    create_date = datetime.strptime(key_date, '%Y-%m-%d')
+                    if datetime.now() - create_date > timedelta(days=90):
+                        key_age_class = 'warning'
+                except:
+                    pass
+        
+        security_issues = []
+        if not mfa:
+            security_issues.append('MFA 미설정')
+        if key_count > 1:
+            security_issues.append('다중 액세스 키')
+        if key_age_class == 'warning':
+            security_issues.append('오래된 키')
+        
+        security_status = ', '.join(security_issues) if security_issues else '양호'
+        security_class = 'error' if security_issues else 'ok'
+        
+        rows.append(f"""
+        <tr>
+            <td><strong>{username}</strong></td>
+            <td class="{'ok' if mfa else 'error'}">{'활성화' if mfa else '미설정'}</td>
+            <td>{key_count}개</td>
+            <td class="{key_age_class}">{key_date}</td>
+            <td class="{security_class}">{security_status}</td>
+        </tr>
+        """)
+    
+    return ''.join(rows)
+
+def generate_sg_risky_rows(security_groups):
+    """보안 그룹 위험 규칙 테이블 행 생성"""
+    rows = []
+    
+    for sg in security_groups:
+        sg_id = sg.get('id', 'N/A')
+        sg_name = sg.get('name', 'N/A')
+        vpc = sg.get('vpc', 'N/A')
+        
+        for rule in sg.get('risky_rules', []):
+            port = rule.get('port', 'N/A')
+            protocol = rule.get('protocol', 'N/A')
+            source = rule.get('source', 'N/A')
+            risk_level = rule.get('risk_level', 'medium')
+            
+            risk_class = {
+                'critical': 'critical',
+                'high': 'high', 
+                'medium': 'medium',
+                'low': 'low'
+            }.get(risk_level, 'medium')
+            
+            rows.append(f"""
+            <tr>
+                <td>{sg_id}</td>
+                <td>{sg_name}</td>
+                <td>{vpc}</td>
+                <td class="{risk_class}">{port}</td>
+                <td>{protocol}</td>
+                <td class="error">{source}</td>
+                <td><span class="badge badge-{risk_class}">{risk_level.upper()}</span></td>
+            </tr>
+            """)
+    
+    if not rows:
+        return '<tr><td colspan="7" class="no-data">위험한 보안 그룹 규칙이 없습니다</td></tr>'
+    
+    return ''.join(rows)
+
+def get_compliance_class(rate):
+    """준수율에 따른 CSS 클래스 반환"""
+    if rate >= 90:
+        return 'ok'
+    elif rate >= 70:
+        return 'warning'
+    else:
+        return 'critical'
+
+def calculate_critical_issues(data):
+    """Critical 이슈 계산 (중복 제거 및 그룹화)"""
+    issues = []
+    
+    # IAM MFA 이슈 그룹화
+    iam_issues = data.get('iam_security', {}).get('issues', [])
+    mfa_issues = [issue for issue in iam_issues if issue.get('severity') == 'critical' and issue.get('type') == 'no_mfa']
+    
+    if mfa_issues:
+        # MFA 미설정 사용자들을 하나로 그룹화
+        mfa_users = [issue.get('user', 'N/A') for issue in mfa_issues]
+        issues.append({
+            'type': 'no_mfa',
+            'description': f"MFA 미설정 ({len(mfa_users)}명: {', '.join(mfa_users[:5])}{'...' if len(mfa_users) > 5 else ''})",
+            'severity': 'critical',
+            'count': len(mfa_users)
+        })
+    
+    # 보안 그룹 이슈 그룹화 (포트별)
+    sg_data = data.get('security_groups', {})
+    sg_issues_by_port = {}  # 포트별로 그룹화
+    
+    for sg in sg_data.get('details', []):
+        for rule in sg.get('risky_rules', []):
+            if rule.get('risk_level') in ['critical', 'high'] and rule.get('source') == '0.0.0.0/0':
+                port = rule.get('port')
+                if port in [22, 3389]:  # SSH, RDP만
+                    if port not in sg_issues_by_port:
+                        sg_issues_by_port[port] = []
+                    sg_issues_by_port[port].append(sg.get('id'))
+    
+    # 포트별로 그룹화된 이슈 추가
+    for port, sg_ids in sg_issues_by_port.items():
+        port_name = "SSH (22)" if port == 22 else "RDP (3389)"
+        issues.append({
+            'type': 'risky_sg_rule',
+            'description': f"위험한 보안 그룹 규칙 - {port_name} 전체 오픈 ({len(sg_ids)}개: {', '.join(sg_ids[:5])}{'...' if len(sg_ids) > 5 else ''})",
+            'severity': 'critical',
+            'count': len(sg_ids)
+        })
+    
+    # EBS 암호화 미설정 (그룹화)
+    encryption = data.get('encryption', {})
+    unencrypted_volumes = encryption.get('ebs', {}).get('unencrypted_volumes', [])
+    if unencrypted_volumes:
+        issues.append({
+            'type': 'unencrypted_ebs',
+            'description': f"EBS 볼륨 암호화 미설정 ({len(unencrypted_volumes)}개)",
+            'severity': 'critical',
+            'count': len(unencrypted_volumes)
+        })
+    
+    return issues
+
+def generate_critical_issues_section(issues):
+    """Critical 이슈 섹션 생성"""
+    if not issues:
+        return ''
+    
+    issue_items = []
+    for issue in issues:
+        issue_items.append(f"""
+        <div class="issue-item">
+            <strong>{issue.get('type', 'Unknown').replace('_', ' ').title()}:</strong> {issue.get('description', 'N/A')}
+        </div>
+        """)
+    
+    return f"""
+    <div class="alert-box critical">
+        <h4>⚠️ 즉시 조치 필요 항목 ({len(issues)}개)</h4>
+        {''.join(issue_items)}
+    </div>
+    """
+
+def process_trusted_advisor_data(checks):
+    """Trusted Advisor 데이터 처리"""
+    categories = {
+        '보안': {'error': 0, 'warning': 0},
+        '내결함성': {'error': 0, 'warning': 0},
+        '비용 최적화': {'error': 0, 'warning': 0},
+        'operational_excellence': {'error': 0, 'warning': 0}
+    }
+    
+    error_rows = []
+    
+    for check in checks:
+        category = check.get('category', '기타')
+        status = check.get('status', 'ok')
+        
+        if category in categories:
+            if status == 'error':
+                categories[category]['error'] += 1
+                error_rows.append(f"""
+                <tr>
+                    <td>{category}</td>
+                    <td>{check.get('name', 'N/A')}</td>
+                    <td class="error">ERROR</td>
+                    <td class="error">{check.get('flagged_resources', 0)}</td>
+                </tr>
+                """)
+            elif status == 'warning':
+                categories[category]['warning'] += 1
+    
+    return {
+        'ta_security_error': categories['보안']['error'],
+        'ta_security_warning': categories['보안']['warning'],
+        'ta_fault_tolerance_error': categories['내결함성']['error'],
+        'ta_fault_tolerance_warning': categories['내결함성']['warning'],
+        'ta_cost_warning': categories['비용 최적화']['warning'],
+        'ta_performance_warning': categories['operational_excellence']['warning'],
+        'ta_error_rows': ''.join(error_rows) if error_rows else '<tr><td colspan="4" class="no-data">Error 항목이 없습니다</td></tr>'
+    }
+
+def generate_cloudtrail_rows(critical_events):
+    """CloudTrail 중요 이벤트 테이블 행 생성 (발생 횟수 0인 항목 제외)"""
+    rows = []
+    has_events = False
+    
+    for event_type, event_data in critical_events.items():
+        count = event_data.get('count', 0)
+        
+        # 발생 횟수가 0이면 스킵
+        if count == 0:
+            continue
+        
+        has_events = True
+        severity = event_data.get('severity', 'medium')
+        category = event_data.get('category', 'unknown')
+        description = event_data.get('description', 'N/A')
+        
+        severity_class = {
+            'critical': 'critical',
+            'high': 'high',
+            'medium': 'medium'
+        }.get(severity, 'medium')
+        
+        rows.append(f"""
+        <tr>
+            <td><strong>{event_type}</strong></td>
+            <td><span class="badge badge-{severity_class}">{severity.upper()}</span></td>
+            <td>{category.replace('_', ' ').title()}</td>
+            <td class="warning">{count}</td>
+            <td>{description}</td>
+        </tr>
+        """)
+    
+    # 발생한 이벤트가 없으면 "특이사항 없음" 메시지
+    if not has_events:
+        return '<tr><td colspan="5" class="no-data">✅ 특이사항 없음 - 모든 이벤트 발생 횟수 0회</td></tr>'
+    
+    return ''.join(rows)
+
+def generate_cloudwatch_rows(alarms):
+    """CloudWatch 알람 테이블 행 생성"""
+    if not alarms:
+        return '<tr><td colspan="4" class="no-data">CloudWatch 알람이 없습니다</td></tr>'
+    
+    rows = []
+    for alarm in alarms:
+        name = alarm.get('AlarmName', 'N/A')
+        state = alarm.get('StateValue', 'UNKNOWN')
+        metric = alarm.get('MetricName', 'N/A')
+        threshold = alarm.get('Threshold', 'N/A')
+        
+        state_class = {
+            'OK': 'ok',
+            'ALARM': 'error',
+            'INSUFFICIENT_DATA': 'warning'
+        }.get(state, 'warning')
+        
+        rows.append(f"""
+        <tr>
+            <td>{name}</td>
+            <td><span class="badge badge-{state_class}">{state}</span></td>
+            <td>{metric}</td>
+            <td>{threshold}</td>
+        </tr>
+        """)
+    
+    return ''.join(rows)
+
+def generate_ebs_unencrypted_section(ebs_data):
+    """EBS 미암호화 볼륨 섹션 생성"""
+    unencrypted_volumes = ebs_data.get('unencrypted_volumes', [])
+    
+    if not unencrypted_volumes:
+        return ''
+    
+    volume_items = []
+    for volume_id in unencrypted_volumes[:10]:
+        volume_items.append(f'<li>{volume_id}</li>')
+    
+    more_text = f' (외 {len(unencrypted_volumes) - 10}개)' if len(unencrypted_volumes) > 10 else ''
+    
+    return f"""
+    <div class="section">
+        <h2>💿 EBS 볼륨 (암호화 미설정 {len(unencrypted_volumes)}개)</h2>
+        <div class="alert-box">
+            <h4>암호화가 필요한 EBS 볼륨</h4>
+            <ul>
+                {''.join(volume_items)}{more_text}
+            </ul>
+        </div>
+    </div>
+    """
+
+def generate_s3_security_issues_section(buckets):
+    """S3 보안 이슈 섹션 생성"""
+    versioning_issues = []
+    public_access_issues = []
+    
+    for bucket in buckets:
+        name = bucket.get('Name', '')
+        
+        versioning = bucket.get('Versioning', {})
+        if versioning.get('Status') != 'Enabled':
+            versioning_issues.append(name)
+        
+        public_access = bucket.get('PublicAccessBlock')
+        if not public_access or not all([
+            public_access.get('BlockPublicAcls', False),
+            public_access.get('IgnorePublicAcls', False),
+            public_access.get('BlockPublicPolicy', False),
+            public_access.get('RestrictPublicBuckets', False)
+        ]):
+            public_access_issues.append(name)
+    
+    if not versioning_issues and not public_access_issues:
+        return ''
+    
+    content = '<div class="section"><h2>🪣 S3 버킷 보안 이슈</h2>'
+    
+    if versioning_issues:
+        content += f"""
+        <div class="alert-box">
+            <h4>버저닝 미설정 버킷 ({len(versioning_issues)}개)</h4>
+            <ul>
+                {''.join(f'<li>{bucket}</li>' for bucket in versioning_issues[:10])}
+            </ul>
+        </div>
+        """
+    
+    if public_access_issues:
+        content += f"""
+        <div class="alert-box">
+            <h4>퍼블릭 액세스 차단 미설정 버킷 ({len(public_access_issues)}개)</h4>
+            <ul>
+                {''.join(f'<li>{bucket}</li>' for bucket in public_access_issues[:10])}
+            </ul>
+        </div>
+        """
+    
+    content += '</div>'
+    return content
+
 def generate_html_report(json_file_path):
     """JSON 데이터를 월간 보안 점검 HTML 보고서로 변환"""
     try:
@@ -1064,3 +1614,4 @@ def generate_html_report(json_file_path):
         return None
 
 if __name__ == '__main__':
+    socketio.run(app, host='0.0.0.0', port=3001, debug=False)
