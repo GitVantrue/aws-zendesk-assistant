@@ -1747,45 +1747,45 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                                 # 질문에 따라 실제 AWS 리소스 조회 (Slack bot 수준 상세 정보)
                                 resource_info = ""
                                 if any(keyword in query.lower() for keyword in ['ec2', '인스턴스', 'instance', '러닝', 'running']):
-                                # EC2 인스턴스 상세 조회 (JSON 형태로)
-                                try:
-                                    ec2_result = subprocess.run(
-                                        ['aws', 'ec2', 'describe-instances', 
-                                         '--filters', 'Name=instance-state-name,Values=running',
-                                         '--output', 'json'],
-                                        capture_output=True,
-                                        text=True,
-                                        env=env_vars,
-                                        timeout=30
-                                    )
-                                    if ec2_result.returncode == 0:
-                                        ec2_data = json.loads(ec2_result.stdout)
-                                        instances = []
-                                        
-                                        for reservation in ec2_data.get('Reservations', []):
-                                            for instance in reservation.get('Instances', []):
-                                                # 인스턴스 이름 추출
-                                                instance_name = "이름 없음"
-                                                for tag in instance.get('Tags', []):
-                                                    if tag.get('Key') == 'Name':
-                                                        instance_name = tag.get('Value', '이름 없음')
-                                                        break
-                                                
-                                                # 보안 그룹 정보 추출
-                                                security_groups = []
-                                                for sg in instance.get('SecurityGroups', []):
-                                                    sg_name = sg.get('GroupName', 'Unknown')
-                                                    sg_id = sg.get('GroupId', 'Unknown')
-                                                    security_groups.append(f"{sg_name} ({sg_id})")
-                                                
-                                                # IAM 역할 추출
-                                                iam_role = "없음"
-                                                if instance.get('IamInstanceProfile'):
-                                                    iam_arn = instance['IamInstanceProfile'].get('Arn', '')
-                                                    if '/' in iam_arn:
-                                                        iam_role = iam_arn.split('/')[-1]
-                                                
-                                                instance_info = f"""🖥️ **{instance_name}**
+                                    # EC2 인스턴스 상세 조회 (JSON 형태로)
+                                    try:
+                                        ec2_result = subprocess.run(
+                                            ['aws', 'ec2', 'describe-instances', 
+                                             '--filters', 'Name=instance-state-name,Values=running',
+                                             '--output', 'json'],
+                                            capture_output=True,
+                                            text=True,
+                                            env=env_vars,
+                                            timeout=30
+                                        )
+                                        if ec2_result.returncode == 0:
+                                            ec2_data = json.loads(ec2_result.stdout)
+                                            instances = []
+                                            
+                                            for reservation in ec2_data.get('Reservations', []):
+                                                for instance in reservation.get('Instances', []):
+                                                    # 인스턴스 이름 추출
+                                                    instance_name = "이름 없음"
+                                                    for tag in instance.get('Tags', []):
+                                                        if tag.get('Key') == 'Name':
+                                                            instance_name = tag.get('Value', '이름 없음')
+                                                            break
+                                                    
+                                                    # 보안 그룹 정보 추출
+                                                    security_groups = []
+                                                    for sg in instance.get('SecurityGroups', []):
+                                                        sg_name = sg.get('GroupName', 'Unknown')
+                                                        sg_id = sg.get('GroupId', 'Unknown')
+                                                        security_groups.append(f"{sg_name} ({sg_id})")
+                                                    
+                                                    # IAM 역할 추출
+                                                    iam_role = "없음"
+                                                    if instance.get('IamInstanceProfile'):
+                                                        iam_arn = instance['IamInstanceProfile'].get('Arn', '')
+                                                        if '/' in iam_arn:
+                                                            iam_role = iam_arn.split('/')[-1]
+                                                    
+                                                    instance_info = f"""🖥️ **{instance_name}**
 • **인스턴스 ID**: {instance.get('InstanceId', 'Unknown')}
 • **상태**: ✅ {instance.get('State', {}).get('Name', 'Unknown')}
 • **인스턴스 타입**: {instance.get('InstanceType', 'Unknown')}
@@ -1806,18 +1806,18 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 • **모니터링**: {'활성화' if instance.get('Monitoring', {}).get('State') == 'enabled' else '비활성화'}
 • **EBS 최적화**: {'활성화' if instance.get('EbsOptimized', False) else '비활성화'}
 """
-                                                instances.append(instance_info)
-                                        
-                                        if instances:
-                                            total_count = len(instances)
-                                            resource_info = f"\n\n📊 **총 {total_count}개 인스턴스 실행 중**:\n\n" + "\n\n".join(instances)
-                                            resource_info += f"\n\n💡 **추가 정보가 필요하시면 특정 인스턴스 ID를 말씀해주세요!**"
+                                                    instances.append(instance_info)
+                                            
+                                            if instances:
+                                                total_count = len(instances)
+                                                resource_info = f"\n\n📊 **총 {total_count}개 인스턴스 실행 중**:\n\n" + "\n\n".join(instances)
+                                                resource_info += f"\n\n💡 **추가 정보가 필요하시면 특정 인스턴스 ID를 말씀해주세요!**"
+                                            else:
+                                                resource_info = f"\n\n📭 **실행 중인 EC2 인스턴스가 없습니다.**"
                                         else:
-                                            resource_info = f"\n\n📭 **실행 중인 EC2 인스턴스가 없습니다.**"
-                                    else:
-                                        resource_info = f"\n\n⚠️ EC2 인스턴스 조회 실패: {ec2_result.stderr[:200]}"
-                                except Exception as e:
-                                    resource_info = f"\n\n⚠️ EC2 조회 중 오류: {str(e)}"
+                                            resource_info = f"\n\n⚠️ EC2 인스턴스 조회 실패: {ec2_result.stderr[:200]}"
+                                    except Exception as e:
+                                        resource_info = f"\n\n⚠️ EC2 조회 중 오류: {str(e)}"
                             
                             fallback_response = f"""✅ AWS 리소스 조회 완료
 
