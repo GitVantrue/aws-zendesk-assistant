@@ -65,6 +65,79 @@ def serve_reports_root():
 @app.route('/reports/<path:filepath>')
 def serve_reports(filepath):
     """
+    /tmp/reports 디렉터리의 파일을 웹으로 서빙 (ALB 라우팅용)
+    """
+    try:
+        full_path = os.path.abspath(os.path.join('/tmp/reports', filepath))
+        if not full_path.startswith('/tmp/reports'):
+            print(f"[ERROR] 경로 이탈 시도: {filepath}", flush=True)
+            return '접근 거부', 403
+        
+        if os.path.isdir(full_path):
+            index_path = os.path.join(full_path, 'index.html')
+            if os.path.exists(index_path):
+                print(f"[DEBUG] 디렉터리 index.html 제공: {index_path}", flush=True)
+                return send_from_directory(full_path, 'index.html', mimetype='text/html')
+            else:
+                print(f"[ERROR] index.html 없음: {index_path}", flush=True)
+                return '디렉터리 목록', 403
+        
+        directory = os.path.dirname(full_path)
+        filename = os.path.basename(full_path)
+        
+        print(f"[DEBUG] 파일 제공: {full_path}", flush=True)
+        return send_from_directory(directory, filename)
+    
+    except Exception as e:
+        print(f"[ERROR] 파일 서빙 중 오류: {e}", flush=True)
+        return f'오류 발생: {str(e)}', 500
+
+@app.route('/zendesk/reports/')
+def serve_zendesk_reports_root():
+    """
+    /zendesk/reports/ 루트 요청 처리 (ALB 라우팅용)
+    """
+    return send_from_directory('/tmp/reports', 'index.html', mimetype='text/html')
+
+@app.route('/zendesk/reports/<path:filepath>')
+def serve_zendesk_reports(filepath):
+    """
+    /tmp/reports 디렉터리의 파일을 웹으로 서빙 (ALB /zendesk/reports/ 라우팅용)
+    
+    Args:
+        filepath (str): 요청된 파일 경로
+    
+    Returns:
+        파일 또는 404 에러
+    """
+    try:
+        # 보안: 경로 이탈 방지
+        full_path = os.path.abspath(os.path.join('/tmp/reports', filepath))
+        if not full_path.startswith('/tmp/reports'):
+            print(f"[ERROR] 경로 이탈 시도: {filepath}", flush=True)
+            return '접근 거부', 403
+        
+        # 디렉터리인 경우 index.html 자동 제공
+        if os.path.isdir(full_path):
+            index_path = os.path.join(full_path, 'index.html')
+            if os.path.exists(index_path):
+                print(f"[DEBUG] 디렉터리 index.html 제공: {index_path}", flush=True)
+                return send_from_directory(full_path, 'index.html', mimetype='text/html')
+            else:
+                print(f"[ERROR] index.html 없음: {index_path}", flush=True)
+                return '디렉터리 목록', 403
+        
+        # 파일 제공
+        directory = os.path.dirname(full_path)
+        filename = os.path.basename(full_path)
+        
+        print(f"[DEBUG] 파일 제공: {full_path}", flush=True)
+        return send_from_directory(directory, filename)
+    
+    except Exception as e:
+        print(f"[ERROR] 파일 서빙 중 오류: {e}", flush=True)
+        return f'오류 발생: {str(e)}', 500
+    """
     /tmp/reports 디렉터리의 파일을 웹으로 서빙
     
     Args:
