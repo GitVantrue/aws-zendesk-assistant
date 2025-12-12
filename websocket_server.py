@@ -25,6 +25,9 @@ socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=
 # 처리 중인 질문 추적
 processing_questions = set()
 
+# 활성 세션 추적
+active_sessions = set()
+
 # /tmp/reports 디렉터리 생성
 os.makedirs('/tmp/reports', exist_ok=True)
 
@@ -198,6 +201,8 @@ def handle_connect():
     """클라이언트 연결 시"""
     from flask import request
     print(f"[DEBUG] 클라이언트 연결됨: {request.sid}", flush=True)
+    active_sessions.add(request.sid)
+    print(f"[DEBUG] 활성 세션 목록: {active_sessions}", flush=True)
     emit('connected', {'message': 'Saltware AWS Assistant에 연결되었습니다!'})
 
 @socketio.on('disconnect', namespace='/zendesk')
@@ -205,6 +210,8 @@ def handle_disconnect():
     """클라이언트 연결 해제 시"""
     from flask import request
     print(f"[DEBUG] 클라이언트 연결 해제됨: {request.sid}", flush=True)
+    active_sessions.discard(request.sid)
+    print(f"[DEBUG] 활성 세션 목록: {active_sessions}", flush=True)
 
 @socketio.on('aws_query', namespace='/zendesk')
 def handle_aws_query(data):
@@ -253,7 +260,14 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
     
     def emit_to_client(event_type, data):
         """클라이언트에게 이벤트 전송하는 통합 헬퍼 함수"""
-        socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
+        try:
+            print(f"[DEBUG] 이벤트 전송: {event_type} -> 세션 {session_id}", flush=True)
+            socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
+            # 이벤트 전송 후 잠시 대기 (버퍼링 방지)
+            import time
+            time.sleep(0.1)
+        except Exception as e:
+            print(f"[ERROR] 이벤트 전송 실패: {e}", flush=True)
     
     def emit_progress(progress, message):
         """진행률 전송 헬퍼 함수"""

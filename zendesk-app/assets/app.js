@@ -161,6 +161,7 @@ class SaltwareAWSAssistant {
         // 진행률 업데이트
         this.socket.on('progress', (data) => {
             console.log('📊 진행률 업데이트:', data);
+            console.log('📊 현재 연결 상태:', this.socket.connected);
             console.log('📊 현재 진행률 요소:', this.elements.progressContainer);
             this.updateProgress(data.progress, data.message);
         });
