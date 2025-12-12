@@ -54,6 +54,62 @@ current_progress = {}
 # /tmp/reports 디렉터리 생성
 os.makedirs('/tmp/reports', exist_ok=True)
 
+# Flask 라우트: /reports/ 정적 파일 서빙
+@app.route('/reports/<path:filename>')
+def serve_reports(filename):
+    """
+    /tmp/reports 디렉터리의 파일을 웹으로 서빙
+    
+    Args:
+        filename (str): 요청된 파일 경로
+    
+    Returns:
+        파일 또는 404 에러
+    """
+    try:
+        file_path = os.path.join('/tmp/reports', filename)
+        
+        # 보안: 경로 이탈 방지
+        if not os.path.abspath(file_path).startswith('/tmp/reports'):
+            return '접근 거부', 403
+        
+        # 파일이 존재하는지 확인
+        if not os.path.exists(file_path):
+            print(f"[ERROR] 파일 없음: {file_path}", flush=True)
+            return '파일을 찾을 수 없습니다', 404
+        
+        # 디렉터리인 경우 index.html 자동 제공
+        if os.path.isdir(file_path):
+            index_path = os.path.join(file_path, 'index.html')
+            if os.path.exists(index_path):
+                with open(index_path, 'r', encoding='utf-8') as f:
+                    return f.read(), 200, {'Content-Type': 'text/html; charset=utf-8'}
+            else:
+                return '디렉터리 목록', 403
+        
+        # 파일 제공
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 파일 타입에 따른 Content-Type 설정
+        if filename.endswith('.html'):
+            content_type = 'text/html; charset=utf-8'
+        elif filename.endswith('.css'):
+            content_type = 'text/css; charset=utf-8'
+        elif filename.endswith('.js'):
+            content_type = 'application/javascript; charset=utf-8'
+        elif filename.endswith('.json'):
+            content_type = 'application/json; charset=utf-8'
+        else:
+            content_type = 'text/plain; charset=utf-8'
+        
+        print(f"[DEBUG] 파일 제공: {file_path} ({content_type})", flush=True)
+        return content, 200, {'Content-Type': content_type}
+    
+    except Exception as e:
+        print(f"[ERROR] 파일 서빙 중 오류: {e}", flush=True)
+        return f'오류 발생: {str(e)}', 500
+
 def cleanup_old_reports(days=2):
     """
     2일 이상 된 보고서 파일 자동 삭제 (파일 로테이션)
