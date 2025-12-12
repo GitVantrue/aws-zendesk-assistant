@@ -65,6 +65,11 @@ class SaltwareAWSAssistant {
             }, 2000);
             
             console.log('✅ 초기화 완료 (로컬 테스트 모드)');
+            
+            // 브라우저 알림 권한 요청
+            if (window.Notification && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
         } catch (error) {
             console.error('❌ 초기화 실패:', error);
             this.showError('앱 초기화에 실패했습니다. 페이지를 새로고침해주세요.');
@@ -166,6 +171,15 @@ class SaltwareAWSAssistant {
             console.log('📊 현재 진행률 요소 존재:', !!this.elements.progressContainer);
             console.log('📊 현재 진행률 요소 표시 상태:', this.elements.progressContainer?.style.display);
             
+            // 강제 알림으로 이벤트 수신 확인
+            if (data.progress > 0) {
+                console.log('🚨 ALERT: 진행률', data.progress + '% 수신됨!');
+                // 브라우저 알림으로 강제 확인
+                if (window.Notification && Notification.permission === 'granted') {
+                    new Notification('진행률 업데이트', { body: data.progress + '% - ' + data.message });
+                }
+            }
+            
             try {
                 this.updateProgress(data.progress, data.message);
                 console.log('📊 ✅ 진행률 업데이트 완료:', data.progress + '%');
@@ -177,6 +191,13 @@ class SaltwareAWSAssistant {
         // 최종 결과
         this.socket.on('result', (data) => {
             console.log('📋 결과 수신:', data);
+            console.log('🚨 ALERT: 최종 결과 수신됨!');
+            
+            // 브라우저 알림으로 강제 확인
+            if (window.Notification && Notification.permission === 'granted') {
+                new Notification('분석 완료', { body: '결과가 도착했습니다!' });
+            }
+            
             this.showResult(data);
             this.hideProgress();
         });
