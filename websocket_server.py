@@ -36,6 +36,9 @@ processing_questions = set()
 # 활성 세션 추적
 active_sessions = set()
 
+# 현재 진행 상태 추적 (질문별)
+current_progress = {}
+
 # /tmp/reports 디렉터리 생성
 os.makedirs('/tmp/reports', exist_ok=True)
 
@@ -216,7 +219,19 @@ def handle_connect():
     ongoing_tasks = [q for q in processing_questions if q.startswith('zendesk_user:')]
     if ongoing_tasks:
         print(f"[DEBUG] 진행 중인 작업 발견: {ongoing_tasks}", flush=True)
-        emit('progress', {'progress': 50, 'message': '이전 작업을 계속 진행하고 있습니다...'})
+        
+        # 가장 최근 진행 상태 찾기
+        latest_progress = None
+        for task in ongoing_tasks:
+            if task in current_progress:
+                latest_progress = current_progress[task]
+                break
+        
+        if latest_progress:
+            print(f"[DEBUG] 최근 진행 상태 복구: {latest_progress}", flush=True)
+            emit('progress', latest_progress)
+        else:
+            emit('progress', {'progress': 50, 'message': '이전 작업을 계속 진행하고 있습니다...'})
     
     emit('connected', {'message': 'Saltware AWS Assistant에 연결되었습니다!'})
 
@@ -278,28 +293,33 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
         try:
             print(f"[DEBUG] 이벤트 전송 시도: {event_type}, 데이터: {data}", flush=True)
             
-            # 세션별 전송과 브로드캐스트 둘 다 시도 (안전장치)
-            try:
-                # 1. 특정 세션으로 전송 시도
-                if session_id in active_sessions:
+            # 현재 활성 세션 확인
+            print(f"[DEBUG] 현재 활성 세션: {active_sessions}", flush=True)
+            print(f"[DEBUG] 대상 세션: {session_id}", flush=True)
+            
+            # 1. 특정 세션으로 전송 시도
+            session_sent = False
+            if session_id in active_sessions:
+                try:
                     socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
                     print(f"[DEBUG] ✅ 세션별 전송 완료: {event_type} -> 세션 {session_id}", flush=True)
-                else:
-                    print(f"[WARNING] 세션 {session_id}가 활성 목록에 없음", flush=True)
+                    session_sent = True
+                except Exception as e:
+                    print(f"[WARNING] 세션별 전송 실패: {e}", flush=True)
+            else:
+                print(f"[WARNING] 세션 {session_id}가 활성 목록에 없음", flush=True)
+            
+            # 2. 모든 활성 세션에게 브로드캐스트 (백업)
+            try:
+                socketio.emit(event_type, data, namespace='/zendesk')
+                print(f"[DEBUG] ✅ 네임스페이스 브로드캐스트 전송 완료: {event_type}", flush=True)
             except Exception as e:
-                print(f"[WARNING] 세션별 전송 실패: {e}", flush=True)
-            
-            # 2. 모든 클라이언트에게 브로드캐스트 (백업) - 네임스페이스 없이도 시도
-            socketio.emit(event_type, data, namespace='/zendesk')
-            print(f"[DEBUG] ✅ 네임스페이스 브로드캐스트 전송 완료: {event_type}", flush=True)
-            
-            # 3. 네임스페이스 없이도 전송 (추가 안전장치)
-            socketio.emit(event_type, data)
-            print(f"[DEBUG] ✅ 글로벌 브로드캐스트 전송 완료: {event_type}", flush=True)
+                print(f"[WARNING] 네임스페이스 브로드캐스트 실패: {e}", flush=True)
             
             # 이벤트 전송 후 잠시 대기 (버퍼링 방지)
             import time
-            time.sleep(0.1)
+            time.sleep(0.05)  # 대기 시간 단축
+            
         except Exception as e:
             print(f"[ERROR] 이벤트 전송 실패: {e}", flush=True)
             import traceback
@@ -307,6 +327,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
     
     def emit_progress(progress, message):
         """진행률 전송 헬퍼 함수"""
+        # 진행 상태 저장
+        current_progress[question_key] = {'progress': progress, 'message': message}
         emit_to_client('progress', {'progress': progress, 'message': message})
     
     def emit_result(data):
@@ -709,6 +731,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
     finally:
         # 정리 작업
         processing_questions.discard(question_key)
+        current_progress.pop(question_key, None)  # 진행 상태도 정리
         if temp_dir and os.path.exists(temp_dir):
             try:
                 shutil.rmtree(temp_dir)

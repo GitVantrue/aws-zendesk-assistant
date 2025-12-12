@@ -122,35 +122,30 @@ class SaltwareAWSAssistant {
             // Socket.IO 클라이언트 생성
             this.socket = io(this.serverUrl, {
                 path: '/zendesk/socket.io',
-                transports: ['polling', 'websocket'],  // polling을 우선으로 (더 안정적)
-                timeout: 20000,  // 타임아웃 증가
+                transports: ['websocket', 'polling'],  // websocket을 우선으로 (더 빠름)
+                timeout: 30000,  // 타임아웃 증가
                 reconnection: true,
-                reconnectionAttempts: 10,  // 재연결 시도 증가
-                reconnectionDelay: 1000,
-                forceNew: true  // 새 연결 강제
+                reconnectionAttempts: 5,  // 재연결 시도 감소 (안정성)
+                reconnectionDelay: 2000,  // 재연결 지연 증가
+                reconnectionDelayMax: 5000,
+                maxReconnectionAttempts: 5,
+                forceNew: false  // 기존 연결 재사용 허용
             });
             
             // WebSocket 이벤트 리스너 설정
             this.setupWebSocketListeners();
             
-            // 연결 상태 주기적 체크 (5초마다)
+            // 연결 상태 주기적 체크 (10초마다로 감소)
             setInterval(() => {
                 if (this.socket) {
                     console.log('🔍 연결 상태 체크:', {
                         connected: this.socket.connected,
                         progress: this.currentProgress + '%',
-                        timestamp: new Date().toLocaleTimeString()
+                        timestamp: new Date().toLocaleTimeString(),
+                        id: this.socket.id
                     });
-                    
-                    // 연결이 끊어졌는데 진행률이 100%가 아니면 알림
-                    if (!this.socket.connected && this.currentProgress < 100 && this.currentProgress > 0) {
-                        console.log('🚨 진행 중 연결 끊어짐 감지!');
-                        if (window.Notification && Notification.permission === 'granted') {
-                            new Notification('연결 문제', { body: '진행률 ' + this.currentProgress + '%에서 연결이 끊어진 상태입니다' });
-                        }
-                    }
                 }
-            }, 5000);
+            }, 10000);
             
         } catch (error) {
             console.error('❌ WebSocket 초기화 실패:', error);
@@ -209,29 +204,12 @@ class SaltwareAWSAssistant {
             // 모든 progress 이벤트에 대해 강제 알림
             console.log('🚨 ALERT: 진행률', data.progress + '% 수신됨!');
             
-            // 브라우저 알림으로 강제 확인 (모든 progress에 대해)
-            if (window.Notification && Notification.permission === 'granted') {
-                new Notification('진행률 업데이트', { body: data.progress + '% - ' + data.message });
-            }
-            
             // 브라우저 제목도 변경해서 확실히 확인
             document.title = `AWS Assistant - ${data.progress}%`;
             
             try {
                 this.updateProgress(data.progress, data.message);
                 console.log('📊 ✅ 진행률 업데이트 완료:', data.progress + '%');
-                
-                // 10% 이후 이벤트가 안 오면 강제 재연결 시도
-                if (data.progress === 10) {
-                    console.log('🔄 10% 이후 이벤트 대기 중... 5초 후 재연결 시도');
-                    setTimeout(() => {
-                        if (this.currentProgress === 10) {
-                            console.log('🚨 10%에서 멈춤 감지! 강제 재연결 시도');
-                            this.socket.disconnect();
-                            this.socket.connect();
-                        }
-                    }, 5000);
-                }
             } catch (error) {
                 console.error('📊 ❌ 진행률 업데이트 실패:', error);
             }
