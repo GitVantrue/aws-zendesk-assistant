@@ -163,42 +163,25 @@ def handle_aws_query(data):
             emit('progress', {'progress': 40, 'message': 'Service Screener 스캔 중...'}, namespace='/zendesk')
             
             try:
-                # Service Screener 실행 (Python 스크립트 직접 호출)
-                # 현재 디렉터리 기준으로 상대 경로 사용
-                screener_path = os.path.join(os.path.dirname(__file__), 'service-screener-v2', 'Screener.py')
-                
-                # 스캔 설정 JSON 생성
-                import tempfile
-                import json
+                # Service Screener 실행 (main.py 방식)
+                screener_base = os.path.join(os.path.dirname(__file__), 'service-screener-v2')
+                screener_main = os.path.join(screener_base, 'main.py')
                 
                 # 스캔할 리전 목록
-                scan_regions = ['ap-northeast-2', 'us-east-1', 'us-west-2', 'eu-west-1']
+                scan_regions = 'ap-northeast-2,us-east-1,us-west-2,eu-west-1'
                 
-                cross_accounts_config = {
-                    "general": {
-                        "IncludeThisAccount": True,
-                        "Regions": scan_regions
-                    }
-                }
-                
-                # 임시 JSON 파일 생성
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
-                    json.dump(cross_accounts_config, f, indent=2)
-                    temp_json_path = f.name
-                
-                print(f"[DEBUG] 스캔 설정 파일 생성: {temp_json_path}", flush=True)
-                
-                # Service Screener 실행
+                # Service Screener 실행 (main.py 사용)
                 cmd = [
                     'python3',
-                    screener_path,
-                    '--crossAccounts', temp_json_path
+                    screener_main,
+                    '--regions', scan_regions
                 ]
                 
                 env = os.environ.copy()
                 env.update(credentials)
                 
                 print(f"[DEBUG] Service Screener 실행 명령어: {' '.join(cmd)}", flush=True)
+                print(f"[DEBUG] 작업 디렉터리: {screener_base}", flush=True)
                 
                 result = subprocess.run(
                     cmd,
@@ -206,22 +189,21 @@ def handle_aws_query(data):
                     text=True,
                     env=env,
                     timeout=600,  # 10분 타임아웃
-                    cwd=os.path.dirname(screener_path)
+                    cwd=screener_base
                 )
                 
-                # 임시 파일 삭제
-                try:
-                    os.remove(temp_json_path)
-                except:
-                    pass
+                print(f"[DEBUG] Service Screener 실행 완료 (returncode: {result.returncode})", flush=True)
+                if result.stdout:
+                    print(f"[DEBUG] stdout: {result.stdout[:500]}", flush=True)
+                if result.stderr:
+                    print(f"[DEBUG] stderr: {result.stderr[:500]}", flush=True)
                 
                 emit('progress', {'progress': 80, 'message': '결과 정리 중...'}, namespace='/zendesk')
                 
                 if result.returncode == 0:
                     print(f"[DEBUG] ✅ Service Screener 스캔 완료", flush=True)
                     
-                    # 결과 디렉터리 확인
-                    screener_base = os.path.dirname(screener_path)
+                    # 결과 디렉터리 확인 (adminlte/aws/{account_id}/)
                     account_result_dir = os.path.join(screener_base, 'adminlte', 'aws', account_id)
                     
                     if os.path.exists(account_result_dir):
