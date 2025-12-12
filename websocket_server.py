@@ -292,16 +292,17 @@ def parse_month_from_query(query):
         'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
     }
     
-    # 연도 추출 (4자리 숫자)
-    year_match = re.search(r'(\d{4})', query)
-    target_year = int(year_match.group(1)) if year_match else today.year
-    
-    # 월 추출
+    # 월 추출 (먼저 월을 찾음)
     target_month = None
     for month_name, month_num in month_map.items():
         if month_name in query_lower:
             target_month = month_num
             break
+    
+    # 연도 추출 (4자리 숫자, 1900~2100 범위만)
+    # 계정 ID(12자리)와 구분하기 위해 1900~2100 범위로 제한
+    year_match = re.search(r'\b(19\d{2}|20\d{2})\b', query)
+    target_year = int(year_match.group(1)) if year_match else today.year
     
     # 월을 찾지 못하면 지난달
     if target_month is None:
