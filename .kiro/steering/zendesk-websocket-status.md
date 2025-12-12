@@ -30,37 +30,36 @@
 - HTML 보고서 생성 및 저장
 - 로컬 파일 경로를 웹 URL로 변환
 
-## 현재 이슈 및 해결 방법
+## 최신 수정사항 (2025-12-12)
 
-### 문제: ALB를 통한 `/reports/` 엔드포인트 404 에러
+### ✅ 완료: Slack bot 코드 정확히 포팅
+- `collect_raw_security_data()` 함수를 Slack bot과 동일하게 구현
+- `generate_html_report()` 함수를 Slack bot과 동일하게 구현
+- Raw JSON 데이터 구조를 Slack bot과 정확히 일치
+- EC2, S3, RDS, Lambda, IAM, 보안 그룹, CloudTrail, CloudWatch, Trusted Advisor 모두 수집
+- HTML 보고서 템플릿 정확히 적용
 
-**원인**: WebSocket 서버에 `/reports/` 라우트가 없어서 ALB가 요청을 처리할 수 없음
+### 커밋 정보
+- **Commit**: `cc17763`
+- **Message**: "Replace with exact Slack bot implementation for data collection and HTML report generation"
 
-**해결책**: 
-1. Flask 라우트 추가: `@app.route('/reports/<path:filename>')`
-2. `/tmp/reports/` 디렉토리의 파일을 웹으로 제공
-3. 디렉토리 구조 지원 (Service Screener 결과 디렉토리)
-4. 적절한 MIME 타입 설정
+## EC2 배포 절차 (매번 git push 후 실행)
 
-**구현 위치**: `websocket_server.py` 라인 1162-1210
-
-**테스트 방법**:
 ```bash
-# 로컬에서 테스트
-curl -I http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/security_report_950027134314_20251212_035333.html
-
-# 또는 브라우저에서
-http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/security_report_950027134314_20251212_035333.html
+# EC2에 접속 후 다음 명령어 실행:
+cd /home/ec2-user/aws-zendesk-assistant
+git pull origin main
+sudo pkill -f websocket_server.py
+nohup python3 websocket_server.py > /tmp/websocket_server.log 2>&1 &
+tail -f /tmp/websocket_server.log
 ```
 
-## 배포 절차
-
-1. 로컬에서 코드 수정
-2. `git add` → `git commit` → `git push`
-3. EC2에서 `git pull origin main`
-4. `sudo pkill -f websocket_server.py` (기존 프로세스 종료)
-5. `nohup python3 websocket_server.py > /tmp/websocket_server.log 2>&1 &` (재시작)
-6. `tail -f /tmp/websocket_server.log` (로그 확인)
+**각 명령어 설명**:
+1. `cd /home/ec2-user/aws-zendesk-assistant` - 프로젝트 디렉토리로 이동
+2. `git pull origin main` - 최신 코드 다운로드
+3. `sudo pkill -f websocket_server.py` - 기존 WebSocket 서버 프로세스 종료
+4. `nohup python3 websocket_server.py > /tmp/websocket_server.log 2>&1 &` - 새로운 서버 시작 (백그라운드)
+5. `tail -f /tmp/websocket_server.log` - 실시간 로그 확인 (Ctrl+C로 종료)
 
 ## 주요 파일 위치
 
