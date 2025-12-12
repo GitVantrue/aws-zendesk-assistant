@@ -289,9 +289,13 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
             except Exception as e:
                 print(f"[WARNING] 세션별 전송 실패: {e}", flush=True)
             
-            # 2. 모든 클라이언트에게 브로드캐스트 (백업)
+            # 2. 모든 클라이언트에게 브로드캐스트 (백업) - 네임스페이스 없이도 시도
             socketio.emit(event_type, data, namespace='/zendesk')
-            print(f"[DEBUG] ✅ 브로드캐스트 전송 완료: {event_type}", flush=True)
+            print(f"[DEBUG] ✅ 네임스페이스 브로드캐스트 전송 완료: {event_type}", flush=True)
+            
+            # 3. 네임스페이스 없이도 전송 (추가 안전장치)
+            socketio.emit(event_type, data)
+            print(f"[DEBUG] ✅ 글로벌 브로드캐스트 전송 완료: {event_type}", flush=True)
             
             # 이벤트 전송 후 잠시 대기 (버퍼링 방지)
             import time

@@ -213,6 +213,29 @@ class SaltwareAWSAssistant {
         this.socket.onAny((eventName, ...args) => {
             console.log('🔍 WebSocket 이벤트 수신:', eventName, args);
         });
+        
+        // 추가 안전장치: 네임스페이스 없이도 이벤트 수신
+        const globalSocket = io(serverUrl.replace('/zendesk', ''), {
+            transports: ['polling', 'websocket'],
+            timeout: 20000,
+            reconnection: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000
+        });
+        
+        globalSocket.on('progress', (data) => {
+            console.log('🌐 글로벌 progress 이벤트 수신:', data);
+            if (data.progress > 0) {
+                console.log('🚨 글로벌에서 진행률', data.progress + '% 수신됨!');
+                this.updateProgress(data.progress, data.message);
+            }
+        });
+        
+        globalSocket.on('result', (data) => {
+            console.log('🌐 글로벌 result 이벤트 수신:', data);
+            this.showResult(data);
+            this.hideProgress();
+        });
     }
     
     /**
