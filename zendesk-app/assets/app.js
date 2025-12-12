@@ -119,17 +119,20 @@ class SaltwareAWSAssistant {
             
             console.log('🔌 WebSocket 서버 연결 시도:', this.serverUrl);
             
-            // Socket.IO 클라이언트 생성 - 안정성 우선 설정
+            // Socket.IO 클라이언트 생성 - 이벤트 수신 최적화
             this.socket = io(this.serverUrl, {
                 path: '/zendesk/socket.io',
-                transports: ['polling'],  // polling만 사용 (안정성 우선)
-                timeout: 60000,  // 타임아웃 대폭 증가
+                transports: ['polling'],  // polling만 사용
+                timeout: 120000,  // 타임아웃 2분
                 reconnection: true,
-                reconnectionAttempts: 3,
-                reconnectionDelay: 3000,
-                reconnectionDelayMax: 10000,
-                forceNew: true,  // 새 연결 강제
-                upgrade: false  // 업그레이드 비활성화
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                forceNew: true,
+                upgrade: false,
+                rememberUpgrade: false,
+                autoConnect: true,
+                closeOnBeforeunload: false  // 페이지 언로드 시 연결 유지
             });
             
             // WebSocket 이벤트 리스너 설정
@@ -194,9 +197,10 @@ class SaltwareAWSAssistant {
             this.updateConnectionStatus(false, '연결 오류');
         });
         
-        // 진행률 업데이트 - 강화된 디버깅
+        // 진행률 업데이트 - 이벤트 손실 방지 강화
         this.socket.on('progress', (data) => {
-            console.log('📊 진행률 업데이트 수신:', data);
+            const timestamp = new Date().toLocaleTimeString();
+            console.log(`📊 [${timestamp}] 진행률 업데이트 수신:`, data);
             console.log('📊 현재 연결 상태:', this.socket.connected);
             console.log('📊 현재 진행률 요소 존재:', !!this.elements.progressContainer);
             console.log('📊 현재 진행률 요소 표시 상태:', this.elements.progressContainer?.style.display);
@@ -207,17 +211,15 @@ class SaltwareAWSAssistant {
             // 브라우저 제목도 변경해서 확실히 확인
             document.title = `AWS Assistant - ${data.progress}%`;
             
-            // 강제 알림으로 이벤트 수신 확인
-            if (window.Notification && Notification.permission === 'granted') {
-                new Notification(`진행률 ${data.progress}%`, { 
-                    body: data.message,
-                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📊</text></svg>'
-                });
-            }
-            
+            // 이벤트 수신 즉시 DOM 업데이트 (비동기 방지)
             try {
                 this.updateProgress(data.progress, data.message);
                 console.log('📊 ✅ 진행률 업데이트 완료:', data.progress + '%');
+                
+                // 이벤트 처리 완료 확인용 DOM 마킹
+                document.body.setAttribute('data-last-progress', data.progress);
+                document.body.setAttribute('data-last-update', timestamp);
+                
             } catch (error) {
                 console.error('📊 ❌ 진행률 업데이트 실패:', error);
             }
