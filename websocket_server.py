@@ -604,23 +604,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
             print(f"[DEBUG] Q CLI 실행 시작 - 질문 유형: {question_type}", flush=True)
             
             try:
-                # Q CLI 경로 확인 (여러 경로 시도)
-                q_paths = [
-                    '/root/.local/bin/q',
-                    '/home/ec2-user/.local/bin/q', 
-                    '/usr/local/bin/q',
-                    'q'  # PATH에서 찾기
-                ]
-                
-                q_cmd = None
-                for path in q_paths:
-                    if path == 'q' or os.path.exists(path):
-                        q_cmd = path
-                        print(f"[DEBUG] Q CLI 경로 발견: {q_cmd}", flush=True)
-                        break
-                
-                if not q_cmd:
-                    raise FileNotFoundError("Q CLI를 찾을 수 없습니다")
+                # Q CLI 실행 (Slack bot과 동일한 방식)
+                q_cmd = '/root/.local/bin/q'  # Slack bot과 동일한 경로 사용
                 
                 # Q CLI 실행 전 환경 변수 디버깅
                 print(f"[DEBUG] Q CLI 실행 환경:", flush=True)
@@ -629,13 +614,17 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 print(f"[DEBUG] - AWS_DEFAULT_REGION: {env_vars.get('AWS_DEFAULT_REGION', 'None')}", flush=True)
                 print(f"[DEBUG] - 질문 길이: {len(korean_prompt)}", flush=True)
                 
-                # Q CLI 실행 (실제 AWS 분석) - 도구 자동 승인 추가
+                # Q CLI 실행 (Slack bot과 동일한 명령어 및 타임아웃)
+                cmd = [q_cmd, 'chat', '--no-interactive', '--trust-all-tools', korean_prompt]
+                print(f"[DEBUG] 실행 명령어: {' '.join(cmd)}", flush=True)
+                print(f"[DEBUG] 타임아웃 설정: 600초 (질문 유형: {question_type})", flush=True)
+                
                 q_result = subprocess.run(
-                    [q_cmd, 'chat', '--no-interactive', '--trust-all-tools', korean_prompt],
+                    cmd,
                     capture_output=True,
                     text=True,
                     env=env_vars,
-                    timeout=300  # 5분 타임아웃
+                    timeout=600  # Slack bot과 동일한 10분 타임아웃
                 )
                 
                 print(f"[DEBUG] Q CLI 실행 완료:", flush=True)
@@ -678,23 +667,76 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                             account = caller_info.get('Account', 'Unknown')
                             user_arn = caller_info.get('Arn', 'Unknown')
                             
-                            # 질문에 따라 실제 AWS 리소스 조회
+                            # 질문에 따라 실제 AWS 리소스 조회 (Slack bot 수준 상세 정보)
                             resource_info = ""
                             if any(keyword in query.lower() for keyword in ['ec2', '인스턴스', 'instance', '러닝', 'running']):
-                                # EC2 인스턴스 조회
+                                # EC2 인스턴스 상세 조회 (JSON 형태로)
                                 try:
                                     ec2_result = subprocess.run(
                                         ['aws', 'ec2', 'describe-instances', 
                                          '--filters', 'Name=instance-state-name,Values=running',
-                                         '--query', 'Reservations[].Instances[].[InstanceId,InstanceType,State.Name,LaunchTime]',
-                                         '--output', 'table'],
+                                         '--output', 'json'],
                                         capture_output=True,
                                         text=True,
                                         env=env_vars,
                                         timeout=30
                                     )
                                     if ec2_result.returncode == 0:
-                                        resource_info = f"\n\n🖥️ 실행 중인 EC2 인스턴스:\n```\n{ec2_result.stdout}\n```"
+                                        ec2_data = json.loads(ec2_result.stdout)
+                                        instances = []
+                                        
+                                        for reservation in ec2_data.get('Reservations', []):
+                                            for instance in reservation.get('Instances', []):
+                                                # 인스턴스 이름 추출
+                                                instance_name = "이름 없음"
+                                                for tag in instance.get('Tags', []):
+                                                    if tag.get('Key') == 'Name':
+                                                        instance_name = tag.get('Value', '이름 없음')
+                                                        break
+                                                
+                                                # 보안 그룹 정보 추출
+                                                security_groups = []
+                                                for sg in instance.get('SecurityGroups', []):
+                                                    sg_name = sg.get('GroupName', 'Unknown')
+                                                    sg_id = sg.get('GroupId', 'Unknown')
+                                                    security_groups.append(f"{sg_name} ({sg_id})")
+                                                
+                                                # IAM 역할 추출
+                                                iam_role = "없음"
+                                                if instance.get('IamInstanceProfile'):
+                                                    iam_arn = instance['IamInstanceProfile'].get('Arn', '')
+                                                    if '/' in iam_arn:
+                                                        iam_role = iam_arn.split('/')[-1]
+                                                
+                                                instance_info = f"""🖥️ **{instance_name}**
+• **인스턴스 ID**: {instance.get('InstanceId', 'Unknown')}
+• **상태**: ✅ {instance.get('State', {}).get('Name', 'Unknown')}
+• **인스턴스 타입**: {instance.get('InstanceType', 'Unknown')}
+• **시작 시간**: {instance.get('LaunchTime', 'Unknown')}
+• **가용 영역**: {instance.get('Placement', {}).get('AvailabilityZone', 'Unknown')}
+
+**네트워크 정보**:
+• **프라이빗 IP**: {instance.get('PrivateIpAddress', '없음')}
+• **퍼블릭 IP**: {instance.get('PublicIpAddress', '없음')}
+• **VPC ID**: {instance.get('VpcId', 'Unknown')}
+• **서브넷 ID**: {instance.get('SubnetId', 'Unknown')}
+• **보안 그룹**: {', '.join(security_groups) if security_groups else '없음'}
+
+**기타 정보**:
+• **키 페어**: {instance.get('KeyName', '없음')}
+• **IAM 역할**: {iam_role}
+• **플랫폼**: {instance.get('Platform', 'Linux/UNIX')}
+• **모니터링**: {'활성화' if instance.get('Monitoring', {}).get('State') == 'enabled' else '비활성화'}
+• **EBS 최적화**: {'활성화' if instance.get('EbsOptimized', False) else '비활성화'}
+"""
+                                                instances.append(instance_info)
+                                        
+                                        if instances:
+                                            total_count = len(instances)
+                                            resource_info = f"\n\n📊 **총 {total_count}개 인스턴스 실행 중**:\n\n" + "\n\n".join(instances)
+                                            resource_info += f"\n\n💡 **추가 정보가 필요하시면 특정 인스턴스 ID를 말씀해주세요!**"
+                                        else:
+                                            resource_info = f"\n\n📭 **실행 중인 EC2 인스턴스가 없습니다.**"
                                     else:
                                         resource_info = f"\n\n⚠️ EC2 인스턴스 조회 실패: {ec2_result.stderr[:200]}"
                                 except Exception as e:
