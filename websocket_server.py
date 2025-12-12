@@ -276,18 +276,22 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
     def emit_to_client(event_type, data):
         """클라이언트에게 이벤트 전송하는 통합 헬퍼 함수"""
         try:
-            print(f"[DEBUG] 이벤트 전송 시도: {event_type} -> 세션 {session_id}, 데이터: {data}", flush=True)
+            print(f"[DEBUG] 이벤트 전송 시도: {event_type}, 데이터: {data}", flush=True)
             
-            # 세션이 여전히 활성 상태인지 확인
-            if session_id in active_sessions:
-                print(f"[DEBUG] 세션 {session_id} 활성 상태 확인됨", flush=True)
-                socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
-                print(f"[DEBUG] ✅ 이벤트 전송 완료: {event_type} -> 세션 {session_id}", flush=True)
-            else:
-                print(f"[WARNING] 세션 {session_id}가 활성 세션 목록에 없음. 활성 세션: {active_sessions}", flush=True)
-                # 그래도 전송 시도
-                socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
-                print(f"[DEBUG] 비활성 세션에도 전송 시도 완료", flush=True)
+            # 세션별 전송과 브로드캐스트 둘 다 시도 (안전장치)
+            try:
+                # 1. 특정 세션으로 전송 시도
+                if session_id in active_sessions:
+                    socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
+                    print(f"[DEBUG] ✅ 세션별 전송 완료: {event_type} -> 세션 {session_id}", flush=True)
+                else:
+                    print(f"[WARNING] 세션 {session_id}가 활성 목록에 없음", flush=True)
+            except Exception as e:
+                print(f"[WARNING] 세션별 전송 실패: {e}", flush=True)
+            
+            # 2. 모든 클라이언트에게 브로드캐스트 (백업)
+            socketio.emit(event_type, data, namespace='/zendesk')
+            print(f"[DEBUG] ✅ 브로드캐스트 전송 완료: {event_type}", flush=True)
             
             # 이벤트 전송 후 잠시 대기 (버퍼링 방지)
             import time
