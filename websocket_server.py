@@ -1157,10 +1157,9 @@ def generate_s3_security_issues_section(buckets):
     """S3 보안 이슈 섹션 생성"""
     return '<div class="no-data">S3 보안 이슈가 없습니다</div>'
 
-# Flask 라우트: 보고서 파일 제공
-@app.route('/reports/<path:filename>')
-def serve_report(filename):
-    """보고서 파일 제공"""
+# Flask 라우트: 보고서 파일 제공 (여러 경로 지원)
+def serve_report_impl(filename):
+    """보고서 파일 제공 구현"""
     try:
         from flask import send_file, abort
         
@@ -1212,6 +1211,18 @@ def serve_report(filename):
     except Exception as e:
         print(f"[ERROR] 보고서 파일 제공 중 오류: {str(e)}", flush=True)
         abort(500)
+
+# 경로 1: /reports/
+@app.route('/reports/<path:filename>')
+def serve_report(filename):
+    """보고서 파일 제공 (/reports/)"""
+    return serve_report_impl(filename)
+
+# 경로 2: /zendesk/reports/ (ALB가 /zendesk/ 경로를 라우팅하는 경우)
+@app.route('/zendesk/reports/<path:filename>')
+def serve_report_zendesk(filename):
+    """보고서 파일 제공 (/zendesk/reports/)"""
+    return serve_report_impl(filename)
 
 @socketio.on('connect', namespace='/zendesk')
 def handle_connect():
