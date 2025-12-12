@@ -164,7 +164,8 @@ def handle_aws_query(data):
             
             try:
                 # Service Screener 실행 (Python 스크립트 직접 호출)
-                screener_path = '/root/service-screener-v2/Screener.py'
+                # 현재 디렉터리 기준으로 상대 경로 사용
+                screener_path = os.path.join(os.path.dirname(__file__), 'service-screener-v2', 'Screener.py')
                 
                 # 스캔 설정 JSON 생성
                 import tempfile
@@ -205,7 +206,7 @@ def handle_aws_query(data):
                     text=True,
                     env=env,
                     timeout=600,  # 10분 타임아웃
-                    cwd='/root/service-screener-v2'
+                    cwd=os.path.dirname(screener_path)
                 )
                 
                 # 임시 파일 삭제
@@ -220,7 +221,8 @@ def handle_aws_query(data):
                     print(f"[DEBUG] ✅ Service Screener 스캔 완료", flush=True)
                     
                     # 결과 디렉터리 확인
-                    account_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
+                    screener_base = os.path.dirname(screener_path)
+                    account_result_dir = os.path.join(screener_base, 'adminlte', 'aws', account_id)
                     
                     if os.path.exists(account_result_dir):
                         # 결과를 /tmp/reports로 복사 (웹 접근 가능하게)
