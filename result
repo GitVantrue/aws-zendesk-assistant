@@ -1,0 +1,39 @@
+🏢 계정 950027134314 결과:
+
+> 📋 EC2 인스턴스 현황 (실행 중)
+📅 조회 시간: 2025-12-12 02:11:04 KST
+🌍 리전: ap-northeast-2 (서울)
+
+🛠️ Using tool: use_aws (trusted)
+⋮
+● Running aws cli command:
+
+Service name: ec2
+Operation name: describe-instances
+Parameters:
+- query: "Reservations[].Instances[].[InstanceId,InstanceType,State.Name,LaunchTime,Tags[?Key=='Name'].Value|[0]]"
+- filters: [{"name":"instance-state-name","values":["running"]}]
+Region: ap-northeast-2
+Label: 실행 중인 EC2 인스턴스 목록 조회
+
+🛠️ Using tool: use_aws (trusted)
+⋮
+● Running aws cli command:
+
+Service name: ec2
+Operation name: describe-instances
+Parameters:
+- query: "Reservations[].Instances[].[InstanceId,InstanceType,State.Name,LaunchTime,Tags[?Key=='Name'].Value|[0]]"
+- filters: [{"Name":"instance-state-name","Values":["running"]}]
+Region: ap-northeast-2
+Label: 실행 중인 EC2 인스턴스 목록 조회 ⋮
+● Completed in 0.947s
+
+> 총 1개 인스턴스가 실행 중입니다:
+
+🖥️ Amazon-Q-Slack-Bridge-SSH (i-0f021cd63ff2462b6)
+• 타입: t3.medium
+• 상태: running ✅
+• 시작일: 2025-10-30 10:21:06 KST
+
+💡 특정 인스턴스의 자세한 정보(보안그룹, 네트워크 등)를 보시겠어요?

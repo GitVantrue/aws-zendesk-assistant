@@ -570,6 +570,19 @@ def generate_html_report(json_file_path):
         # 템플릿이 없으면 기본 HTML 생성 함수 사용
         if not template:
             print(f"[DEBUG] 템플릿 파일 없음, 기본 HTML 생성 사용", flush=True)
+            # 기본 HTML 생성
+            html_content = generate_html_from_json(data)
+            
+            # 파일 저장
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            html_filename = f"security_report_{account_id}_{timestamp}.html"
+            html_path = f"/tmp/reports/{html_filename}"
+            
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            print(f"[DEBUG] HTML 보고서 생성 완료: {html_path}", flush=True)
+            return html_path
         
         # 메타데이터 추출
         metadata = data.get('metadata', {})
@@ -1712,40 +1725,40 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 print(f"[DEBUG] - AWS_DEFAULT_REGION: {env_vars.get('AWS_DEFAULT_REGION', 'None')}", flush=True)
                 print(f"[DEBUG] - 질문 길이: {len(korean_prompt)}", flush=True)
                 
-                # Q CLI 실행 (Slack bot과 동일한 명령어 및 타임아웃)
-                cmd = [q_cmd, 'chat', '--no-interactive', '--trust-all-tools', korean_prompt]
-                print(f"[DEBUG] 실행 명령어: {' '.join(cmd)}", flush=True)
-                print(f"[DEBUG] 타임아웃 설정: 600초 (질문 유형: {question_type})", flush=True)
-                
-                q_result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    env=env_vars,
-                    timeout=600  # Slack bot과 동일한 10분 타임아웃
-                )
-                
-                print(f"[DEBUG] Q CLI 실행 완료:", flush=True)
-                print(f"[DEBUG] - 반환 코드: {q_result.returncode}", flush=True)
-                print(f"[DEBUG] - stdout 길이: {len(q_result.stdout) if q_result.stdout else 0}", flush=True)
-                print(f"[DEBUG] - stderr 길이: {len(q_result.stderr) if q_result.stderr else 0}", flush=True)
-                
-                if q_result.stderr:
-                    print(f"[DEBUG] Q CLI stderr: {q_result.stderr[:500]}", flush=True)
-                
-                if q_result.returncode == 0 and q_result.stdout.strip():
-                    # 성공적인 응답
-                    clean_response = simple_clean_output(q_result.stdout.strip())
-                    print(f"[DEBUG] Q CLI 응답 성공 (길이: {len(clean_response)})", flush=True)
+                    # Q CLI 실행 (Slack bot과 동일한 명령어 및 타임아웃)
+                    cmd = [q_cmd, 'chat', '--no-interactive', '--trust-all-tools', korean_prompt]
+                    print(f"[DEBUG] 실행 명령어: {' '.join(cmd)}", flush=True)
+                    print(f"[DEBUG] 타임아웃 설정: 600초 (질문 유형: {question_type})", flush=True)
                     
-                    emit_progress(100, '분석이 완료되었습니다!')
-                    emit_result({'summary': account_prefix + clean_response})
-                else:
-                    # Q CLI 실행 실패
-                    error_msg = q_result.stderr.strip() if q_result.stderr else "Q CLI 실행 실패"
-                    print(f"[ERROR] Q CLI 실행 실패:", flush=True)
-                    print(f"[ERROR] - 반환 코드: {q_result.returncode}", flush=True)
-                    print(f"[ERROR] - 에러 메시지: {error_msg}", flush=True)
+                    q_result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        env=env_vars,
+                        timeout=600  # Slack bot과 동일한 10분 타임아웃
+                    )
+                
+                    print(f"[DEBUG] Q CLI 실행 완료:", flush=True)
+                    print(f"[DEBUG] - 반환 코드: {q_result.returncode}", flush=True)
+                    print(f"[DEBUG] - stdout 길이: {len(q_result.stdout) if q_result.stdout else 0}", flush=True)
+                    print(f"[DEBUG] - stderr 길이: {len(q_result.stderr) if q_result.stderr else 0}", flush=True)
+                    
+                    if q_result.stderr:
+                        print(f"[DEBUG] Q CLI stderr: {q_result.stderr[:500]}", flush=True)
+                    
+                    if q_result.returncode == 0 and q_result.stdout.strip():
+                        # 성공적인 응답
+                        clean_response = simple_clean_output(q_result.stdout.strip())
+                        print(f"[DEBUG] Q CLI 응답 성공 (길이: {len(clean_response)})", flush=True)
+                        
+                        emit_progress(100, '분석이 완료되었습니다!')
+                        emit_result({'summary': account_prefix + clean_response})
+                    else:
+                        # Q CLI 실행 실패
+                        error_msg = q_result.stderr.strip() if q_result.stderr else "Q CLI 실행 실패"
+                        print(f"[ERROR] Q CLI 실행 실패:", flush=True)
+                        print(f"[ERROR] - 반환 코드: {q_result.returncode}", flush=True)
+                        print(f"[ERROR] - 에러 메시지: {error_msg}", flush=True)
                     
                     # 폴백: AWS CLI로 실제 리소스 조회
                     try:
