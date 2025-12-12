@@ -74,6 +74,143 @@ def handle_message(data):
     print(f"[DEBUG] 메시지 수신: {data}", flush=True)
     emit('response', {'data': '메시지를 받았습니다'})
 
+@socketio.on('aws_query', namespace='/zendesk')
+def handle_aws_query(data):
+    """AWS 쿼리 처리"""
+    print(f"[DEBUG] AWS 쿼리 수신: {data}", flush=True)
+    
+    try:
+        query = data.get('query', '')
+        user_id = data.get('user_id', 'unknown')
+        ticket_id = data.get('ticket_id', 'unknown')
+        
+        print(f"[DEBUG] 쿼리 처리 시작: {query}", flush=True)
+        
+        # 진행률 업데이트 시작
+        emit('progress', {'progress': 10, 'message': '요청 분석 중...'}, namespace='/zendesk')
+        
+        # 질문 유형 분석
+        question_type, context_path = analyze_question_type(query)
+        print(f"[DEBUG] 질문 유형: {question_type}", flush=True)
+        
+        emit('progress', {'progress': 20, 'message': '계정 정보 추출 중...'}, namespace='/zendesk')
+        
+        # 계정 ID 추출
+        account_id = extract_account_id(query)
+        if not account_id:
+            emit('result', {
+                'summary': '❌ 계정 ID를 찾을 수 없습니다. 질문에 12자리 계정 ID를 포함해주세요.',
+                'reports': [],
+                'data': {}
+            }, namespace='/zendesk')
+            return
+        
+        print(f"[DEBUG] 추출된 계정 ID: {account_id}", flush=True)
+        
+        # Cross-account 세션 생성
+        emit('progress', {'progress': 30, 'message': 'AWS 자격증명 확보 중...'}, namespace='/zendesk')
+        
+        credentials = get_crossaccount_session(account_id)
+        if not credentials:
+            emit('result', {
+                'summary': f'❌ 계정 {account_id}에 접근할 수 없습니다.',
+                'reports': [],
+                'data': {}
+            }, namespace='/zendesk')
+            return
+        
+        print(f"[DEBUG] Cross-account 세션 생성 성공", flush=True)
+        
+        # 질문 유형별 처리
+        if question_type == 'screener':
+            emit('progress', {'progress': 40, 'message': 'Service Screener 스캔 중...'}, namespace='/zendesk')
+            
+            # Q CLI 실행
+            q_path = '/home/ec2-user/.local/bin/q'
+            cmd = [q_path, 'scan', '--account', account_id, '--region', 'ap-northeast-2']
+            
+            env = os.environ.copy()
+            env.update(credentials)
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=300)
+            
+            emit('progress', {'progress': 80, 'message': '결과 정리 중...'}, namespace='/zendesk')
+            
+            if result.returncode == 0:
+                output = simple_clean_output(result.stdout)
+                emit('result', {
+                    'summary': f'✅ Service Screener 스캔 완료\n\n{output}',
+                    'reports': [],
+                    'data': {'raw_output': result.stdout}
+                }, namespace='/zendesk')
+            else:
+                emit('result', {
+                    'summary': f'❌ Service Screener 스캔 실패: {result.stderr}',
+                    'reports': [],
+                    'data': {}
+                }, namespace='/zendesk')
+        
+        elif question_type == 'report':
+            emit('progress', {'progress': 40, 'message': '보안 데이터 수집 중...'}, namespace='/zendesk')
+            
+            # 월간 보고서 생성
+            today = datetime.now()
+            start_date = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+            end_date = today.replace(day=1) - timedelta(days=1)
+            
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            # Raw 데이터 수집
+            raw_data = collect_raw_security_data(account_id, start_date_str, end_date_str, credentials=credentials)
+            
+            emit('progress', {'progress': 70, 'message': 'HTML 보고서 생성 중...'}, namespace='/zendesk')
+            
+            # HTML 보고서 생성
+            html_content = generate_html_report(raw_data)
+            
+            # 보고서 저장
+            report_filename = f"security_report_{account_id}_{today.strftime('%Y%m%d')}.html"
+            report_path = f'/tmp/reports/{report_filename}'
+            
+            with open(report_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            emit('progress', {'progress': 90, 'message': '보고서 URL 생성 중...'}, namespace='/zendesk')
+            
+            # URL 변환
+            report_url = convert_local_paths_to_urls(report_path)
+            
+            emit('result', {
+                'summary': f'✅ 월간 보안 보고서 생성 완료\n\n📊 보고서: {report_url}',
+                'reports': [{'name': report_filename, 'url': report_url}],
+                'data': raw_data
+            }, namespace='/zendesk')
+        
+        else:
+            # 일반 AWS 질문
+            emit('progress', {'progress': 50, 'message': 'AWS 정보 조회 중...'}, namespace='/zendesk')
+            
+            # 간단한 응답
+            emit('result', {
+                'summary': f'✅ 질문을 받았습니다: {query}\n\n현재는 Service Screener 스캔과 월간 보고서 생성만 지원합니다.',
+                'reports': [],
+                'data': {}
+            }, namespace='/zendesk')
+        
+        emit('progress', {'progress': 100, 'message': '완료!'}, namespace='/zendesk')
+        
+    except Exception as e:
+        print(f"[ERROR] AWS 쿼리 처리 중 오류: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        
+        emit('result', {
+            'summary': f'❌ 오류 발생: {str(e)}',
+            'reports': [],
+            'data': {}
+        }, namespace='/zendesk')
+
 def convert_datetime_to_json_serializable(obj):
     """
     datetime 객체를 JSON 직렬화 가능한 형식으로 변환하는 재귀 함수
