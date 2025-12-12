@@ -12,6 +12,11 @@ class SaltwareAWSAssistant {
         this.currentProgress = 0;
         this.serverUrl = null; // 서버 URL 저장
         
+        // 중복 이벤트 방지
+        this.lastProgressUpdate = 0;
+        this.lastResultReceived = null;
+        this.eventDeduplication = new Map(); // 이벤트 중복 제거
+        
         // DOM 요소들
         this.elements = {
             connectionStatus: document.getElementById('connectionStatus'),
@@ -201,13 +206,34 @@ class SaltwareAWSAssistant {
             this.updateConnectionStatus(false, '연결 오류');
         });
         
-        // 진행률 업데이트 - 이벤트 손실 방지 강화
+        // 진행률 업데이트 - 중복 방지 강화
         this.socket.on('progress', (data) => {
             const timestamp = new Date().toLocaleTimeString();
+            
+            // 중복 이벤트 체크 (같은 진행률이 연속으로 오면 무시)
+            const eventKey = `progress_${data.progress}`;
+            const now = Date.now();
+            
+            if (this.eventDeduplication.has(eventKey)) {
+                const lastTime = this.eventDeduplication.get(eventKey);
+                if (now - lastTime < 1000) { // 1초 내 중복 이벤트 무시
+                    console.log(`🔄 중복 진행률 이벤트 무시: ${data.progress}%`);
+                    return;
+                }
+            }
+            
+            this.eventDeduplication.set(eventKey, now);
+            
             console.log(`📊 [${timestamp}] 진행률 업데이트 수신:`, data);
             console.log('📊 현재 연결 상태:', this.socket.connected);
-            console.log('📊 현재 진행률 요소 존재:', !!this.elements.progressContainer);
-            console.log('📊 현재 진행률 요소 표시 상태:', this.elements.progressContainer?.style.display);
+            
+            // 진행률이 역행하는 경우 무시 (단, 0%는 새 요청이므로 허용)
+            if (data.progress !== 0 && data.progress < this.lastProgressUpdate) {
+                console.log(`🔄 역행하는 진행률 무시: ${data.progress}% (현재: ${this.lastProgressUpdate}%)`);
+                return;
+            }
+            
+            this.lastProgressUpdate = data.progress;
             
             // 모든 progress 이벤트에 대해 강제 알림
             console.log('🚨 ALERT: 진행률', data.progress + '% 수신됨!');
@@ -229,9 +255,18 @@ class SaltwareAWSAssistant {
             }
         });
         
-        // 최종 결과
+        // 최종 결과 - 중복 방지
         this.socket.on('result', (data) => {
             console.log('📋 결과 수신:', data);
+            
+            // 중복 결과 체크
+            const resultHash = JSON.stringify(data).substring(0, 100);
+            if (this.lastResultReceived === resultHash) {
+                console.log('🔄 중복 결과 이벤트 무시');
+                return;
+            }
+            
+            this.lastResultReceived = resultHash;
             console.log('🚨 ALERT: 최종 결과 수신됨!');
             
             // 브라우저 알림으로 강제 확인
@@ -241,6 +276,10 @@ class SaltwareAWSAssistant {
             
             this.showResult(data);
             this.hideProgress();
+            
+            // 진행률 상태 초기화
+            this.lastProgressUpdate = 0;
+            this.eventDeduplication.clear();
         });
         
         // 에러 메시지

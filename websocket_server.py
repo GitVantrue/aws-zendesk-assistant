@@ -300,7 +300,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
     temp_dir = None
     
     def emit_to_client(event_type, data):
-        """클라이언트에게 이벤트 전송하는 통합 헬퍼 함수"""
+        """클라이언트에게 이벤트 전송하는 통합 헬퍼 함수 (중복 전송 방지)"""
         try:
             print(f"[DEBUG] 이벤트 전송 시도: {event_type}, 데이터: {data}", flush=True)
             
@@ -308,28 +308,27 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
             print(f"[DEBUG] 현재 활성 세션: {active_sessions}", flush=True)
             print(f"[DEBUG] 대상 세션: {session_id}", flush=True)
             
-            # 1. 특정 세션으로 전송 시도
-            session_sent = False
+            # 특정 세션으로만 전송 (중복 방지)
             if session_id in active_sessions:
                 try:
                     socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
                     print(f"[DEBUG] ✅ 세션별 전송 완료: {event_type} -> 세션 {session_id}", flush=True)
-                    session_sent = True
                 except Exception as e:
                     print(f"[WARNING] 세션별 전송 실패: {e}", flush=True)
+                    # 세션별 전송 실패 시에만 브로드캐스트로 폴백
+                    try:
+                        socketio.emit(event_type, data, namespace='/zendesk')
+                        print(f"[DEBUG] ✅ 폴백 브로드캐스트 전송 완료: {event_type}", flush=True)
+                    except Exception as fallback_error:
+                        print(f"[ERROR] 폴백 브로드캐스트도 실패: {fallback_error}", flush=True)
             else:
-                print(f"[WARNING] 세션 {session_id}가 활성 목록에 없음", flush=True)
-            
-            # 2. 모든 활성 세션에게 브로드캐스트 (백업)
-            try:
-                socketio.emit(event_type, data, namespace='/zendesk')
-                print(f"[DEBUG] ✅ 네임스페이스 브로드캐스트 전송 완료: {event_type}", flush=True)
-            except Exception as e:
-                print(f"[WARNING] 네임스페이스 브로드캐스트 실패: {e}", flush=True)
-            
-            # 이벤트 전송 후 잠시 대기 (버퍼링 방지)
-            import time
-            time.sleep(0.05)  # 대기 시간 단축
+                print(f"[WARNING] 세션 {session_id}가 활성 목록에 없음, 브로드캐스트로 전송", flush=True)
+                # 세션이 없을 때만 브로드캐스트
+                try:
+                    socketio.emit(event_type, data, namespace='/zendesk')
+                    print(f"[DEBUG] ✅ 브로드캐스트 전송 완료: {event_type}", flush=True)
+                except Exception as e:
+                    print(f"[ERROR] 브로드캐스트 전송 실패: {e}", flush=True)
             
         except Exception as e:
             print(f"[ERROR] 이벤트 전송 실패: {e}", flush=True)
