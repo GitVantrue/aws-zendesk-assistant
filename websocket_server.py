@@ -1818,8 +1818,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                                             resource_info = f"\n\n⚠️ EC2 인스턴스 조회 실패: {ec2_result.stderr[:200]}"
                                     except Exception as e:
                                         resource_info = f"\n\n⚠️ EC2 조회 중 오류: {str(e)}"
-                            
-                            fallback_response = f"""✅ AWS 리소스 조회 완료
+                                
+                                fallback_response = f"""✅ AWS 리소스 조회 완료
 
 질문: {query}
 유형: {question_type}
@@ -1836,8 +1836,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 • 보안 취약점 분석
 • 비용 최적화 제안
 • CloudTrail 이벤트 분석"""
-                        else:
-                            fallback_response = f"""⚠️ AWS 접근 확인 필요
+                            else:
+                                fallback_response = f"""⚠️ AWS 접근 확인 필요
 
 질문: {query}
 유형: {question_type}
@@ -1850,10 +1850,10 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 1. Q CLI 설치: curl -sSL https://install.q.dev | bash
 2. AWS 자격증명 확인
 3. 서비스 재시작"""
-                        
-                    except Exception as aws_error:
-                        print(f"[ERROR] AWS CLI 폴백도 실패: {aws_error}", flush=True)
-                        fallback_response = f"""⚠️ 시스템 설정 확인 필요
+                            
+                        except Exception as aws_error:
+                            print(f"[ERROR] AWS CLI 폴백도 실패: {aws_error}", flush=True)
+                            fallback_response = f"""⚠️ 시스템 설정 확인 필요
 
 질문: {query}
 
@@ -1865,9 +1865,9 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 1. Q CLI 설치 및 로그인
 2. AWS 자격증명 설정
 3. 컨텍스트 파일 복사"""
-                    
-                    emit_progress(100, '기본 분석이 완료되었습니다.')
-                    emit_result({'summary': account_prefix + fallback_response})
+                        
+                        emit_progress(100, '기본 분석이 완료되었습니다.')
+                        emit_result({'summary': account_prefix + fallback_response})
                     
             except subprocess.TimeoutExpired:
                 print(f"[ERROR] Q CLI 타임아웃 (5분)", flush=True)
