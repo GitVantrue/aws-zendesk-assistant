@@ -161,6 +161,7 @@ class SaltwareAWSAssistant {
         // 진행률 업데이트
         this.socket.on('progress', (data) => {
             console.log('📊 진행률 업데이트:', data);
+            console.log('📊 현재 진행률 요소:', this.elements.progressContainer);
             this.updateProgress(data.progress, data.message);
         });
         
@@ -176,6 +177,11 @@ class SaltwareAWSAssistant {
             console.error('❌ 서버 에러:', data);
             this.showError(data.message || '서버에서 오류가 발생했습니다.');
             this.hideProgress();
+        });
+        
+        // 모든 이벤트 디버깅
+        this.socket.onAny((eventName, ...args) => {
+            console.log('🔍 WebSocket 이벤트 수신:', eventName, args);
         });
     }
     
