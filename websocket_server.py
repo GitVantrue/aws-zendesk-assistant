@@ -333,9 +333,13 @@ def handle_aws_query(data):
                 
                 print(f"[DEBUG] Service Screener 실행 완료 (returncode: {result.returncode})", flush=True)
                 if result.stdout:
-                    print(f"[DEBUG] stdout (처음 500자): {result.stdout[:500]}", flush=True)
+                    print(f"[DEBUG] stdout (전체): {result.stdout}", flush=True)
+                else:
+                    print(f"[DEBUG] stdout: 없음", flush=True)
                 if result.stderr:
-                    print(f"[DEBUG] stderr (처음 500자): {result.stderr[:500]}", flush=True)
+                    print(f"[DEBUG] stderr (전체): {result.stderr}", flush=True)
+                else:
+                    print(f"[DEBUG] stderr: 없음", flush=True)
                 
                 # 임시 파일 삭제
                 try:
