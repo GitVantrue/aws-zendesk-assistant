@@ -306,8 +306,7 @@ def handle_aws_query(data):
                 
                 cross_accounts_config = {
                     "general": {
-                        "IncludeThisAccount": True,
-                        "Regions": scan_regions
+                        "IncludeThisAccount": True
                     }
                 }
                 
