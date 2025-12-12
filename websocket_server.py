@@ -20,7 +20,15 @@ import shutil
 # Flask 앱 및 SocketIO 설정
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'saltware-aws-assistant-secret'
-socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True, path='/zendesk/socket.io')
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    logger=True, 
+    engineio_logger=True, 
+    path='/zendesk/socket.io',
+    ping_timeout=60,  # ping 타임아웃 60초로 증가
+    ping_interval=25  # ping 간격 25초 유지
+)
 
 # 처리 중인 질문 추적
 processing_questions = set()
@@ -203,6 +211,13 @@ def handle_connect():
     print(f"[DEBUG] 클라이언트 연결됨: {request.sid}", flush=True)
     active_sessions.add(request.sid)
     print(f"[DEBUG] 활성 세션 목록: {active_sessions}", flush=True)
+    
+    # 진행 중인 작업이 있는지 확인하고 상태 복구
+    ongoing_tasks = [q for q in processing_questions if q.startswith('zendesk_user:')]
+    if ongoing_tasks:
+        print(f"[DEBUG] 진행 중인 작업 발견: {ongoing_tasks}", flush=True)
+        emit('progress', {'progress': 50, 'message': '이전 작업을 계속 진행하고 있습니다...'})
+    
     emit('connected', {'message': 'Saltware AWS Assistant에 연결되었습니다!'})
 
 @socketio.on('disconnect', namespace='/zendesk')

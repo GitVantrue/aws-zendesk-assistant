@@ -115,11 +115,12 @@ class SaltwareAWSAssistant {
             // Socket.IO 클라이언트 생성
             this.socket = io(serverUrl, {
                 path: '/zendesk/socket.io',
-                transports: ['websocket', 'polling'],
-                timeout: 10000,
+                transports: ['polling', 'websocket'],  // polling을 우선으로 (더 안정적)
+                timeout: 20000,  // 타임아웃 증가
                 reconnection: true,
-                reconnectionAttempts: 5,
-                reconnectionDelay: 2000
+                reconnectionAttempts: 10,  // 재연결 시도 증가
+                reconnectionDelay: 1000,
+                forceNew: true  // 새 연결 강제
             });
             
             // WebSocket 이벤트 리스너 설정
