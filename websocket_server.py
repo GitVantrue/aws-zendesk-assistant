@@ -251,17 +251,21 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
     """비동기로 AWS 질문 처리 (기존 Slack bot 로직 포팅)"""
     temp_dir = None
     
+    def emit_to_client(event_type, data):
+        """클라이언트에게 이벤트 전송하는 통합 헬퍼 함수"""
+        socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
+    
     def emit_progress(progress, message):
         """진행률 전송 헬퍼 함수"""
-        socketio.emit('progress', {'progress': progress, 'message': message}, room=session_id, namespace='/zendesk')
+        emit_to_client('progress', {'progress': progress, 'message': message})
     
     def emit_result(data):
         """결과 전송 헬퍼 함수"""
-        socketio.emit('result', data, room=session_id, namespace='/zendesk')
+        emit_to_client('result', data)
     
     def emit_error(message):
         """에러 전송 헬퍼 함수"""
-        socketio.emit('error', {'message': message}, room=session_id, namespace='/zendesk')
+        emit_to_client('error', {'message': message})
     
     try:
         print(f"[DEBUG] 질문 처리 중: {query} (세션: {session_id})", flush=True)
@@ -282,7 +286,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
             print(f"[DEBUG] 계정 ID 발견: {account_id}", flush=True)
             
             # 진행률 20% - Cross-account 세션 생성
-            socketio.emit('progress', {'progress': 20, 'message': f'계정 {account_id} 접근 권한을 확인하고 있습니다...'}, namespace='/zendesk')
+            emit_progress(20, f'계정 {account_id} 접근 권한을 확인하고 있습니다...')
             
             # Cross-account 세션 생성
             credentials = get_crossaccount_session(account_id)
@@ -317,7 +321,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
                 
                 # 진행률 30% - 계정 검증
-                socketio.emit('progress', {'progress': 30, 'message': '계정 접근을 검증하고 있습니다...'}, namespace='/zendesk')
+                emit_progress(30, '계정 접근을 검증하고 있습니다...')
                 
                 # 계정 검증
                 verify_cmd = ['aws', 'sts', 'get-caller-identity', '--query', 'Account', '--output', 'text']
@@ -335,13 +339,13 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                     
                     if actual_account != account_id:
                         print(f"[ERROR] 계정 불일치! 요청: {account_id}, 실제: {actual_account}", flush=True)
-                        socketio.emit('error', {'message': f'계정 자격증명 오류\n요청: {account_id}\n실제: {actual_account}'}, namespace='/zendesk')
+                        emit_error(f'계정 자격증명 오류\n요청: {account_id}\n실제: {actual_account}')
                         return
                     else:
                         print(f"[DEBUG] ✅ 계정 검증 성공: {actual_account}", flush=True)
                 else:
                     print(f"[ERROR] 계정 검증 실패: {verify_result.stderr}", flush=True)
-                    socketio.emit('error', {'message': f'계정 검증 실패: {verify_result.stderr[:200]}'}, namespace='/zendesk')
+                    emit_error(f'계정 검증 실패: {verify_result.stderr[:200]}')
                     return
                 
                 account_prefix = f"🏢 계정 {account_id} 결과:\n\n"
@@ -351,18 +355,18 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 print(f"[DEBUG] 정리된 질문: {query}", flush=True)
             else:
                 print(f"[DEBUG] 계정 {account_id} 접근 실패", flush=True)
-                socketio.emit('error', {'message': f'계정 {account_id}에 접근할 수 없습니다.'}, namespace='/zendesk')
+                emit_error(f'계정 {account_id}에 접근할 수 없습니다.')
                 return
         
         # 진행률 40% - 질문 유형 분석
-        socketio.emit('progress', {'progress': 40, 'message': '질문 유형을 분석하고 있습니다...'}, namespace='/zendesk')
+        emit_progress(40, '질문 유형을 분석하고 있습니다...')
         
         # 질문 유형 분석
         question_type, context_path = analyze_question_type(query)
         print(f"[DEBUG] 질문 유형: {question_type}, 컨텍스트: {context_path}", flush=True)
         
         # 진행률 50% - AWS 분석 시작
-        socketio.emit('progress', {'progress': 50, 'message': 'AWS 분석을 시작합니다...'}, namespace='/zendesk')
+        emit_progress(50, 'AWS 분석을 시작합니다...')
         
         # Service Screener 처리
         if question_type == 'screener':
@@ -497,7 +501,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
             
         else:
             # 일반 질문 처리 - 실제 Q CLI 실행
-            socketio.emit('progress', {'progress': 70, 'message': 'AWS API를 호출하고 있습니다...'}, namespace='/zendesk')
+            emit_progress(70, 'AWS API를 호출하고 있습니다...')
             
             # 컨텍스트 파일 로드
             context_content = load_context_file(context_path) if context_path else ""
@@ -512,7 +516,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 
 위 컨텍스트의 가이드라인을 따라 한국어로 답변해주세요."""
             
-            socketio.emit('progress', {'progress': 90, 'message': 'AI가 결과를 분석하고 있습니다...'}, namespace='/zendesk')
+            emit_progress(90, 'AI가 결과를 분석하고 있습니다...')
             
             # 실제 Q CLI 실행
             print(f"[DEBUG] Q CLI 실행 시작 - 질문 유형: {question_type}", flush=True)
@@ -550,8 +554,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                     clean_response = simple_clean_output(q_result.stdout.strip())
                     print(f"[DEBUG] Q CLI 응답 성공 (길이: {len(clean_response)})", flush=True)
                     
-                    socketio.emit('progress', {'progress': 100, 'message': '분석이 완료되었습니다!'}, namespace='/zendesk')
-                    socketio.emit('result', {'summary': account_prefix + clean_response}, namespace='/zendesk')
+                    emit_progress(100, '분석이 완료되었습니다!')
+                    emit_result({'summary': account_prefix + clean_response})
                 else:
                     # Q CLI 실행 실패
                     error_msg = q_result.stderr.strip() if q_result.stderr else "Q CLI 실행 실패"
