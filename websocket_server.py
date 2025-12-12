@@ -622,6 +622,13 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 if not q_cmd:
                     raise FileNotFoundError("Q CLI를 찾을 수 없습니다")
                 
+                # Q CLI 실행 전 환경 변수 디버깅
+                print(f"[DEBUG] Q CLI 실행 환경:", flush=True)
+                print(f"[DEBUG] - 명령어: {q_cmd}", flush=True)
+                print(f"[DEBUG] - AWS_ACCESS_KEY_ID: {env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:10]}...", flush=True)
+                print(f"[DEBUG] - AWS_DEFAULT_REGION: {env_vars.get('AWS_DEFAULT_REGION', 'None')}", flush=True)
+                print(f"[DEBUG] - 질문 길이: {len(korean_prompt)}", flush=True)
+                
                 # Q CLI 실행 (실제 AWS 분석)
                 q_result = subprocess.run(
                     [q_cmd, 'chat', '--no-interactive', korean_prompt],
@@ -630,6 +637,14 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                     env=env_vars,
                     timeout=300  # 5분 타임아웃
                 )
+                
+                print(f"[DEBUG] Q CLI 실행 완료:", flush=True)
+                print(f"[DEBUG] - 반환 코드: {q_result.returncode}", flush=True)
+                print(f"[DEBUG] - stdout 길이: {len(q_result.stdout) if q_result.stdout else 0}", flush=True)
+                print(f"[DEBUG] - stderr 길이: {len(q_result.stderr) if q_result.stderr else 0}", flush=True)
+                
+                if q_result.stderr:
+                    print(f"[DEBUG] Q CLI stderr: {q_result.stderr[:500]}", flush=True)
                 
                 if q_result.returncode == 0 and q_result.stdout.strip():
                     # 성공적인 응답
@@ -641,9 +656,11 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 else:
                     # Q CLI 실행 실패
                     error_msg = q_result.stderr.strip() if q_result.stderr else "Q CLI 실행 실패"
-                    print(f"[ERROR] Q CLI 실행 실패: {error_msg}", flush=True)
+                    print(f"[ERROR] Q CLI 실행 실패:", flush=True)
+                    print(f"[ERROR] - 반환 코드: {q_result.returncode}", flush=True)
+                    print(f"[ERROR] - 에러 메시지: {error_msg}", flush=True)
                     
-                    # 폴백: AWS CLI로 기본 정보 조회
+                    # 폴백: AWS CLI로 실제 리소스 조회
                     try:
                         print(f"[DEBUG] Q CLI 실패, AWS CLI로 폴백 시도", flush=True)
                         
@@ -661,7 +678,29 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                             account = caller_info.get('Account', 'Unknown')
                             user_arn = caller_info.get('Arn', 'Unknown')
                             
-                            fallback_response = f"""✅ AWS 기본 정보 조회 완료
+                            # 질문에 따라 실제 AWS 리소스 조회
+                            resource_info = ""
+                            if any(keyword in query.lower() for keyword in ['ec2', '인스턴스', 'instance', '러닝', 'running']):
+                                # EC2 인스턴스 조회
+                                try:
+                                    ec2_result = subprocess.run(
+                                        ['aws', 'ec2', 'describe-instances', 
+                                         '--filters', 'Name=instance-state-name,Values=running',
+                                         '--query', 'Reservations[].Instances[].[InstanceId,InstanceType,State.Name,LaunchTime]',
+                                         '--output', 'table'],
+                                        capture_output=True,
+                                        text=True,
+                                        env=env_vars,
+                                        timeout=30
+                                    )
+                                    if ec2_result.returncode == 0:
+                                        resource_info = f"\n\n🖥️ 실행 중인 EC2 인스턴스:\n```\n{ec2_result.stdout}\n```"
+                                    else:
+                                        resource_info = f"\n\n⚠️ EC2 인스턴스 조회 실패: {ec2_result.stderr[:200]}"
+                                except Exception as e:
+                                    resource_info = f"\n\n⚠️ EC2 조회 중 오류: {str(e)}"
+                            
+                            fallback_response = f"""✅ AWS 리소스 조회 완료
 
 질문: {query}
 유형: {question_type}
@@ -671,9 +710,11 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 • 사용자: {user_arn}
 • 리전: {env_vars.get('AWS_DEFAULT_REGION', 'ap-northeast-2')}
 
-💡 Q CLI가 설치되면 더 자세한 분석이 가능합니다:
-• 리소스 상세 분석
-• 보안 권장사항
+{resource_info}
+
+💡 Q CLI가 정상 작동하면 더 자세한 AI 분석이 가능합니다:
+• 리소스 상세 분석 및 권장사항
+• 보안 취약점 분석
 • 비용 최적화 제안
 • CloudTrail 이벤트 분석"""
                         else:
