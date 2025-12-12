@@ -10,7 +10,6 @@ import subprocess
 import threading
 import re
 import boto3
-import sys
 from datetime import datetime, timedelta, date
 from flask import Flask, request, Response, send_from_directory
 from flask_socketio import SocketIO, emit
@@ -18,75 +17,6 @@ import requests
 import tempfile
 import shutil
 import glob
-
-# 서버 시작 시 Service Screener 의존성 설치
-def ensure_screener_dependencies():
-    """
-    Service Screener 의존성 설치 (서버 시작 시 한 번만 실행)
-    """
-    try:
-        print("[INFO] Service Screener 의존성 확인 및 설치 시작...", flush=True)
-        
-        screener_base = os.path.join(os.path.dirname(__file__), 'service-screener-v2')
-        screener_requirements = os.path.join(screener_base, 'requirements.txt')
-        
-        if not os.path.exists(screener_requirements):
-            print(f"[WARNING] Service Screener requirements.txt 없음: {screener_requirements}", flush=True)
-            return False
-        
-        # 1단계: 기본 requirements 설치
-        print("[DEBUG] 1단계: pip install -r requirements.txt 실행", flush=True)
-        result1 = subprocess.run(
-            [sys.executable, '-m', 'pip', 'install', '-q', '-r', screener_requirements],
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-        
-        if result1.returncode != 0:
-            print(f"[WARNING] requirements 설치 실패: {result1.stderr[:200]}", flush=True)
-        else:
-            print("[DEBUG] requirements 설치 완료", flush=True)
-        
-        # 2단계: 개발 모드 설치
-        print("[DEBUG] 2단계: pip install -e . 실행", flush=True)
-        result2 = subprocess.run(
-            [sys.executable, '-m', 'pip', 'install', '-q', '-e', screener_base],
-            capture_output=True,
-            text=True,
-            timeout=300,
-            cwd=screener_base
-        )
-        
-        if result2.returncode != 0:
-            print(f"[WARNING] 개발 모드 설치 실패: {result2.stderr[:200]}", flush=True)
-        else:
-            print("[DEBUG] 개발 모드 설치 완료", flush=True)
-        
-        # 3단계: xlsxwriter 직접 설치 (확실하게)
-        print("[DEBUG] 3단계: xlsxwriter 직접 설치", flush=True)
-        result3 = subprocess.run(
-            [sys.executable, '-m', 'pip', 'install', '-q', 'XlsxWriter>=3.1.0'],
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-        
-        if result3.returncode != 0:
-            print(f"[WARNING] xlsxwriter 설치 실패: {result3.stderr[:200]}", flush=True)
-        else:
-            print("[DEBUG] xlsxwriter 설치 완료", flush=True)
-        
-        print("[INFO] ✅ Service Screener 의존성 설치 완료", flush=True)
-        return True
-        
-    except Exception as e:
-        print(f"[ERROR] Service Screener 의존성 설치 중 오류: {e}", flush=True)
-        return False
-
-# 서버 시작 시 의존성 설치
-print("[INFO] 서버 시작 중...", flush=True)
-ensure_screener_dependencies()
 
 # Flask 앱 및 SocketIO 설정
 app = Flask(__name__)
@@ -353,15 +283,26 @@ def handle_aws_query(data):
             emit('progress', {'progress': 40, 'message': 'Service Screener 스캔 중...'}, namespace='/zendesk')
             
             try:
-                # Service Screener 실행 (Reference 코드 기반, 경로만 현재 환경에 맞게 수정)
+                # Reference 코드와 정확히 동일 (경로만 현재 환경에 맞게)
                 screener_base = os.path.join(os.path.dirname(__file__), 'service-screener-v2')
                 screener_path = os.path.join(screener_base, 'Screener.py')
                 
-                # 스캔 설정 JSON 생성 (Reference 코드와 동일)
+                # 1. 현재 계정 스캔 설정 (이미 assume role 완료된 자격증명 사용)
                 temp_json_path = f'/tmp/crossAccounts_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
                 
-                # 스캔할 리전 목록
-                scan_regions = ['ap-northeast-2', 'us-east-1', 'us-west-2', 'eu-west-1']
+                # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
+                default_regions = ['ap-northeast-2', 'us-east-1']
+                additional_regions = []
+                
+                # AWS 리전 패턴 매칭
+                region_pattern = r'\b(us|eu|ap|sa|ca|me|af)-(north|south|east|west|central|northeast|southeast)-\d\b'
+                found_regions = re.findall(region_pattern, query.lower())
+                if found_regions:
+                    additional_regions = [f"{r[0]}-{r[1]}-{r[2]}" for r in found_regions]
+                    additional_regions = [r for r in additional_regions if r not in default_regions]
+                
+                # 최종 리전 리스트
+                scan_regions = default_regions + additional_regions
                 
                 cross_accounts_config = {
                     "general": {
@@ -370,48 +311,41 @@ def handle_aws_query(data):
                     }
                 }
                 
-                # 임시 JSON 파일 생성
-                with open(temp_json_path, 'w', encoding='utf-8') as f:
+                with open(temp_json_path, 'w') as f:
                     json.dump(cross_accounts_config, f, indent=2)
                 
-                print(f"[DEBUG] 스캔 설정 파일 생성: {temp_json_path}", flush=True)
                 print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
+                print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+                print(f"[DEBUG] 환경 변수 확인: AWS_ACCESS_KEY_ID={credentials.get('AWS_ACCESS_KEY_ID', 'N/A')[:20]}...", flush=True)
+                print(f"[DEBUG] 환경 변수 확인: AWS_SESSION_TOKEN 존재={bool(credentials.get('AWS_SESSION_TOKEN'))}", flush=True)
                 
-                # Service Screener 실행 (Screener.py + --crossAccounts 사용)
+                # EC2 메타데이터 서비스 비활성화
+                env_vars = credentials.copy()
+                env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
+                print(f"[DEBUG] EC2 메타데이터 비활성화 설정", flush=True)
+                
+                # 2. Service Screener 실행
                 cmd = [
                     'python3',
                     screener_path,
                     '--crossAccounts', temp_json_path
                 ]
                 
-                env = os.environ.copy()
-                env.update(credentials)
-                # EC2 메타데이터 서비스 비활성화 (환경 변수 자격증명 우선 사용)
-                env['AWS_EC2_METADATA_DISABLED'] = 'true'
-                
-                print(f"[DEBUG] Service Screener 실행 명령어: {' '.join(cmd)}", flush=True)
+                print(f"[DEBUG] 실행 명령어: {' '.join(cmd)}", flush=True)
                 print(f"[DEBUG] 작업 디렉터리: {screener_base}", flush=True)
-                print(f"[DEBUG] Screener.py 존재 여부: {os.path.exists(screener_path)}", flush=True)
-                print(f"[DEBUG] screener_base 존재 여부: {os.path.exists(screener_base)}", flush=True)
                 
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
-                    env=env,
-                    timeout=600,  # 10분 타임아웃
+                    env=env_vars,
+                    timeout=600,
                     cwd=screener_base
                 )
                 
-                print(f"[DEBUG] Service Screener 실행 완료 (returncode: {result.returncode})", flush=True)
-                if result.stdout:
-                    print(f"[DEBUG] stdout (전체): {result.stdout}", flush=True)
-                else:
-                    print(f"[DEBUG] stdout: 없음", flush=True)
-                if result.stderr:
-                    print(f"[DEBUG] stderr (전체): {result.stderr}", flush=True)
-                else:
-                    print(f"[DEBUG] stderr: 없음", flush=True)
+                print(f"[DEBUG] Service Screener 완료. 반환코드: {result.returncode}", flush=True)
+                print(f"[DEBUG] stdout (처음 1000자): {result.stdout[:1000]}", flush=True)
+                print(f"[DEBUG] stderr (처음 1000자): {result.stderr[:1000]}", flush=True)
                 
                 # 임시 파일 삭제
                 try:
@@ -419,20 +353,12 @@ def handle_aws_query(data):
                 except:
                     pass
                 
-                emit('progress', {'progress': 80, 'message': '결과 정리 중...'}, namespace='/zendesk')
-                
+                # 3. 결과 처리
                 if result.returncode == 0:
-                    print(f"[DEBUG] ✅ Service Screener 스캔 완료", flush=True)
-                    
-                    # 결과 디렉터리 확인 (adminlte/aws/{account_id}/)
+                    # Service Screener는 adminlte/aws/{account_id}/ 디렉터리에 결과 생성
                     account_result_dir = os.path.join(screener_base, 'adminlte', 'aws', account_id)
                     
-                    # 디버그: adminlte/aws 디렉터리 내용 확인
-                    aws_dir = os.path.join(screener_base, 'adminlte', 'aws')
-                    if os.path.exists(aws_dir):
-                        print(f"[DEBUG] adminlte/aws 디렉터리 내용: {os.listdir(aws_dir)}", flush=True)
-                    else:
-                        print(f"[DEBUG] adminlte/aws 디렉터리 없음", flush=True)
+                    print(f"[DEBUG] 계정 결과 디렉터리 확인: {account_result_dir}", flush=True)
                     
                     if os.path.exists(account_result_dir):
                         print(f"[DEBUG] 계정 디렉터리 발견: {account_result_dir}", flush=True)
