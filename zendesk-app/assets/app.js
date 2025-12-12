@@ -133,6 +133,25 @@ class SaltwareAWSAssistant {
             // WebSocket 이벤트 리스너 설정
             this.setupWebSocketListeners();
             
+            // 연결 상태 주기적 체크 (5초마다)
+            setInterval(() => {
+                if (this.socket) {
+                    console.log('🔍 연결 상태 체크:', {
+                        connected: this.socket.connected,
+                        progress: this.currentProgress + '%',
+                        timestamp: new Date().toLocaleTimeString()
+                    });
+                    
+                    // 연결이 끊어졌는데 진행률이 100%가 아니면 알림
+                    if (!this.socket.connected && this.currentProgress < 100 && this.currentProgress > 0) {
+                        console.log('🚨 진행 중 연결 끊어짐 감지!');
+                        if (window.Notification && Notification.permission === 'granted') {
+                            new Notification('연결 문제', { body: '진행률 ' + this.currentProgress + '%에서 연결이 끊어진 상태입니다' });
+                        }
+                    }
+                }
+            }, 5000);
+            
         } catch (error) {
             console.error('❌ WebSocket 초기화 실패:', error);
             this.updateConnectionStatus(false, 'WebSocket 연결 실패');
@@ -155,6 +174,13 @@ class SaltwareAWSAssistant {
         // 연결 해제
         this.socket.on('disconnect', (reason) => {
             console.log('❌ WebSocket 연결 해제:', reason);
+            console.log('🚨 연결 해제 시점 - 현재 진행률:', this.currentProgress + '%');
+            
+            // 브라우저 알림으로 연결 해제 알림
+            if (window.Notification && Notification.permission === 'granted') {
+                new Notification('연결 해제', { body: '진행률 ' + this.currentProgress + '%에서 연결이 끊어졌습니다' });
+            }
+            
             this.isConnected = false;
             this.updateConnectionStatus(false, '연결 해제됨');
             this.disableInput();
@@ -163,6 +189,13 @@ class SaltwareAWSAssistant {
         // 연결 오류
         this.socket.on('connect_error', (error) => {
             console.error('❌ WebSocket 연결 오류:', error);
+            console.log('🚨 연결 오류 시점 - 현재 진행률:', this.currentProgress + '%');
+            
+            // 브라우저 알림으로 연결 오류 알림
+            if (window.Notification && Notification.permission === 'granted') {
+                new Notification('연결 오류', { body: '진행률 ' + this.currentProgress + '%에서 오류 발생' });
+            }
+            
             this.updateConnectionStatus(false, '연결 오류');
         });
         
