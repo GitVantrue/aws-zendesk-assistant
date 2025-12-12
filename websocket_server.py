@@ -323,11 +323,11 @@ def handle_aws_query(data):
                 env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
                 print(f"[DEBUG] EC2 메타데이터 비활성화 설정", flush=True)
                 
-                # 2. Service Screener 실행
+                # 2. Service Screener 실행 (단일 계정: --regions 사용)
                 cmd = [
                     'python3',
                     screener_path,
-                    '--crossAccounts', temp_json_path
+                    '--regions', 'ap-northeast-2,us-east-1'
                 ]
                 
                 print(f"[DEBUG] 실행 명령어: {' '.join(cmd)}", flush=True)
