@@ -550,12 +550,26 @@ def generate_html_report(json_file_path):
         with open(json_file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        # HTML 템플릿 경로
-        template_path = 'reference_templates/json_report_template.html'
+        # HTML 템플릿 경로 (여러 경로 시도)
+        template_paths = [
+            'reference_templates/json_report_template.html',
+            '/tmp/reports/json_report_template.html',
+            'json_report_template.html'
+        ]
         
-        # 템플릿 로드
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template = f.read()
+        template = None
+        for template_path in template_paths:
+            try:
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template = f.read()
+                print(f"[DEBUG] 템플릿 로드 성공: {template_path}", flush=True)
+                break
+            except FileNotFoundError:
+                continue
+        
+        # 템플릿이 없으면 기본 HTML 생성 함수 사용
+        if not template:
+            print(f"[DEBUG] 템플릿 파일 없음, 기본 HTML 생성 사용", flush=True)
         
         # 메타데이터 추출
         metadata = data.get('metadata', {})
@@ -1638,6 +1652,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                     import traceback
                     traceback.print_exc()
                     emit_error(f'보고서 생성 중 오류가 발생했습니다: {str(e)}')
+                    return  # 오류 발생 시 함수 종료
                 
             else:
                 # 일반 질문 처리 - 실제 Q CLI 실행
