@@ -11,7 +11,7 @@ import threading
 import re
 import boto3
 from datetime import datetime, timedelta, date
-from flask import Flask
+from flask import Flask, request
 from flask_socketio import SocketIO, emit
 import requests
 import tempfile
@@ -52,6 +52,27 @@ current_progress = {}
 
 # /tmp/reports 디렉터리 생성
 os.makedirs('/tmp/reports', exist_ok=True)
+
+# WebSocket 이벤트 핸들러
+@socketio.on('connect', namespace='/zendesk')
+def handle_connect():
+    """클라이언트 연결 처리"""
+    print(f"[DEBUG] 클라이언트 연결됨: {request.sid}", flush=True)
+    active_sessions.add(request.sid)
+    emit('response', {'data': '연결되었습니다'})
+
+@socketio.on('disconnect', namespace='/zendesk')
+def handle_disconnect():
+    """클라이언트 연결 해제 처리"""
+    print(f"[DEBUG] 클라이언트 연결 해제: {request.sid}", flush=True)
+    active_sessions.discard(request.sid)
+    current_progress.pop(request.sid, None)
+
+@socketio.on('message', namespace='/zendesk')
+def handle_message(data):
+    """메시지 수신 처리"""
+    print(f"[DEBUG] 메시지 수신: {data}", flush=True)
+    emit('response', {'data': '메시지를 받았습니다'})
 
 def convert_datetime_to_json_serializable(obj):
     """
