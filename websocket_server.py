@@ -351,6 +351,13 @@ def handle_aws_query(data):
                     # 결과 디렉터리 확인 (adminlte/aws/{account_id}/)
                     account_result_dir = os.path.join(screener_base, 'adminlte', 'aws', account_id)
                     
+                    # 디버그: adminlte/aws 디렉터리 내용 확인
+                    aws_dir = os.path.join(screener_base, 'adminlte', 'aws')
+                    if os.path.exists(aws_dir):
+                        print(f"[DEBUG] adminlte/aws 디렉터리 내용: {os.listdir(aws_dir)}", flush=True)
+                    else:
+                        print(f"[DEBUG] adminlte/aws 디렉터리 없음", flush=True)
+                    
                     if os.path.exists(account_result_dir):
                         print(f"[DEBUG] 계정 디렉터리 발견: {account_result_dir}", flush=True)
                         
