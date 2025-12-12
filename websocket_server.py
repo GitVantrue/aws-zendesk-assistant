@@ -1868,18 +1868,18 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                         
                         emit_progress(100, '기본 분석이 완료되었습니다.')
                         emit_result({'summary': account_prefix + fallback_response})
-                    
-            except subprocess.TimeoutExpired:
-                print(f"[ERROR] Q CLI 타임아웃 (5분)", flush=True)
-                timeout_response = f"""⏰ 분석 시간이 초과되었습니다.
+                
+                except subprocess.TimeoutExpired:
+                    print(f"[ERROR] Q CLI 타임아웃 (5분)", flush=True)
+                    timeout_response = f"""⏰ 분석 시간이 초과되었습니다.
 
 질문: {query}
 
 복잡한 분석의 경우 시간이 오래 걸릴 수 있습니다. 
 더 구체적인 질문으로 다시 시도해보세요."""
-                
-                emit_progress(100, '시간 초과로 분석을 중단했습니다.')
-                emit_result({'summary': account_prefix + timeout_response})
+                    
+                    emit_progress(100, '시간 초과로 분석을 중단했습니다.')
+                    emit_result({'summary': account_prefix + timeout_response})
                 
                 except Exception as e:
                     print(f"[ERROR] Q CLI 실행 중 예외: {str(e)}", flush=True)
