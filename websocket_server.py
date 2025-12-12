@@ -16,6 +16,7 @@ from flask_socketio import SocketIO, emit
 import requests
 import tempfile
 import shutil
+import glob
 
 # Flask 앱 및 SocketIO 설정
 app = Flask(__name__)
@@ -53,6 +54,39 @@ current_progress = {}
 # /tmp/reports 디렉터리 생성
 os.makedirs('/tmp/reports', exist_ok=True)
 
+def cleanup_old_reports(days=2):
+    """
+    2일 이상 된 보고서 파일 자동 삭제 (파일 로테이션)
+    
+    Args:
+        days (int): 유지할 일수 (기본값: 2일)
+    """
+    try:
+        reports_dir = '/tmp/reports'
+        if not os.path.exists(reports_dir):
+            return
+        
+        now = datetime.now()
+        cutoff_time = now - timedelta(days=days)
+        
+        deleted_count = 0
+        for report_file in glob.glob(os.path.join(reports_dir, '*.html')):
+            file_mtime = datetime.fromtimestamp(os.path.getmtime(report_file))
+            
+            if file_mtime < cutoff_time:
+                try:
+                    os.remove(report_file)
+                    deleted_count += 1
+                    print(f"[DEBUG] 오래된 보고서 삭제: {os.path.basename(report_file)}", flush=True)
+                except Exception as e:
+                    print(f"[ERROR] 보고서 삭제 실패: {report_file} - {e}", flush=True)
+        
+        if deleted_count > 0:
+            print(f"[DEBUG] ✅ 파일 로테이션 완료: {deleted_count}개 파일 삭제", flush=True)
+    
+    except Exception as e:
+        print(f"[ERROR] 파일 로테이션 중 오류: {e}", flush=True)
+
 # WebSocket 이벤트 핸들러
 @socketio.on('connect', namespace='/zendesk')
 def handle_connect():
@@ -78,6 +112,9 @@ def handle_message(data):
 def handle_aws_query(data):
     """AWS 쿼리 처리"""
     print(f"[DEBUG] AWS 쿼리 수신: {data}", flush=True)
+    
+    # 파일 로테이션 실행 (2일 이상 된 파일 삭제)
+    cleanup_old_reports(days=2)
     
     try:
         query = data.get('query', '')
@@ -623,7 +660,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
     }
     
     # 1. EC2 인스턴스 수집 (Raw 데이터 저장)
-    print(f"[DEBUG] 📦 EC2 인스턴스 수집 중...", flush=True)
     try:
         ec2_response = ec2.describe_instances()
         
@@ -652,7 +688,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['resources']['ec2'] = {"summary": {"total": 0, "running": 0, "stopped": 0}, "instances": []}
     
     # 2. S3 버킷 수집 (Raw 데이터 + 추가 정보)
-    print(f"[DEBUG] 📦 S3 버킷 수집 중...", flush=True)
     try:
         s3_response = s3.list_buckets()
         buckets_raw = []
@@ -689,7 +724,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
                 
                 buckets_raw.append(bucket_data)
             except Exception as e:
-                print(f"[DEBUG] 버킷 {bucket_name} 상세 정보 수집 실패: {e}", flush=True)
                 buckets_raw.append(bucket_data)  # 기본 정보라도 저장
         
         # 요약 정보 계산
@@ -710,7 +744,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['resources']['s3'] = {"summary": {"total": 0, "encrypted": 0, "public": 0}, "buckets": []}
     
     # 3. Lambda 함수 수집 (Raw 데이터 저장)
-    print(f"[DEBUG] 📦 Lambda 함수 수집 중...", flush=True)
     try:
         lambda_client = session.client('lambda', region_name=region)
         lambda_response = lambda_client.list_functions()
@@ -728,7 +761,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['resources']['lambda'] = {"summary": {"total": 0}, "functions": []}
     
     # 4. RDS 인스턴스 수집 (Raw 데이터 저장 - Multi-AZ, 엔진, 백업 등 모든 정보 포함)
-    print(f"[DEBUG] 📦 RDS 인스턴스 수집 중...", flush=True)
     try:
         rds_client = session.client('rds', region_name=region)
         rds_response = rds_client.describe_db_instances()
@@ -746,7 +778,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['resources']['rds'] = {"summary": {"total": 0}, "instances": []}
     
     # 5. IAM 사용자 수집
-    print(f"[DEBUG] 📦 IAM 사용자 수집 중...", flush=True)
     try:
         iam_response = iam.list_users()
         users = []
@@ -793,7 +824,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['iam_security'] = {"users": {"total": 0, "mfa_enabled": 0, "details": []}, "issues": []}
     
     # 6. 보안 그룹 수집
-    print(f"[DEBUG] 📦 보안 그룹 수집 중...", flush=True)
     try:
         sg_response = ec2.describe_security_groups()
         risky_sgs = []
@@ -833,7 +863,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['security_groups'] = {"total": 0, "risky": 0, "details": []}
     
     # 7. 암호화 상태 수집
-    print(f"[DEBUG] 📦 암호화 상태 수집 중...", flush=True)
     try:
         volumes_response = ec2.describe_volumes()
         volumes = volumes_response['Volumes']
@@ -873,12 +902,10 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['encryption'] = {"ebs": {"total": 0, "encrypted": 0, "unencrypted_volumes": []}, "s3": {"total": 0, "encrypted": 0, "encrypted_rate": 0.0}, "rds": {"total": 0, "encrypted": 0, "encrypted_rate": 0.0}}
     
     # 8. Trusted Advisor 수집 (가장 중요!)
-    print(f"[DEBUG] 🔍 Trusted Advisor 수집 중... (이게 핵심!)", flush=True)
     try:
         # TA 체크 목록 가져오기
         ta_checks_response = support.describe_trusted_advisor_checks(language='en')
         checks = ta_checks_response['checks']
-        print(f"[DEBUG] TA 전체 체크 개수: {len(checks)}개", flush=True)
         
         ta_results = []
         for check in checks:
@@ -912,9 +939,8 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
                         "flagged_resources": flagged_resources,
                         "details": []  # 상세 정보는 생략 (개수만 표시)
                     })
-                    print(f"[DEBUG] TA 이슈 발견: [{category_kr}] {check_name} - {flagged_resources}개", flush=True)
             except Exception as e:
-                print(f"[DEBUG] TA 체크 {check_name} 결과 수집 실패: {e}", flush=True)
+                pass
         
         report_data['trusted_advisor'] = {
             "available": True,
@@ -923,12 +949,9 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         print(f"[DEBUG] ✅ Trusted Advisor 수집 완료: {len(ta_results)}개 이슈 발견!", flush=True)
     except Exception as e:
         print(f"[ERROR] ❌ Trusted Advisor 수집 실패: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
         report_data['trusted_advisor'] = {"available": False, "checks": []}
     
     # 9. CloudTrail 이벤트 수집 (정확한 기간, UTC+9)
-    print(f"[DEBUG] 📦 CloudTrail 이벤트 수집 중 ({start_date_str} ~ {end_date_str})...", flush=True)
     try:
         from datetime import datetime as dt, timezone
         
@@ -942,8 +965,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         # 종료일 23:59:59 KST → UTC 변환
         end_time_kst = dt.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=kst)
         end_time_utc = end_time_kst.astimezone(timezone.utc)
-        
-        print(f"[DEBUG] CloudTrail 조회 기간 (UTC): {start_time_utc} ~ {end_time_utc}", flush=True)
         
         # 보안 관점에서 중요한 이벤트 목록 (우선순위 순)
         critical_events = {
@@ -967,8 +988,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         total_collected = 0
         
         for event_name, event_info in critical_events.items():
-            print(f"[DEBUG] 🔍 {event_name} 이벤트 조회 중...", flush=True)
-            
             try:
                 # 해당 이벤트만 조회 (최대 50개)
                 events_response = cloudtrail.lookup_events(
@@ -991,7 +1010,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
                         'events': events  # Raw 이벤트 데이터
                     }
                     total_collected += len(events)
-                    print(f"[DEBUG] ✅ {event_name}: {len(events)}개 발견", flush=True)
                 else:
                     # 이벤트가 없어도 기록 (0건)
                     critical_events_data[event_name] = {
@@ -1003,7 +1021,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
                     }
                     
             except Exception as e:
-                print(f"[DEBUG] ⚠️ {event_name} 조회 실패: {e}", flush=True)
                 critical_events_data[event_name] = {
                     'severity': event_info['severity'],
                     'category': event_info['category'],
@@ -1026,12 +1043,9 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         print(f"[DEBUG] ✅ CloudTrail 중요 이벤트 수집 완료: {total_collected}개 ({period_days}일간)", flush=True)
     except Exception as e:
         print(f"[ERROR] ❌ CloudTrail 수집 실패: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
         report_data['cloudtrail_events'] = {"summary": {"period_days": 30, "total_critical_events": 0, "monitored_event_types": 0}, "critical_events": {}}
     
     # 10. CloudWatch 알람 수집 (Raw 데이터 저장)
-    print(f"[DEBUG] 📦 CloudWatch 알람 수집 중...", flush=True)
     try:
         alarms_response = cloudwatch.describe_alarms()
         alarms_raw = alarms_response['MetricAlarms']
@@ -1057,7 +1071,6 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         report_data['cloudwatch'] = {"summary": {"total": 0, "in_alarm": 0, "ok": 0, "insufficient_data": 0}, "alarms": []}
     
     # 11. 권장사항 생성
-    print(f"[DEBUG] 📝 권장사항 생성 중...", flush=True)
     recommendations = []
     
     # MFA 권장사항
@@ -1109,14 +1122,11 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
         })
     
     report_data['recommendations'] = recommendations
-    print(f"[DEBUG] ✅ 권장사항 생성 완료: {len(recommendations)}개", flush=True)
     
     print(f"[DEBUG] 🎉 boto3 데이터 수집 완료! 정확한 데이터를 수집했습니다.", flush=True)
     
     # datetime 객체를 JSON 직렬화 가능한 형식으로 변환
-    print(f"[DEBUG] 📝 datetime 객체 변환 중...", flush=True)
     report_data = convert_datetime_to_json_serializable(report_data)
-    print(f"[DEBUG] ✅ datetime 변환 완료", flush=True)
     
     return report_data
 
@@ -1688,8 +1698,6 @@ def generate_html_report(data):
         if not isinstance(data, dict):
             raise TypeError(f"data는 dict여야 하는데 {type(data)}입니다")
         
-        print(f"[DEBUG] HTML 보고서 생성 시작", flush=True)
-        
         # datetime 객체를 JSON 직렬화 가능한 형식으로 변환
         data = convert_datetime_to_json_serializable(data)
 
@@ -1697,8 +1705,6 @@ def generate_html_report(data):
         # 현재 스크립트 디렉토리 기준으로 템플릿 경로 설정
         script_dir = os.path.dirname(os.path.abspath(__file__))
         template_path = os.path.join(script_dir, 'templates', 'json_report_template.html')
-        
-        print(f"[DEBUG] 템플릿 경로: {template_path}", flush=True)
         
         # 템플릿 파일 로드 (필수)
         if not os.path.exists(template_path):
@@ -1708,7 +1714,6 @@ def generate_html_report(data):
         try:
             with open(template_path, 'r', encoding='utf-8') as f:
                 template = f.read()
-            print(f"[DEBUG] 템플릿 파일에서 로드 완료 (크기: {len(template)} bytes)", flush=True)
         except Exception as e:
             print(f"[ERROR] 템플릿 파일 로드 실패: {e}", flush=True)
             raise
@@ -1858,8 +1863,6 @@ def generate_html_report(data):
         
     except Exception as e:
         print(f"[ERROR] ❌ HTML 보고서 생성 실패: {str(e)}", flush=True)
-        import traceback
-        print(f"[ERROR] {traceback.format_exc()}", flush=True)
         return None
 
 # Flask 라우트: 보고서 파일 제공
@@ -1877,27 +1880,22 @@ def serve_report(filename):
     try:
         # 보안: 파일명에 경로 조작 문자 제거
         if '..' in filename or '/' in filename:
-            print(f"[ERROR] 보안 위반: 부적절한 파일명 {filename}", flush=True)
             return "파일을 찾을 수 없습니다", 404
         
         report_path = os.path.join('/tmp/reports', filename)
         
         # 파일 존재 확인
         if not os.path.exists(report_path):
-            print(f"[ERROR] 보고서 파일 없음: {report_path}", flush=True)
             return "파일을 찾을 수 없습니다", 404
         
         # 파일 읽기
         with open(report_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        print(f"[DEBUG] 보고서 파일 제공: {report_path} (크기: {len(content)} bytes)", flush=True)
-        
         # HTML 파일로 반환
         return Response(content, mimetype='text/html; charset=utf-8')
     
     except Exception as e:
-        print(f"[ERROR] 보고서 파일 제공 중 오류: {e}", flush=True)
         return "파일을 읽을 수 없습니다", 500
 
 if __name__ == '__main__':
