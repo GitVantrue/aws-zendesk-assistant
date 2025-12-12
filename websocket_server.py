@@ -193,20 +193,20 @@ def simple_clean_output(text):
     
     return text
 
-@socketio.on('connect')
+@socketio.on('connect', namespace='/zendesk')
 def handle_connect():
     """클라이언트 연결 시"""
     from flask import request
     print(f"[DEBUG] 클라이언트 연결됨: {request.sid}", flush=True)
     emit('connected', {'message': 'Saltware AWS Assistant에 연결되었습니다!'})
 
-@socketio.on('disconnect')
+@socketio.on('disconnect', namespace='/zendesk')
 def handle_disconnect():
     """클라이언트 연결 해제 시"""
     from flask import request
     print(f"[DEBUG] 클라이언트 연결 해제됨: {request.sid}", flush=True)
 
-@socketio.on('aws_query')
+@socketio.on('aws_query', namespace='/zendesk')
 def handle_aws_query(data):
     """AWS 질문 처리"""
     try:
@@ -231,7 +231,7 @@ def handle_aws_query(data):
         processing_questions.add(question_key)
         
         # 진행률 0% 전송
-        emit('progress', {'progress': 0, 'message': '질문을 분석하고 있습니다...'})
+        emit('progress', {'progress': 0, 'message': '질문을 분석하고 있습니다...'}, namespace='/zendesk')
         
         # 백그라운드에서 처리
         thread = threading.Thread(
@@ -243,7 +243,7 @@ def handle_aws_query(data):
         
     except Exception as e:
         print(f"[ERROR] AWS 질문 처리 중 오류: {str(e)}", flush=True)
-        emit('error', {'message': f'질문 처리 중 오류가 발생했습니다: {str(e)}'})
+        emit('error', {'message': f'질문 처리 중 오류가 발생했습니다: {str(e)}'}, namespace='/zendesk')
 
 def process_aws_question_async(query, question_key, user_id, ticket_id):
     """비동기로 AWS 질문 처리 (기존 Slack bot 로직 포팅)"""
@@ -253,7 +253,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
         print(f"[DEBUG] 질문 처리 중: {query}", flush=True)
         
         # 진행률 10% - 계정 ID 추출
-        socketio.emit('progress', {'progress': 10, 'message': '계정 정보를 확인하고 있습니다...'})
+        socketio.emit('progress', {'progress': 10, 'message': '계정 정보를 확인하고 있습니다...'}, namespace='/zendesk')
         
         # 계정 ID 추출
         account_id = extract_account_id(query)
@@ -268,7 +268,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
             print(f"[DEBUG] 계정 ID 발견: {account_id}", flush=True)
             
             # 진행률 20% - Cross-account 세션 생성
-            socketio.emit('progress', {'progress': 20, 'message': f'계정 {account_id} 접근 권한을 확인하고 있습니다...'})
+            socketio.emit('progress', {'progress': 20, 'message': f'계정 {account_id} 접근 권한을 확인하고 있습니다...'}, namespace='/zendesk')
             
             # Cross-account 세션 생성
             credentials = get_crossaccount_session(account_id)
@@ -303,7 +303,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
                 env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
                 
                 # 진행률 30% - 계정 검증
-                socketio.emit('progress', {'progress': 30, 'message': '계정 접근을 검증하고 있습니다...'})
+                socketio.emit('progress', {'progress': 30, 'message': '계정 접근을 검증하고 있습니다...'}, namespace='/zendesk')
                 
                 # 계정 검증
                 verify_cmd = ['aws', 'sts', 'get-caller-identity', '--query', 'Account', '--output', 'text']
@@ -321,13 +321,13 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
                     
                     if actual_account != account_id:
                         print(f"[ERROR] 계정 불일치! 요청: {account_id}, 실제: {actual_account}", flush=True)
-                        socketio.emit('error', {'message': f'계정 자격증명 오류\n요청: {account_id}\n실제: {actual_account}'})
+                        socketio.emit('error', {'message': f'계정 자격증명 오류\n요청: {account_id}\n실제: {actual_account}'}, namespace='/zendesk')
                         return
                     else:
                         print(f"[DEBUG] ✅ 계정 검증 성공: {actual_account}", flush=True)
                 else:
                     print(f"[ERROR] 계정 검증 실패: {verify_result.stderr}", flush=True)
-                    socketio.emit('error', {'message': f'계정 검증 실패: {verify_result.stderr[:200]}'})
+                    socketio.emit('error', {'message': f'계정 검증 실패: {verify_result.stderr[:200]}'}, namespace='/zendesk')
                     return
                 
                 account_prefix = f"🏢 계정 {account_id} 결과:\n\n"
@@ -337,26 +337,26 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
                 print(f"[DEBUG] 정리된 질문: {query}", flush=True)
             else:
                 print(f"[DEBUG] 계정 {account_id} 접근 실패", flush=True)
-                socketio.emit('error', {'message': f'계정 {account_id}에 접근할 수 없습니다.'})
+                socketio.emit('error', {'message': f'계정 {account_id}에 접근할 수 없습니다.'}, namespace='/zendesk')
                 return
         
         # 진행률 40% - 질문 유형 분석
-        socketio.emit('progress', {'progress': 40, 'message': '질문 유형을 분석하고 있습니다...'})
+        socketio.emit('progress', {'progress': 40, 'message': '질문 유형을 분석하고 있습니다...'}, namespace='/zendesk')
         
         # 질문 유형 분석
         question_type, context_path = analyze_question_type(query)
         print(f"[DEBUG] 질문 유형: {question_type}, 컨텍스트: {context_path}", flush=True)
         
         # 진행률 50% - AWS 분석 시작
-        socketio.emit('progress', {'progress': 50, 'message': 'AWS 분석을 시작합니다...'})
+        socketio.emit('progress', {'progress': 50, 'message': 'AWS 분석을 시작합니다...'}, namespace='/zendesk')
         
         # Service Screener 처리
         if question_type == 'screener':
-            socketio.emit('progress', {'progress': 60, 'message': f'계정 {account_id} Service Screener 스캔을 시작합니다...'})
+            socketio.emit('progress', {'progress': 60, 'message': f'계정 {account_id} Service Screener 스캔을 시작합니다...'}, namespace='/zendesk')
             
             # Service Screener 실행 (간소화된 버전)
             # 실제 환경에서는 기존 코드의 run_service_screener 함수 사용
-            socketio.emit('progress', {'progress': 80, 'message': '스캔 결과를 분석하고 있습니다...'})
+            socketio.emit('progress', {'progress': 80, 'message': '스캔 결과를 분석하고 있습니다...'}, namespace='/zendesk')
             
             # Mock 결과 (실제로는 Service Screener 결과 파싱)
             summary = f"""📊 Service Screener 스캔 결과 요약
@@ -374,7 +374,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
 • IAM 사용자 중 MFA 미설정 계정 존재
 • S3 버킷 중 퍼블릭 읽기 권한 설정된 버킷 발견"""
             
-            socketio.emit('progress', {'progress': 100, 'message': '스캔이 완료되었습니다!'})
+            socketio.emit('progress', {'progress': 100, 'message': '스캔이 완료되었습니다!'}, namespace='/zendesk')
             socketio.emit('result', {
                 'summary': summary,
                 'reports': [
@@ -383,11 +383,11 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
                         'url': f'http://localhost:5000/reports/screener_{account_id}_mock.html'
                     }
                 ]
-            })
+            }, namespace='/zendesk')
             
         else:
             # 일반 질문 처리
-            socketio.emit('progress', {'progress': 70, 'message': 'AWS API를 호출하고 있습니다...'})
+            socketio.emit('progress', {'progress': 70, 'message': 'AWS API를 호출하고 있습니다...'}, namespace='/zendesk')
             
             # 컨텍스트 파일 로드
             context_content = load_context_file(context_path) if context_path else ""
@@ -402,7 +402,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
 
 위 컨텍스트의 가이드라인을 따라 한국어로 답변해주세요."""
             
-            socketio.emit('progress', {'progress': 90, 'message': 'AI가 결과를 분석하고 있습니다...'})
+            socketio.emit('progress', {'progress': 90, 'message': 'AI가 결과를 분석하고 있습니다...'}, namespace='/zendesk')
             
             # Mock 응답 (실제로는 Q CLI 실행)
             mock_response = f"""✅ 질문 처리 완료!
@@ -419,14 +419,14 @@ Mock 응답입니다. 실제 환경에서는 Q CLI를 통해 AWS API를 호출�
 • Trusted Advisor 권장사항
 • 리소스 사용량 분석"""
             
-            socketio.emit('progress', {'progress': 100, 'message': '분석이 완료되었습니다!'})
-            socketio.emit('result', {'summary': account_prefix + mock_response})
+            socketio.emit('progress', {'progress': 100, 'message': '분석이 완료되었습니다!'}, namespace='/zendesk')
+            socketio.emit('result', {'summary': account_prefix + mock_response}, namespace='/zendesk')
         
     except Exception as e:
         print(f"[ERROR] AWS 질문 처리 중 오류: {str(e)}", flush=True)
         import traceback
         traceback.print_exc()
-        socketio.emit('error', {'message': f'처리 중 오류가 발생했습니다: {str(e)}'})
+        socketio.emit('error', {'message': f'처리 중 오류가 발생했습니다: {str(e)}'}, namespace='/zendesk')
     finally:
         # 정리 작업
         processing_questions.discard(question_key)
