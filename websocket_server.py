@@ -354,39 +354,135 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
         if question_type == 'screener':
             socketio.emit('progress', {'progress': 60, 'message': f'계정 {account_id} Service Screener 스캔을 시작합니다...'}, namespace='/zendesk')
             
-            # Service Screener 실행 (간소화된 버전)
-            # 실제 환경에서는 기존 코드의 run_service_screener 함수 사용
-            socketio.emit('progress', {'progress': 80, 'message': '스캔 결과를 분석하고 있습니다...'}, namespace='/zendesk')
-            
-            # Mock 결과 (실제로는 Service Screener 결과 파싱)
-            summary = f"""📊 Service Screener 스캔 결과 요약
+            try:
+                # 기존 Service Screener 결과 삭제 (새로운 스캔을 위해)
+                old_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
+                if os.path.exists(old_result_dir):
+                    print(f"[DEBUG] 기존 결과 삭제: {old_result_dir}", flush=True)
+                    shutil.rmtree(old_result_dir)
+                
+                # Service Screener 직접 실행
+                socketio.emit('progress', {'progress': 70, 'message': 'Service Screener를 실행하고 있습니다...'}, namespace='/zendesk')
+                
+                cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
+                print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
+                
+                log_file = f'/tmp/screener_{account_id}.log'
+                with open(log_file, 'w') as f:
+                    result = subprocess.run(
+                        cmd,
+                        stdout=f,
+                        stderr=subprocess.STDOUT,
+                        env=env_vars,
+                        timeout=600,  # 10분 타임아웃
+                        cwd='/root/service-screener-v2'
+                    )
+                
+                print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
+                
+                socketio.emit('progress', {'progress': 80, 'message': '스캔 결과를 분석하고 있습니다...'}, namespace='/zendesk')
+                
+                # 결과 디렉터리 확인
+                account_result_dir = os.path.join('/root/service-screener-v2/adminlte/aws', account_id)
+                
+                if os.path.exists(account_result_dir):
+                    print(f"[DEBUG] Service Screener 결과 발견: {account_result_dir}", flush=True)
+                    
+                    # 전체 디렉터리를 /tmp/reports/로 복사
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    tmp_report_dir = f"/tmp/reports/screener_{account_id}_{timestamp}"
+                    
+                    # 기존 디렉터리가 있으면 삭제
+                    if os.path.exists(tmp_report_dir):
+                        shutil.rmtree(tmp_report_dir)
+                    
+                    # 전체 디렉터리 복사
+                    shutil.copytree(account_result_dir, tmp_report_dir)
+                    print(f"[DEBUG] 보고서 디렉터리 복사 완료: {tmp_report_dir}", flush=True)
+                    
+                    # res 디렉터리 복사 (CSS/JS 등)
+                    screener_res_dir = '/root/service-screener-v2/adminlte/aws/res'
+                    tmp_res_dir = '/tmp/reports/res'
+                    
+                    if os.path.exists(screener_res_dir):
+                        if os.path.exists(tmp_res_dir):
+                            shutil.rmtree(tmp_res_dir)
+                        shutil.copytree(screener_res_dir, tmp_res_dir)
+                        print(f"[DEBUG] res 디렉터리 복사 완료: {tmp_res_dir}", flush=True)
+                    
+                    # 결과 요약 생성 (간단한 파싱)
+                    summary = f"""📊 Service Screener 스캔 결과
 
 🏢 계정: {account_id}
-📦 스캔된 리소스: 150개
-⚠️ 발견된 이슈: 23개
-🔴 Critical: 2개
-🟠 High: 5개
-🟡 Medium: 10개
-🟢 Low: 6개
+📍 스캔 리전: ap-northeast-2, us-east-1
+✅ 스캔이 성공적으로 완료되었습니다.
 
-주요 발견사항:
-• 보안 그룹에서 0.0.0.0/0 허용 규칙 발견
-• IAM 사용자 중 MFA 미설정 계정 존재
-• S3 버킷 중 퍼블릭 읽기 권한 설정된 버킷 발견"""
-            
-            socketio.emit('progress', {'progress': 100, 'message': '스캔이 완료되었습니다!'}, namespace='/zendesk')
-            socketio.emit('result', {
-                'summary': summary,
-                'reports': [
-                    {
-                        'name': 'Service Screener 상세 보고서',
-                        'url': f'http://localhost:5000/reports/screener_{account_id}_mock.html'
-                    }
-                ]
-            }, namespace='/zendesk')
+상세한 분석 결과는 아래 보고서에서 확인하실 수 있습니다."""
+                    
+                    # 보고서 URL 생성
+                    report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/screener_{account_id}_{timestamp}/index.html"
+                    
+                    socketio.emit('progress', {'progress': 100, 'message': '스캔이 완료되었습니다!'}, namespace='/zendesk')
+                    socketio.emit('result', {
+                        'summary': summary,
+                        'reports': [
+                            {
+                                'name': 'Service Screener 상세 보고서',
+                                'url': report_url
+                            }
+                        ]
+                    }, namespace='/zendesk')
+                    
+                else:
+                    print(f"[DEBUG] Service Screener 결과 디렉터리 없음: {account_result_dir}", flush=True)
+                    
+                    # 로그 파일 내용 확인
+                    try:
+                        with open(log_file, 'r') as f:
+                            log_content = f.read()
+                        print(f"[DEBUG] Service Screener 로그:\n{log_content[-1000:]}", flush=True)
+                    except Exception as e:
+                        print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
+                    
+                    error_summary = f"""⚠️ Service Screener 실행 완료
+
+🏢 계정: {account_id}
+📍 스캔 리전: ap-northeast-2, us-east-1
+
+스캔은 실행되었으나 결과 파일을 찾을 수 없습니다.
+로그를 확인하여 문제를 진단해주세요."""
+                    
+                    socketio.emit('progress', {'progress': 100, 'message': '스캔 완료 (결과 확인 필요)'}, namespace='/zendesk')
+                    socketio.emit('result', {'summary': error_summary}, namespace='/zendesk')
+                    
+            except subprocess.TimeoutExpired:
+                print(f"[ERROR] Service Screener 타임아웃", flush=True)
+                timeout_summary = f"""⏰ Service Screener 타임아웃
+
+🏢 계정: {account_id}
+스캔 시간이 10분을 초과하여 중단되었습니다.
+계정 규모가 큰 경우 더 오래 걸릴 수 있습니다."""
+                
+                socketio.emit('progress', {'progress': 100, 'message': '스캔 시간 초과'}, namespace='/zendesk')
+                socketio.emit('result', {'summary': timeout_summary}, namespace='/zendesk')
+                
+            except Exception as e:
+                print(f"[ERROR] Service Screener 실행 중 오류: {str(e)}", flush=True)
+                import traceback
+                traceback.print_exc()
+                
+                error_summary = f"""❌ Service Screener 실행 오류
+
+🏢 계정: {account_id}
+오류: {str(e)}
+
+시스템 관리자에게 문의하거나 잠시 후 다시 시도해주세요."""
+                
+                socketio.emit('progress', {'progress': 100, 'message': '스캔 실행 오류'}, namespace='/zendesk')
+                socketio.emit('result', {'summary': error_summary}, namespace='/zendesk')
             
         else:
-            # 일반 질문 처리
+            # 일반 질문 처리 - 실제 Q CLI 실행
             socketio.emit('progress', {'progress': 70, 'message': 'AWS API를 호출하고 있습니다...'}, namespace='/zendesk')
             
             # 컨텍스트 파일 로드
@@ -404,23 +500,70 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
             
             socketio.emit('progress', {'progress': 90, 'message': 'AI가 결과를 분석하고 있습니다...'}, namespace='/zendesk')
             
-            # Mock 응답 (실제로는 Q CLI 실행)
-            mock_response = f"""✅ 질문 처리 완료!
+            # 실제 Q CLI 실행
+            print(f"[DEBUG] Q CLI 실행 시작 - 질문 유형: {question_type}", flush=True)
+            
+            try:
+                # Q CLI 실행 (실제 AWS 분석)
+                q_result = subprocess.run(
+                    ['/root/.local/bin/q', 'chat', '--no-interactive', korean_prompt],
+                    capture_output=True,
+                    text=True,
+                    env=env_vars,
+                    timeout=300  # 5분 타임아웃
+                )
+                
+                if q_result.returncode == 0 and q_result.stdout.strip():
+                    # 성공적인 응답
+                    clean_response = simple_clean_output(q_result.stdout.strip())
+                    print(f"[DEBUG] Q CLI 응답 성공 (길이: {len(clean_response)})", flush=True)
+                    
+                    socketio.emit('progress', {'progress': 100, 'message': '분석이 완료되었습니다!'}, namespace='/zendesk')
+                    socketio.emit('result', {'summary': account_prefix + clean_response}, namespace='/zendesk')
+                else:
+                    # Q CLI 실행 실패
+                    error_msg = q_result.stderr.strip() if q_result.stderr else "Q CLI 실행 실패"
+                    print(f"[ERROR] Q CLI 실행 실패: {error_msg}", flush=True)
+                    
+                    # 폴백: 기본 응답
+                    fallback_response = f"""⚠️ Q CLI 실행 중 문제가 발생했습니다.
 
 질문: {query}
 유형: {question_type}
 
-Mock 응답입니다. 실제 환경에서는 Q CLI를 통해 AWS API를 호출하여 정확한 정보를 제공합니다.
+현재 AWS 환경에 접근하여 기본 정보를 확인할 수 있습니다:
+• 계정 정보 확인
+• 기본 리소스 조회
+• 보안 설정 검토
 
-주요 기능:
-• CloudTrail 이벤트 분석
-• CloudWatch 지표 모니터링  
-• 보안 그룹 및 IAM 분석
-• Trusted Advisor 권장사항
-• 리소스 사용량 분석"""
-            
-            socketio.emit('progress', {'progress': 100, 'message': '분석이 완료되었습니다!'}, namespace='/zendesk')
-            socketio.emit('result', {'summary': account_prefix + mock_response}, namespace='/zendesk')
+더 자세한 분석을 위해서는 Q CLI 설정을 확인해주세요."""
+                    
+                    socketio.emit('progress', {'progress': 100, 'message': '기본 분석이 완료되었습니다.'}, namespace='/zendesk')
+                    socketio.emit('result', {'summary': account_prefix + fallback_response}, namespace='/zendesk')
+                    
+            except subprocess.TimeoutExpired:
+                print(f"[ERROR] Q CLI 타임아웃 (5분)", flush=True)
+                timeout_response = f"""⏰ 분석 시간이 초과되었습니다.
+
+질문: {query}
+
+복잡한 분석의 경우 시간이 오래 걸릴 수 있습니다. 
+더 구체적인 질문으로 다시 시도해보세요."""
+                
+                socketio.emit('progress', {'progress': 100, 'message': '시간 초과로 분석을 중단했습니다.'}, namespace='/zendesk')
+                socketio.emit('result', {'summary': account_prefix + timeout_response}, namespace='/zendesk')
+                
+            except Exception as e:
+                print(f"[ERROR] Q CLI 실행 중 예외: {str(e)}", flush=True)
+                error_response = f"""❌ 분석 중 오류가 발생했습니다.
+
+질문: {query}
+오류: {str(e)}
+
+시스템 관리자에게 문의하거나 잠시 후 다시 시도해주세요."""
+                
+                socketio.emit('progress', {'progress': 100, 'message': '오류가 발생했습니다.'}, namespace='/zendesk')
+                socketio.emit('result', {'summary': account_prefix + error_response}, namespace='/zendesk')
         
     except Exception as e:
         print(f"[ERROR] AWS 질문 처리 중 오류: {str(e)}", flush=True)
