@@ -1157,6 +1157,62 @@ def generate_s3_security_issues_section(buckets):
     """S3 보안 이슈 섹션 생성"""
     return '<div class="no-data">S3 보안 이슈가 없습니다</div>'
 
+# Flask 라우트: 보고서 파일 제공
+@app.route('/reports/<path:filename>')
+def serve_report(filename):
+    """보고서 파일 제공"""
+    try:
+        from flask import send_file, abort
+        
+        # 보안: 경로 조작 방지
+        if '..' in filename or filename.startswith('/'):
+            abort(400)
+        
+        file_path = os.path.join('/tmp/reports', filename)
+        
+        # 파일 존재 여부 확인
+        if not os.path.exists(file_path):
+            print(f"[DEBUG] 보고서 파일 없음: {file_path}", flush=True)
+            abort(404)
+        
+        # 디렉터리인 경우 index.html 제공
+        if os.path.isdir(file_path):
+            index_path = os.path.join(file_path, 'index.html')
+            if os.path.exists(index_path):
+                print(f"[DEBUG] 디렉터리 인덱스 제공: {index_path}", flush=True)
+                return send_file(index_path, mimetype='text/html')
+            else:
+                abort(404)
+        
+        # 파일 제공
+        print(f"[DEBUG] 보고서 파일 제공: {file_path}", flush=True)
+        
+        # MIME 타입 결정
+        if filename.endswith('.html'):
+            mimetype = 'text/html'
+        elif filename.endswith('.css'):
+            mimetype = 'text/css'
+        elif filename.endswith('.js'):
+            mimetype = 'application/javascript'
+        elif filename.endswith('.json'):
+            mimetype = 'application/json'
+        elif filename.endswith('.png'):
+            mimetype = 'image/png'
+        elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
+            mimetype = 'image/jpeg'
+        elif filename.endswith('.gif'):
+            mimetype = 'image/gif'
+        elif filename.endswith('.svg'):
+            mimetype = 'image/svg+xml'
+        else:
+            mimetype = 'application/octet-stream'
+        
+        return send_file(file_path, mimetype=mimetype)
+        
+    except Exception as e:
+        print(f"[ERROR] 보고서 파일 제공 중 오류: {str(e)}", flush=True)
+        abort(500)
+
 @socketio.on('connect', namespace='/zendesk')
 def handle_connect():
     """클라이언트 연결 시"""
