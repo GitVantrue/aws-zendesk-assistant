@@ -10,6 +10,7 @@ import subprocess
 import threading
 import re
 import boto3
+import sys
 from datetime import datetime, timedelta, date
 from flask import Flask, request, Response, send_from_directory
 from flask_socketio import SocketIO, emit
@@ -17,6 +18,75 @@ import requests
 import tempfile
 import shutil
 import glob
+
+# 서버 시작 시 Service Screener 의존성 설치
+def ensure_screener_dependencies():
+    """
+    Service Screener 의존성 설치 (서버 시작 시 한 번만 실행)
+    """
+    try:
+        print("[INFO] Service Screener 의존성 확인 및 설치 시작...", flush=True)
+        
+        screener_base = os.path.join(os.path.dirname(__file__), 'service-screener-v2')
+        screener_requirements = os.path.join(screener_base, 'requirements.txt')
+        
+        if not os.path.exists(screener_requirements):
+            print(f"[WARNING] Service Screener requirements.txt 없음: {screener_requirements}", flush=True)
+            return False
+        
+        # 1단계: 기본 requirements 설치
+        print("[DEBUG] 1단계: pip install -r requirements.txt 실행", flush=True)
+        result1 = subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', '-q', '-r', screener_requirements],
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        
+        if result1.returncode != 0:
+            print(f"[WARNING] requirements 설치 실패: {result1.stderr[:200]}", flush=True)
+        else:
+            print("[DEBUG] requirements 설치 완료", flush=True)
+        
+        # 2단계: 개발 모드 설치
+        print("[DEBUG] 2단계: pip install -e . 실행", flush=True)
+        result2 = subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', '-q', '-e', screener_base],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=screener_base
+        )
+        
+        if result2.returncode != 0:
+            print(f"[WARNING] 개발 모드 설치 실패: {result2.stderr[:200]}", flush=True)
+        else:
+            print("[DEBUG] 개발 모드 설치 완료", flush=True)
+        
+        # 3단계: xlsxwriter 직접 설치 (확실하게)
+        print("[DEBUG] 3단계: xlsxwriter 직접 설치", flush=True)
+        result3 = subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', '-q', 'XlsxWriter>=3.1.0'],
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        
+        if result3.returncode != 0:
+            print(f"[WARNING] xlsxwriter 설치 실패: {result3.stderr[:200]}", flush=True)
+        else:
+            print("[DEBUG] xlsxwriter 설치 완료", flush=True)
+        
+        print("[INFO] ✅ Service Screener 의존성 설치 완료", flush=True)
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] Service Screener 의존성 설치 중 오류: {e}", flush=True)
+        return False
+
+# 서버 시작 시 의존성 설치
+print("[INFO] 서버 시작 중...", flush=True)
+ensure_screener_dependencies()
 
 # Flask 앱 및 SocketIO 설정
 app = Flask(__name__)
@@ -286,47 +356,6 @@ def handle_aws_query(data):
                 # Service Screener 실행 (Reference 코드 기반, 경로만 현재 환경에 맞게 수정)
                 screener_base = os.path.join(os.path.dirname(__file__), 'service-screener-v2')
                 screener_path = os.path.join(screener_base, 'Screener.py')
-                screener_requirements = os.path.join(screener_base, 'requirements.txt')
-                
-                # Service Screener 의존성 설치 (개발 모드 + requirements)
-                print(f"[DEBUG] Service Screener 의존성 설치 시작", flush=True)
-                
-                # 1단계: 기본 requirements 설치
-                pip_install_cmd = [
-                    'pip3', 'install', '-q',
-                    '-r', screener_requirements
-                ]
-                
-                pip_result = subprocess.run(
-                    pip_install_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=300  # 5분 타임아웃
-                )
-                
-                if pip_result.returncode == 0:
-                    print(f"[DEBUG] Service Screener requirements 설치 완료", flush=True)
-                else:
-                    print(f"[WARNING] Service Screener requirements 설치 경고: {pip_result.stderr[:500]}", flush=True)
-                
-                # 2단계: 개발 모드 설치 (setup.py -e .)
-                print(f"[DEBUG] Service Screener 개발 모드 설치 시작", flush=True)
-                setup_install_cmd = [
-                    'pip3', 'install', '-q', '-e', screener_base
-                ]
-                
-                setup_result = subprocess.run(
-                    setup_install_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                    cwd=screener_base
-                )
-                
-                if setup_result.returncode == 0:
-                    print(f"[DEBUG] Service Screener 개발 모드 설치 완료", flush=True)
-                else:
-                    print(f"[WARNING] Service Screener 개발 모드 설치 경고: {setup_result.stderr[:500]}", flush=True)
                 
                 # 스캔 설정 JSON 생성 (Reference 코드와 동일)
                 temp_json_path = f'/tmp/crossAccounts_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
