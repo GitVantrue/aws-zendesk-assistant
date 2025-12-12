@@ -11,7 +11,7 @@ import threading
 import re
 import boto3
 from datetime import datetime, timedelta, date
-from flask import Flask, request
+from flask import Flask, request, Response
 from flask_socketio import SocketIO, emit
 import requests
 import tempfile
@@ -169,17 +169,30 @@ def handle_aws_query(data):
             # HTML 보고서 생성
             html_content = generate_html_report(raw_data)
             
-            # 보고서 저장
-            report_filename = f"security_report_{account_id}_{today.strftime('%Y%m%d')}.html"
+            if not html_content:
+                emit('result', {
+                    'summary': '❌ HTML 보고서 생성 실패',
+                    'reports': [],
+                    'data': {}
+                }, namespace='/zendesk')
+                return
+            
+            # 보고서 저장 (타임스탐프 포함)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            report_filename = f"security_report_{account_id}_{timestamp}.html"
             report_path = f'/tmp/reports/{report_filename}'
             
+            os.makedirs('/tmp/reports', exist_ok=True)
             with open(report_path, 'w', encoding='utf-8') as f:
                 f.write(html_content)
+            
+            print(f"[DEBUG] ✅ 보고서 파일 저장 완료: {report_path}", flush=True)
             
             emit('progress', {'progress': 90, 'message': '보고서 URL 생성 중...'}, namespace='/zendesk')
             
             # URL 변환
-            report_url = convert_local_paths_to_urls(report_path)
+            report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/{report_filename}"
+            print(f"[DEBUG] 보고서 URL: {report_url}", flush=True)
             
             emit('result', {
                 'summary': f'✅ 월간 보안 보고서 생성 완료\n\n📊 보고서: {report_url}',
@@ -1613,12 +1626,14 @@ def generate_html_report(data):
         data (dict): 보안 데이터 딕셔너리
     
     Returns:
-        str: HTML 보고서 파일 경로 또는 None
+        str: HTML 보고서 콘텐츠 또는 None
     """
     try:
         # data가 dict인지 확인
         if not isinstance(data, dict):
             raise TypeError(f"data는 dict여야 하는데 {type(data)}입니다")
+        
+        print(f"[DEBUG] HTML 보고서 생성 시작", flush=True)
         
         # datetime 객체를 JSON 직렬화 가능한 형식으로 변환
         data = convert_datetime_to_json_serializable(data)
@@ -1968,23 +1983,52 @@ def generate_html_report(data):
         # 템플릿에 변수 적용
         html_content = template.format(**template_vars)
         
-        # HTML 파일 저장
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        html_filename = f"security_report_{metadata.get('account_id', 'unknown')}_{timestamp}.html"
-        html_file_path = os.path.join('/tmp/reports', html_filename)
-        
-        os.makedirs('/tmp/reports', exist_ok=True)
-        with open(html_file_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        
-        print(f"[DEBUG] ✅ HTML 보고서 생성 완료: {html_file_path}", flush=True)
-        return html_file_path
+        print(f"[DEBUG] ✅ HTML 보고서 콘텐츠 생성 완료 (크기: {len(html_content)} bytes)", flush=True)
+        return html_content
         
     except Exception as e:
         print(f"[ERROR] ❌ HTML 보고서 생성 실패: {str(e)}", flush=True)
         import traceback
         print(f"[ERROR] {traceback.format_exc()}", flush=True)
         return None
+
+# Flask 라우트: 보고서 파일 제공
+@app.route('/reports/<filename>')
+def serve_report(filename):
+    """
+    /tmp/reports/ 디렉토리의 HTML 보고서 파일을 웹으로 제공
+    
+    Args:
+        filename (str): 보고서 파일명
+    
+    Returns:
+        HTML 파일 또는 404 에러
+    """
+    try:
+        # 보안: 파일명에 경로 조작 문자 제거
+        if '..' in filename or '/' in filename:
+            print(f"[ERROR] 보안 위반: 부적절한 파일명 {filename}", flush=True)
+            return "파일을 찾을 수 없습니다", 404
+        
+        report_path = os.path.join('/tmp/reports', filename)
+        
+        # 파일 존재 확인
+        if not os.path.exists(report_path):
+            print(f"[ERROR] 보고서 파일 없음: {report_path}", flush=True)
+            return "파일을 찾을 수 없습니다", 404
+        
+        # 파일 읽기
+        with open(report_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        print(f"[DEBUG] 보고서 파일 제공: {report_path} (크기: {len(content)} bytes)", flush=True)
+        
+        # HTML 파일로 반환
+        return Response(content, mimetype='text/html; charset=utf-8')
+    
+    except Exception as e:
+        print(f"[ERROR] 보고서 파일 제공 중 오류: {e}", flush=True)
+        return "파일을 읽을 수 없습니다", 500
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=3001, debug=False, allow_unsafe_werkzeug=True)
