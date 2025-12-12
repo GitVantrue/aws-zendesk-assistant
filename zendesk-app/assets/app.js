@@ -114,6 +114,7 @@ class SaltwareAWSAssistant {
             
             // Socket.IO 클라이언트 생성
             this.socket = io(serverUrl, {
+                path: '/zendesk/socket.io',
                 transports: ['websocket', 'polling'],
                 timeout: 10000,
                 reconnection: true,
