@@ -261,13 +261,26 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
     def emit_to_client(event_type, data):
         """클라이언트에게 이벤트 전송하는 통합 헬퍼 함수"""
         try:
-            print(f"[DEBUG] 이벤트 전송: {event_type} -> 세션 {session_id}", flush=True)
-            socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
+            print(f"[DEBUG] 이벤트 전송 시도: {event_type} -> 세션 {session_id}, 데이터: {data}", flush=True)
+            
+            # 세션이 여전히 활성 상태인지 확인
+            if session_id in active_sessions:
+                print(f"[DEBUG] 세션 {session_id} 활성 상태 확인됨", flush=True)
+                socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
+                print(f"[DEBUG] ✅ 이벤트 전송 완료: {event_type} -> 세션 {session_id}", flush=True)
+            else:
+                print(f"[WARNING] 세션 {session_id}가 활성 세션 목록에 없음. 활성 세션: {active_sessions}", flush=True)
+                # 그래도 전송 시도
+                socketio.emit(event_type, data, room=session_id, namespace='/zendesk')
+                print(f"[DEBUG] 비활성 세션에도 전송 시도 완료", flush=True)
+            
             # 이벤트 전송 후 잠시 대기 (버퍼링 방지)
             import time
             time.sleep(0.1)
         except Exception as e:
             print(f"[ERROR] 이벤트 전송 실패: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
     
     def emit_progress(progress, message):
         """진행률 전송 헬퍼 함수"""
@@ -384,7 +397,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
         
         # Service Screener 처리
         if question_type == 'screener':
-            socketio.emit('progress', {'progress': 60, 'message': f'계정 {account_id} Service Screener 스캔을 시작합니다...'}, namespace='/zendesk')
+            emit_progress(60, f'계정 {account_id} Service Screener 스캔을 시작합니다...')
             
             try:
                 # 기존 Service Screener 결과 삭제 (새로운 스캔을 위해)
@@ -394,7 +407,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                     shutil.rmtree(old_result_dir)
                 
                 # Service Screener 직접 실행
-                socketio.emit('progress', {'progress': 70, 'message': 'Service Screener를 실행하고 있습니다...'}, namespace='/zendesk')
+                emit_progress(70, 'Service Screener를 실행하고 있습니다...')
                 
                 cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
                 print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
@@ -412,7 +425,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 
                 print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
                 
-                socketio.emit('progress', {'progress': 80, 'message': '스캔 결과를 분석하고 있습니다...'}, namespace='/zendesk')
+                emit_progress(80, '스캔 결과를 분석하고 있습니다...')
                 
                 # 결과 디렉터리 확인
                 account_result_dir = os.path.join('/root/service-screener-v2/adminlte/aws', account_id)
@@ -454,8 +467,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                     # 보고서 URL 생성
                     report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/screener_{account_id}_{timestamp}/index.html"
                     
-                    socketio.emit('progress', {'progress': 100, 'message': '스캔이 완료되었습니다!'}, namespace='/zendesk')
-                    socketio.emit('result', {
+                    emit_progress(100, '스캔이 완료되었습니다!')
+                    emit_result({
                         'summary': summary,
                         'reports': [
                             {
@@ -463,7 +476,7 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                                 'url': report_url
                             }
                         ]
-                    }, namespace='/zendesk')
+                    })
                     
                 else:
                     print(f"[DEBUG] Service Screener 결과 디렉터리 없음: {account_result_dir}", flush=True)
@@ -484,8 +497,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 스캔은 실행되었으나 결과 파일을 찾을 수 없습니다.
 로그를 확인하여 문제를 진단해주세요."""
                     
-                    socketio.emit('progress', {'progress': 100, 'message': '스캔 완료 (결과 확인 필요)'}, namespace='/zendesk')
-                    socketio.emit('result', {'summary': error_summary}, namespace='/zendesk')
+                    emit_progress(100, '스캔 완료 (결과 확인 필요)')
+                    emit_result({'summary': error_summary})
                     
             except subprocess.TimeoutExpired:
                 print(f"[ERROR] Service Screener 타임아웃", flush=True)
@@ -495,8 +508,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 스캔 시간이 10분을 초과하여 중단되었습니다.
 계정 규모가 큰 경우 더 오래 걸릴 수 있습니다."""
                 
-                socketio.emit('progress', {'progress': 100, 'message': '스캔 시간 초과'}, namespace='/zendesk')
-                socketio.emit('result', {'summary': timeout_summary}, namespace='/zendesk')
+                emit_progress(100, '스캔 시간 초과')
+                emit_result({'summary': timeout_summary})
                 
             except Exception as e:
                 print(f"[ERROR] Service Screener 실행 중 오류: {str(e)}", flush=True)
@@ -510,8 +523,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 
 시스템 관리자에게 문의하거나 잠시 후 다시 시도해주세요."""
                 
-                socketio.emit('progress', {'progress': 100, 'message': '스캔 실행 오류'}, namespace='/zendesk')
-                socketio.emit('result', {'summary': error_summary}, namespace='/zendesk')
+                emit_progress(100, '스캔 실행 오류')
+                emit_result({'summary': error_summary})
             
         else:
             # 일반 질문 처리 - 실제 Q CLI 실행
@@ -638,8 +651,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 2. AWS 자격증명 설정
 3. 컨텍스트 파일 복사"""
                     
-                    socketio.emit('progress', {'progress': 100, 'message': '기본 분석이 완료되었습니다.'}, namespace='/zendesk')
-                    socketio.emit('result', {'summary': account_prefix + fallback_response}, namespace='/zendesk')
+                    emit_progress(100, '기본 분석이 완료되었습니다.')
+                    emit_result({'summary': account_prefix + fallback_response})
                     
             except subprocess.TimeoutExpired:
                 print(f"[ERROR] Q CLI 타임아웃 (5분)", flush=True)
@@ -650,8 +663,8 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 복잡한 분석의 경우 시간이 오래 걸릴 수 있습니다. 
 더 구체적인 질문으로 다시 시도해보세요."""
                 
-                socketio.emit('progress', {'progress': 100, 'message': '시간 초과로 분석을 중단했습니다.'}, namespace='/zendesk')
-                socketio.emit('result', {'summary': account_prefix + timeout_response}, namespace='/zendesk')
+                emit_progress(100, '시간 초과로 분석을 중단했습니다.')
+                emit_result({'summary': account_prefix + timeout_response})
                 
             except Exception as e:
                 print(f"[ERROR] Q CLI 실행 중 예외: {str(e)}", flush=True)
@@ -662,14 +675,14 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
 
 시스템 관리자에게 문의하거나 잠시 후 다시 시도해주세요."""
                 
-                socketio.emit('progress', {'progress': 100, 'message': '오류가 발생했습니다.'}, namespace='/zendesk')
-                socketio.emit('result', {'summary': account_prefix + error_response}, namespace='/zendesk')
+                emit_progress(100, '오류가 발생했습니다.')
+                emit_result({'summary': account_prefix + error_response})
         
     except Exception as e:
         print(f"[ERROR] AWS 질문 처리 중 오류: {str(e)}", flush=True)
         import traceback
         traceback.print_exc()
-        socketio.emit('error', {'message': f'처리 중 오류가 발생했습니다: {str(e)}'}, namespace='/zendesk')
+        emit_error(f'처리 중 오류가 발생했습니다: {str(e)}')
     finally:
         # 정리 작업
         processing_questions.discard(question_key)

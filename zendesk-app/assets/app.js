@@ -160,10 +160,17 @@ class SaltwareAWSAssistant {
         
         // 진행률 업데이트
         this.socket.on('progress', (data) => {
-            console.log('📊 진행률 업데이트:', data);
+            console.log('📊 진행률 업데이트 수신:', data);
             console.log('📊 현재 연결 상태:', this.socket.connected);
-            console.log('📊 현재 진행률 요소:', this.elements.progressContainer);
-            this.updateProgress(data.progress, data.message);
+            console.log('📊 현재 진행률 요소 존재:', !!this.elements.progressContainer);
+            console.log('📊 현재 진행률 요소 표시 상태:', this.elements.progressContainer?.style.display);
+            
+            try {
+                this.updateProgress(data.progress, data.message);
+                console.log('📊 ✅ 진행률 업데이트 완료:', data.progress + '%');
+            } catch (error) {
+                console.error('📊 ❌ 진행률 업데이트 실패:', error);
+            }
         });
         
         // 최종 결과
@@ -351,13 +358,32 @@ class SaltwareAWSAssistant {
      * 진행률 업데이트
      */
     updateProgress(progress, message) {
-        this.currentProgress = Math.max(0, Math.min(100, progress));
-        this.elements.progressFill.style.width = this.currentProgress + '%';
-        this.elements.progressPercentage.textContent = Math.round(this.currentProgress) + '%';
+        console.log('🔄 updateProgress 호출됨:', { progress, message, currentProgress: this.currentProgress });
         
-        if (message) {
-            this.elements.progressMessage.textContent = message;
+        this.currentProgress = Math.max(0, Math.min(100, progress));
+        
+        if (this.elements.progressFill) {
+            this.elements.progressFill.style.width = this.currentProgress + '%';
+            console.log('🔄 진행률 바 업데이트:', this.currentProgress + '%');
+        } else {
+            console.error('🔄 ❌ progressFill 요소를 찾을 수 없음');
         }
+        
+        if (this.elements.progressPercentage) {
+            this.elements.progressPercentage.textContent = Math.round(this.currentProgress) + '%';
+            console.log('🔄 진행률 텍스트 업데이트:', Math.round(this.currentProgress) + '%');
+        } else {
+            console.error('🔄 ❌ progressPercentage 요소를 찾을 수 없음');
+        }
+        
+        if (message && this.elements.progressMessage) {
+            this.elements.progressMessage.textContent = message;
+            console.log('🔄 진행률 메시지 업데이트:', message);
+        } else if (message) {
+            console.error('🔄 ❌ progressMessage 요소를 찾을 수 없음');
+        }
+        
+        console.log('🔄 ✅ updateProgress 완료');
     }
     
     /**
