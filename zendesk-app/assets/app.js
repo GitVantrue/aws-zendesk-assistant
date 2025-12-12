@@ -99,7 +99,7 @@ class SaltwareAWSAssistant {
     async initWebSocket() {
         try {
             // WebSocket 서버 URL 가져오기 (Zendesk 설정 또는 기본값)
-            let serverUrl = 'http://localhost:3001';
+            let serverUrl = 'http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/zendesk';
             
             if (this.client) {
                 try {

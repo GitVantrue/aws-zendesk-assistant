@@ -20,7 +20,7 @@ import shutil
 # Flask 앱 및 SocketIO 설정
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'saltware-aws-assistant-secret'
-socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True)
+socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True, path='/zendesk/socket.io')
 
 # 처리 중인 질문 추적
 processing_questions = set()
@@ -441,6 +441,11 @@ Mock 응답입니다. 실제 환경에서는 Q CLI를 통해 AWS API를 호출�
 def health_check():
     """헬스 체크 엔드포인트"""
     return {'status': 'healthy', 'service': 'Saltware AWS Assistant WebSocket Server'}
+
+@app.route('/zendesk/health')
+def zendesk_health_check():
+    """Zendesk WebSocket 헬스 체크 엔드포인트"""
+    return {'status': 'healthy', 'service': 'Zendesk WebSocket Server'}
 
 if __name__ == '__main__':
     print("🚀 Saltware AWS Assistant WebSocket Server 시작")
