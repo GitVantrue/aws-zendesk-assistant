@@ -151,7 +151,7 @@ def analyze_question_type(question):
     # 우선순위 2: 보고서 생성 관련 (가장 구체적)
     report_keywords = ['보고서', 'report', '리포트', '감사보고서', '보안보고서']
     if any(keyword in question_lower for keyword in report_keywords):
-        return 'report', '/root/core_contexts/security_report.md'
+        return 'report', 'reference_contexts/security_report.md'
 
     # 우선순위 3: CloudTrail/감사 관련 (활동 추적)
     cloudtrail_keywords = ['cloudtrail', '추적', '누가', '언제', '활동', '이벤트', '로그인', '이력', '히스토리', 'history']
@@ -159,16 +159,16 @@ def analyze_question_type(question):
                           '수정사항', '변경사항', '삭제사항', '생성사항', '바꿨', '지웠', '만들었']
     if (any(keyword in question_lower for keyword in cloudtrail_keywords) or
         any(phrase in question_lower for phrase in cloudtrail_phrases)):
-        return 'cloudtrail', '/root/core_contexts/cloudtrail_mcp.md'
+        return 'cloudtrail', 'reference_contexts/cloudtrail_mcp.md'
 
     # 우선순위 4: CloudWatch/모니터링 관련
     cloudwatch_keywords = ['cloudwatch', '모니터링', '알람', '메트릭', 'dashboard', '성능', '로그 그룹', '지표', 'metric', 'cpu', '메모리', '디스크']
     if any(keyword in question_lower for keyword in cloudwatch_keywords):
-        return 'cloudwatch', '/root/core_contexts/cloudwatch_mcp.md'
+        return 'cloudwatch', 'reference_contexts/cloudwatch_mcp.md'
 
     # 우선순위 5: 일반 AWS 질문
     print(f"[DEBUG] 질문 타입: general", flush=True)
-    return 'general', '/root/core_contexts/general_aws.md'
+    return 'general', 'reference_contexts/general_aws.md'
 
 def load_context_file(context_path):
     """컨텍스트 파일 로드"""
@@ -504,9 +504,27 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
             print(f"[DEBUG] Q CLI 실행 시작 - 질문 유형: {question_type}", flush=True)
             
             try:
+                # Q CLI 경로 확인 (여러 경로 시도)
+                q_paths = [
+                    '/root/.local/bin/q',
+                    '/home/ec2-user/.local/bin/q', 
+                    '/usr/local/bin/q',
+                    'q'  # PATH에서 찾기
+                ]
+                
+                q_cmd = None
+                for path in q_paths:
+                    if path == 'q' or os.path.exists(path):
+                        q_cmd = path
+                        print(f"[DEBUG] Q CLI 경로 발견: {q_cmd}", flush=True)
+                        break
+                
+                if not q_cmd:
+                    raise FileNotFoundError("Q CLI를 찾을 수 없습니다")
+                
                 # Q CLI 실행 (실제 AWS 분석)
                 q_result = subprocess.run(
-                    ['/root/.local/bin/q', 'chat', '--no-interactive', korean_prompt],
+                    [q_cmd, 'chat', '--no-interactive', korean_prompt],
                     capture_output=True,
                     text=True,
                     env=env_vars,
@@ -525,18 +543,68 @@ def process_aws_question_async(query, question_key, user_id, ticket_id):
                     error_msg = q_result.stderr.strip() if q_result.stderr else "Q CLI 실행 실패"
                     print(f"[ERROR] Q CLI 실행 실패: {error_msg}", flush=True)
                     
-                    # 폴백: 기본 응답
-                    fallback_response = f"""⚠️ Q CLI 실행 중 문제가 발생했습니다.
+                    # 폴백: AWS CLI로 기본 정보 조회
+                    try:
+                        print(f"[DEBUG] Q CLI 실패, AWS CLI로 폴백 시도", flush=True)
+                        
+                        # 기본 계정 정보 조회
+                        aws_result = subprocess.run(
+                            ['aws', 'sts', 'get-caller-identity'],
+                            capture_output=True,
+                            text=True,
+                            env=env_vars,
+                            timeout=30
+                        )
+                        
+                        if aws_result.returncode == 0:
+                            caller_info = json.loads(aws_result.stdout)
+                            account = caller_info.get('Account', 'Unknown')
+                            user_arn = caller_info.get('Arn', 'Unknown')
+                            
+                            fallback_response = f"""✅ AWS 기본 정보 조회 완료
 
 질문: {query}
 유형: {question_type}
 
-현재 AWS 환경에 접근하여 기본 정보를 확인할 수 있습니다:
-• 계정 정보 확인
-• 기본 리소스 조회
-• 보안 설정 검토
+🔍 현재 AWS 환경:
+• 계정 ID: {account}
+• 사용자: {user_arn}
+• 리전: {env_vars.get('AWS_DEFAULT_REGION', 'ap-northeast-2')}
 
-더 자세한 분석을 위해서는 Q CLI 설정을 확인해주세요."""
+💡 Q CLI가 설치되면 더 자세한 분석이 가능합니다:
+• 리소스 상세 분석
+• 보안 권장사항
+• 비용 최적화 제안
+• CloudTrail 이벤트 분석"""
+                        else:
+                            fallback_response = f"""⚠️ AWS 접근 확인 필요
+
+질문: {query}
+유형: {question_type}
+
+현재 상태:
+• Q CLI: 설치 필요
+• AWS CLI: 설정 확인 필요
+
+설치 가이드:
+1. Q CLI 설치: curl -sSL https://install.q.dev | bash
+2. AWS 자격증명 확인
+3. 서비스 재시작"""
+                        
+                    except Exception as aws_error:
+                        print(f"[ERROR] AWS CLI 폴백도 실패: {aws_error}", flush=True)
+                        fallback_response = f"""⚠️ 시스템 설정 확인 필요
+
+질문: {query}
+
+현재 상태:
+• Q CLI: 미설치
+• AWS CLI: 설정 확인 필요
+
+관리자에게 문의하여 다음을 설치해주세요:
+1. Q CLI 설치 및 로그인
+2. AWS 자격증명 설정
+3. 컨텍스트 파일 복사"""
                     
                     socketio.emit('progress', {'progress': 100, 'message': '기본 분석이 완료되었습니다.'}, namespace='/zendesk')
                     socketio.emit('result', {'summary': account_prefix + fallback_response}, namespace='/zendesk')
