@@ -236,7 +236,7 @@ def handle_aws_query(data):
         # 백그라운드에서 처리
         thread = threading.Thread(
             target=process_aws_question_async, 
-            args=(query, question_key, user_id, ticket_id)
+            args=(query, question_key, user_id, ticket_id, request.sid)
         )
         thread.daemon = True
         thread.start()
@@ -245,15 +245,27 @@ def handle_aws_query(data):
         print(f"[ERROR] AWS 질문 처리 중 오류: {str(e)}", flush=True)
         emit('error', {'message': f'질문 처리 중 오류가 발생했습니다: {str(e)}'}, namespace='/zendesk')
 
-def process_aws_question_async(query, question_key, user_id, ticket_id):
+def process_aws_question_async(query, question_key, user_id, ticket_id, session_id):
     """비동기로 AWS 질문 처리 (기존 Slack bot 로직 포팅)"""
     temp_dir = None
     
+    def emit_progress(progress, message):
+        """진행률 전송 헬퍼 함수"""
+        socketio.emit('progress', {'progress': progress, 'message': message}, room=session_id, namespace='/zendesk')
+    
+    def emit_result(data):
+        """결과 전송 헬퍼 함수"""
+        socketio.emit('result', data, room=session_id, namespace='/zendesk')
+    
+    def emit_error(message):
+        """에러 전송 헬퍼 함수"""
+        socketio.emit('error', {'message': message}, room=session_id, namespace='/zendesk')
+    
     try:
-        print(f"[DEBUG] 질문 처리 중: {query}", flush=True)
+        print(f"[DEBUG] 질문 처리 중: {query} (세션: {session_id})", flush=True)
         
         # 진행률 10% - 계정 ID 추출
-        socketio.emit('progress', {'progress': 10, 'message': '계정 정보를 확인하고 있습니다...'}, namespace='/zendesk')
+        emit_progress(10, '계정 정보를 확인하고 있습니다...')
         
         # 계정 ID 추출
         account_id = extract_account_id(query)
