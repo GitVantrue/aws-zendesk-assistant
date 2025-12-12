@@ -771,46 +771,102 @@ def generate_s3_rows(buckets):
     
     return ''.join(rows)
 
+def convert_qcli_json_to_template_format(data):
+    """Q CLI가 생성한 JSON 구조를 템플릿 형식으로 변환 (Slack bot과 동일)"""
+    try:
+        print(f"[DEBUG] JSON 구조 변환 시작", flush=True)
+        
+        # resources 섹션 변환
+        if 'resources' in data:
+            resources = data['resources']
+            new_resources = {}
+            
+            # ec2_instances → ec2
+            if 'ec2_instances' in resources:
+                new_resources['ec2'] = resources['ec2_instances']
+            elif 'ec2' in resources:
+                new_resources['ec2'] = resources['ec2']
+            else:
+                new_resources['ec2'] = {'total': 0, 'running': 0, 'instances': []}
+            
+            # s3_buckets → s3
+            if 's3_buckets' in resources:
+                new_resources['s3'] = resources['s3_buckets']
+            elif 's3' in resources:
+                new_resources['s3'] = resources['s3']
+            else:
+                new_resources['s3'] = {'total': 0, 'encrypted': 0, 'buckets': []}
+            
+            # lambda 함수
+            if 'lambda' in resources or 'lambda_functions' in resources:
+                new_resources['lambda'] = resources.get('lambda') or resources.get('lambda_functions', {'total': 0, 'functions': []})
+            else:
+                new_resources['lambda'] = {'total': 0, 'functions': []}
+            
+            # rds_instances → rds
+            if 'rds_instances' in resources:
+                new_resources['rds'] = resources['rds_instances']
+            elif 'rds' in resources:
+                new_resources['rds'] = resources['rds']
+            else:
+                new_resources['rds'] = {'total': 0, 'instances': []}
+            
+            data['resources'] = new_resources
+        
+        # 기본값 설정 (누락된 섹션)
+        if 'iam_security' not in data:
+            data['iam_security'] = {'users': {'total': 0, 'mfa_enabled': 0, 'details': []}, 'issues': []}
+        
+        if 'security_groups' not in data:
+            data['security_groups'] = {'total': 0, 'risky': 0, 'details': []}
+        
+        if 'encryption' not in data:
+            data['encryption'] = {
+                'ebs': {'total': 0, 'encrypted': 0, 'unencrypted_volumes': []},
+                's3': {'total': 0, 'encrypted': 0, 'encrypted_rate': 0.0},
+                'rds': {'total': 0, 'encrypted': 0, 'encrypted_rate': 0.0}
+            }
+        
+        if 'trusted_advisor' not in data:
+            data['trusted_advisor'] = {'available': False, 'checks': []}
+        
+        if 'cloudtrail_events' not in data:
+            data['cloudtrail_events'] = {
+                'period_days': 30, 'total_events': 0, 'critical_events': [],
+                'failed_logins': 0, 'permission_changes': 0, 'resource_deletions': 0
+            }
+        
+        if 'cloudwatch' not in data:
+            data['cloudwatch'] = {
+                'alarms': {'total': 0, 'in_alarm': 0, 'ok': 0, 'insufficient_data': 0, 'details': []},
+                'high_cpu_instances': []
+            }
+        
+        if 'recommendations' not in data:
+            data['recommendations'] = []
+        
+        print(f"[DEBUG] JSON 구조 변환 완료", flush=True)
+        return data
+        
+    except Exception as e:
+        print(f"[ERROR] JSON 구조 변환 실패: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return data
+
 def generate_html_report(json_file_path):
     """JSON 데이터를 월간 보안 점검 HTML 보고서로 변환 (Slack bot과 동일)"""
     try:
         with open(json_file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        # HTML 템플릿 경로 (여러 경로 시도)
-        template_paths = [
-            'reference_templates/json_report_template.html',
-            '/tmp/reports/json_report_template.html',
-            'json_report_template.html'
-        ]
-        
-        template = None
-        for template_path in template_paths:
-            try:
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    template = f.read()
-                print(f"[DEBUG] 템플릿 로드 성공: {template_path}", flush=True)
-                break
-            except FileNotFoundError:
-                continue
-        
-        # 템플릿이 없으면 기본 HTML 생성 함수 사용
-        if not template:
-            print(f"[DEBUG] 템플릿 파일 없음, 기본 HTML 생성 사용", flush=True)
-            # 기본 HTML 생성
-            html_content = generate_html_from_json(data)
-            
-            # 파일 저장
-            metadata = data.get('metadata', {})
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            html_filename = f"security_report_{metadata.get('account_id', 'unknown')}_{timestamp}.html"
-            html_path = f"/tmp/reports/{html_filename}"
-            
-            with open(html_path, 'w', encoding='utf-8') as f:
-                f.write(html_content)
-            
-            print(f"[DEBUG] HTML 보고서 생성 완료: {html_path}", flush=True)
-            return html_path
+        # JSON 구조 변환
+        data = convert_qcli_json_to_template_format(data)
+
+        # HTML 템플릿 읽기
+        template_path = 'reference_templates/json_report_template.html'
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template = f.read()
 
         # 기본 메타데이터
         metadata = data.get('metadata', {})
