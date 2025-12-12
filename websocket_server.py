@@ -22,12 +22,14 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'saltware-aws-assistant-secret'
 socketio = SocketIO(
     app, 
-    cors_allowed_origins="*", 
+    cors_allowed_origins=["http://localhost:8080", "http://127.0.0.1:8080", "*"], 
     logger=True, 
     engineio_logger=True, 
     path='/zendesk/socket.io',
-    ping_timeout=60,  # ping 타임아웃 60초로 증가
-    ping_interval=25  # ping 간격 25초 유지
+    ping_timeout=120,  # ping 타임아웃 2분으로 증가
+    ping_interval=30,  # ping 간격 30초로 증가
+    allow_upgrades=False,  # WebSocket 업그레이드 비활성화
+    transports=['polling']  # polling만 사용
 )
 
 # 처리 중인 질문 추적
@@ -738,6 +740,14 @@ def process_aws_question_async(query, question_key, user_id, ticket_id, session_
                 print(f"[DEBUG] 임시 디렉터리 삭제: {temp_dir}", flush=True)
             except Exception as e:
                 print(f"[DEBUG] 임시 디렉터리 삭제 실패 (무시): {e}", flush=True)
+
+@app.after_request
+def after_request(response):
+    """모든 응답에 CORS 헤더 추가"""
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
 
 @app.route('/health')
 def health_check():
