@@ -220,6 +220,18 @@ class SaltwareAWSAssistant {
             try {
                 this.updateProgress(data.progress, data.message);
                 console.log('📊 ✅ 진행률 업데이트 완료:', data.progress + '%');
+                
+                // 10% 이후 이벤트가 안 오면 강제 재연결 시도
+                if (data.progress === 10) {
+                    console.log('🔄 10% 이후 이벤트 대기 중... 5초 후 재연결 시도');
+                    setTimeout(() => {
+                        if (this.currentProgress === 10) {
+                            console.log('🚨 10%에서 멈춤 감지! 강제 재연결 시도');
+                            this.socket.disconnect();
+                            this.socket.connect();
+                        }
+                    }, 5000);
+                }
             } catch (error) {
                 console.error('📊 ❌ 진행률 업데이트 실패:', error);
             }
@@ -257,6 +269,14 @@ class SaltwareAWSAssistant {
                 console.log('%c🚨 PROGRESS: ' + args[0]?.progress + '%', 'color: red; font-size: 20px; font-weight: bold;');
             }
         });
+        
+        // Socket.IO 내부 이벤트도 모니터링
+        this.socket.on('connect', () => console.log('🔌 Socket.IO connect'));
+        this.socket.on('disconnect', () => console.log('🔌 Socket.IO disconnect'));
+        this.socket.on('reconnect', () => console.log('🔌 Socket.IO reconnect'));
+        this.socket.on('reconnect_attempt', () => console.log('🔌 Socket.IO reconnect_attempt'));
+        this.socket.on('reconnect_error', () => console.log('🔌 Socket.IO reconnect_error'));
+        this.socket.on('reconnect_failed', () => console.log('🔌 Socket.IO reconnect_failed'));
         
         // 글로벌 연결은 CORS 문제로 제거하고 메인 연결에 집중
     }
