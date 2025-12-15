@@ -1,0 +1,23 @@
+# WebSocket 서버
+websockets>=12.0
+
+# LangGraph 에이전트
+langgraph>=0.2.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+
+# AWS SDK
+boto3>=1.35.0
+botocore>=1.42.0
+
+# HTTP 요청
+requests>=2.31.0
+
+# Property-based testing
+hypothesis>=6.100.0
+
+# JSON 처리
+python-dateutil>=2.8.0
+
+# 로깅 및 유틸리티
+typing-extensions>=4.8.0
