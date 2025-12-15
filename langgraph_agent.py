@@ -443,8 +443,8 @@ async def process_question_workflow(
         if state["processing_status"] == "error":
             return state
         
-        # 3. AWS 인증 (필수) - 로컬 테스트 모드 강제 적용
-        state = await authenticate_aws(state, local_test_mode=True)
+        # 3. AWS 인증 (필수) - 실제 인증 모드
+        state = await authenticate_aws(state, local_test_mode=False)
         if state["processing_status"] == "error":
             return state
         
