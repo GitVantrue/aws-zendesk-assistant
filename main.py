@@ -22,7 +22,6 @@ async def main():
     # 종료 시그널 핸들러
     def signal_handler(signum, frame):
         log_info("종료 시그널 수신, 서버를 중지합니다...")
-        asyncio.create_task(server.stop_server())
         sys.exit(0)
     
     signal.signal(signal.SIGINT, signal_handler)
