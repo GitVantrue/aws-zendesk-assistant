@@ -341,39 +341,59 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
         # 진행 상황 전송
         await send_websocket_progress(state, f"⚙️ {question_type} 작업을 실행합니다...")
         
-        # TODO: Task 5~에서 실제 AWS 작업 구현
+        # 실제 AWS 작업 실행
         if question_type == "screener" and account_id and credentials:
-            # Service Screener 실행
+            # TODO: Task 5에서 Service Screener 구현
             result = {
                 "question": state["question"],
-                "answer": f"Task 4 완료: Service Screener 실행 준비됨 (계정: {account_id})",
+                "answer": f"Service Screener 기능은 아직 구현 중입니다. (계정: {account_id})",
                 "question_type": question_type,
                 "account_id": account_id,
                 "authenticated": True
             }
         elif question_type == "report" and account_id and credentials:
-            # 보안 보고서 생성
+            # TODO: Task 6에서 보안 보고서 구현
             result = {
                 "question": state["question"],
-                "answer": f"Task 4 완료: 보안 보고서 생성 준비됨 (계정: {account_id})",
+                "answer": f"보안 보고서 기능은 아직 구현 중입니다. (계정: {account_id})",
                 "question_type": question_type,
                 "account_id": account_id,
                 "authenticated": True
             }
-        elif question_type in ["cloudtrail", "cloudwatch"] and account_id and credentials:
-            # MCP 서버 연동
-            result = {
-                "question": state["question"],
-                "answer": f"Task 4 완료: {question_type} MCP 연동 준비됨 (계정: {account_id})",
-                "question_type": question_type,
-                "account_id": account_id,
-                "authenticated": True
-            }
+        elif question_type in ["cloudtrail", "cloudwatch", "general"]:
+            # Q CLI 직접 호출 (1단계 구현)
+            from aws_tools.q_cli import call_q_cli
+            
+            q_result = await call_q_cli(
+                question=state["question"],
+                account_id=account_id,
+                credentials=credentials,
+                context_file=state.get("context_file"),
+                question_type=question_type,
+                timeout=300
+            )
+            
+            if q_result["success"]:
+                result = {
+                    "question": state["question"],
+                    "answer": q_result["answer"],
+                    "question_type": question_type,
+                    "account_id": account_id,
+                    "authenticated": bool(credentials)
+                }
+            else:
+                result = {
+                    "question": state["question"],
+                    "answer": f"Q CLI 오류: {q_result['error']}",
+                    "question_type": question_type,
+                    "account_id": account_id,
+                    "authenticated": bool(credentials)
+                }
         else:
-            # 일반 질문 또는 인증 실패
+            # 인증 실패 또는 알 수 없는 질문 유형
             result = {
                 "question": state["question"],
-                "answer": f"Task 4 완료: LangGraph 에이전트가 정상 작동합니다! (질문 타입: {question_type})",
+                "answer": f"인증이 필요하거나 지원하지 않는 질문 유형입니다. (타입: {question_type})",
                 "question_type": question_type,
                 "account_id": account_id,
                 "authenticated": bool(credentials)
