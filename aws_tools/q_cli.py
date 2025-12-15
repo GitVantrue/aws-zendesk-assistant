@@ -174,7 +174,7 @@ def build_prompt(
 
 def build_environment(credentials: Optional[Dict[str, str]]) -> Dict[str, str]:
     """
-    Q CLI 실행을 위한 환경 변수 구성
+    Q CLI 실행을 위한 환경 변수 구성 (Reference 코드 로직 적용)
     
     Args:
         credentials: AWS 자격증명
@@ -187,12 +187,26 @@ def build_environment(credentials: Optional[Dict[str, str]]) -> Dict[str, str]:
     
     # AWS 자격증명 설정
     if credentials:
-        env_vars.update(credentials)
+        # Reference 코드와 동일한 방식으로 자격증명 설정
+        env_vars['AWS_ACCESS_KEY_ID'] = credentials.get('AWS_ACCESS_KEY_ID', '')
+        env_vars['AWS_SECRET_ACCESS_KEY'] = credentials.get('AWS_SECRET_ACCESS_KEY', '')
+        env_vars['AWS_SESSION_TOKEN'] = credentials.get('AWS_SESSION_TOKEN', '')
+        env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
+        
+        # Reference 코드와 동일한 추가 설정
+        env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'  # EC2 메타데이터 비활성화
+        env_vars['AWS_SDK_LOAD_CONFIG'] = '0'  # 설정 파일 로드 비활성화
+        
         log_debug("AWS 자격증명 환경 변수 설정 완료")
+        log_debug(f"AWS_ACCESS_KEY_ID: {env_vars['AWS_ACCESS_KEY_ID'][:20]}...")
+        log_debug(f"AWS_SESSION_TOKEN 존재: {bool(env_vars.get('AWS_SESSION_TOKEN'))}")
     
     # 한국어 설정
     env_vars['LANG'] = 'ko_KR.UTF-8'
     env_vars['LC_ALL'] = 'ko_KR.UTF-8'
+    
+    # MCP 서버 초기화 타임아웃 설정 (Reference 코드와 동일)
+    env_vars['Q_MCP_INIT_TIMEOUT'] = '10000'  # 10초
     
     return env_vars
 

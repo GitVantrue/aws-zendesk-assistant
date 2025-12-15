@@ -286,17 +286,14 @@ async def authenticate_aws(state: AgentState, local_test_mode: bool = True) -> A
                         state["processing_status"] = "authenticated"
                         await send_websocket_progress(state, "✅ AWS 인증 성공! 요청을 처리합니다...")
                         log_info(f"AWS 인증 성공: {account_id}")
+                        log_debug(f"자격증명 키: {list(credentials.keys())}")
                     else:
-                        # 실제 환경에서 인증 실패 시 로컬 테스트 모드로 폴백
-                        log_debug(f"실제 인증 실패, 로컬 테스트 모드로 폴백: {account_id}")
-                        state["credentials"] = {
-                            "AWS_ACCESS_KEY_ID": "test-access-key",
-                            "AWS_SECRET_ACCESS_KEY": "test-secret-key", 
-                            "AWS_SESSION_TOKEN": "test-session-token"
-                        }
-                        state["processing_status"] = "authenticated"
-                        await send_websocket_progress(state, "✅ AWS 인증 성공! (폴백 모드) 요청을 처리합니다...")
-                        log_info(f"AWS 인증 성공 (폴백): {account_id}")
+                        # 실제 환경에서 인증 실패
+                        state["error_message"] = f"AWS 계정 {account_id}에 대한 인증에 실패했습니다."
+                        state["processing_status"] = "error"
+                        await send_websocket_progress(state, f"❌ AWS 인증 실패: 계정 {account_id}")
+                        log_error(f"AWS 인증 실패: {account_id}")
+                        return state
                 except Exception as auth_error:
                     log_debug(f"인증 오류, 로컬 테스트 모드로 폴백: {auth_error}")
                     state["credentials"] = {
