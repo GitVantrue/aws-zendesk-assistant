@@ -213,7 +213,7 @@ async def send_websocket_progress(state: AgentState, message: str):
                 "message": message,
                 "timestamp": datetime.now().isoformat()
             }
-            await state["websocket"].send(json.dumps(progress_message, ensure_ascii=False))
+            await state["websocket"].send_str(json.dumps(progress_message, ensure_ascii=False))
             log_debug(f"진행 상황 전송: {message}")
         except Exception as e:
             log_error(f"진행 상황 전송 실패: {e}")
@@ -237,7 +237,7 @@ async def send_websocket_result(state: AgentState, result: Dict[str, Any]):
                 "data": result,
                 "timestamp": datetime.now().isoformat()
             }
-            await state["websocket"].send(json.dumps(result_message, ensure_ascii=False))
+            await state["websocket"].send_str(json.dumps(result_message, ensure_ascii=False))
             log_debug("최종 결과 전송 완료")
         except Exception as e:
             log_error(f"결과 전송 실패: {e}")
