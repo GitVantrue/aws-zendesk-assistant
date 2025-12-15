@@ -1,0 +1,623 @@
+📊 1-200줄 분석
+핵심 구조:
+
+Flask 웹서버: Slack 이벤트 수신용
+Cross-account 인증: Parameter Store + STS assume role (2단계 폴백)
+중복 방지: 타임스탬프 기반 질문 추적
+비동기 처리: Threading으로 질문 처리
+주요 함수:
+
+convert_datetime_to_json_serializable(): JSON 직렬화 유틸리티
+get_crossaccount_credentials(): Parameter Store에서 자격증명 로드
+get_crossaccount_session(): STS assume role로 세션 생성
+인증 방식:
+
+1차: Parameter Store 자격증명 → STS assume role
+2차: EC2 역할 → crossaccount 역할 → target 계정 역할
+📊 201-400줄 분석
+질문 분석 시스템:
+
+analyze_question_type(): 키워드 기반 질문 분류
+screener → Service Screener 실행
+report → 보안 보고서 생성
+cloudtrail → CloudTrail 분석
+cloudwatch → CloudWatch 분석
+general → 일반 AWS 질문
+Service Screener 실행:
+
+자체 Python 스크립트: /root/service-screener-v2/Screener.py
+crossAccounts.json 설정: 리전 및 계정 설정
+리전 추출: 질문에서 정규식으로 리전 파싱
+기본 리전: ap-northeast-2, us-east-1
+파일 관리:
+
+오래된 결과 자동 정리 (3일)
+/tmp/reports/ 디렉터리 관리
+📊 401-600줄 분석
+Service Screener 결과 처리:
+
+결과 위치: /root/service-screener-v2/adminlte/aws/{account_id}/
+파일 복사: /tmp/reports/screener_{account_id}_{timestamp}/
+리소스 복사: CSS/JS/이미지 파일들도 함께 복사
+URL 생성: ALB를 통한 웹 접근 URL 제공
+Well-Architected Summary:
+
+wa-ss-summarizer 스크립트 실행
+Q CLI 연동: 한국어 출력 설정
+환경 변수: Q_LANGUAGE=Korean, LANG=ko_KR.UTF-8
+타임아웃: 15분 (한국어 프롬프트로 시간 더 소요)
+핵심 패턴:
+
+Service Screener → 자체 Python 스크립트
+WA Summary → Q CLI 통해 AI 분석
+결과 파일 → /tmp/reports/로 복사 → 웹 URL 제공
+📊 601-800줄 분석
+WA Summary 완료 처리:
+
+결과 파일: wa_summary_report_*.html 형태
+파일 복사: /tmp/reports/wa_summary_{account_id}_{timestamp}.html
+URL 생성: ALB를 통한 웹 접근
+Service Screener 결과 파싱:
+
+JSON 파일에서 리소스 수, 이슈 수 추출
+Critical/High 이슈 분류
+요약 메시지 생성
+메인 질문 처리 로직:
+
+세션 격리: 임시 디렉터리로 AWS 설정 분리
+Q CLI 캐시 무효화: 계정별 독립적 실행
+환경 변수 설정: Cross-account 자격증명 적용
+계정 검증: aws sts get-caller-identity로 확인
+핵심 패턴:
+
+계정별 세션 격리 (임시 디렉터리)
+Q CLI 캐시 초기화
+AWS 자격증명 환경 변수 설정
+📊 801-1000줄 분석
+계정 검증 프로세스:
+
+aws sts get-caller-identity로 실제 계정 확인
+요청 계정 vs 실제 계정 일치 검증
+불일치 시 에러 처리
+Service Screener 전용 처리:
+
+컨텍스트 파일: /root/core_contexts/service_screener.md
+직접 실행: python3 /root/service-screener-v2/main.py --regions ap-northeast-2,us-east-1
+Q CLI 요약: 결과를 Q CLI로 한국어 요약 생성
+백그라운드 WA 보고서: 별도 스레드로 WA Summary 생성
+핵심 패턴:
+
+Service Screener: 자체 Python 스크립트 실행
+결과 분석: Q CLI로 한국어 요약
+WA Summary: 백그라운드에서 Q CLI 기반 생성
+파일 경로:
+
+결과: /root/service-screener-v2/adminlte/aws/{account_id}/
+복사: /tmp/reports/screener_{account_id}_{timestamp}/
+리소스: /tmp/reports/res/
+📊 1001-1200줄 분석
+일반 Q CLI 실행 로직:
+
+컨텍스트 파일 로드: 질문 타입별 컨텍스트 적용
+날짜 추출: 정규식으로 "X월", "YYYY년" 파싱
+기간 설정: 월 범위 또는 최근 30일
+보고서 생성 프로세스:
+
+Raw 데이터 수집: collect_raw_security_data() 함수로 boto3 기반 수집
+JSON 저장: datetime 객체를 ISO 형식으로 변환하여 저장
+HTML 보고서: generate_html_report() 함수로 생성
+AI 분석: Q CLI로 섹션별 분석 (Trusted Advisor, IAM, Security Groups)
+섹션별 AI 분석:
+
+청크 방식: 각 섹션을 개별적으로 Q CLI 분석
+Enriched JSON: 원본 데이터에 AI 분석 결과 추가
+한국어 설명: 위험도, 조치방법, 우선순위 등
+핵심 패턴:
+
+Raw 데이터: boto3로 직접 수집
+AI 분석: Q CLI로 섹션별 enrichment
+HTML 생성: 템플릿 기반 보고서 생성
+📊 1201-1400줄 분석
+Q CLI 섹션별 분석 완료:
+
+JSON 파싱: Q CLI 응답에서 JSON 블록 추출 (json ... )
+데이터 병합: 원본 데이터에 AI 분석 결과 병합
+에러 처리: JSON 파싱 실패 시 원본 데이터 유지
+Enriched JSON 처리:
+
+데이터 검증: EC2, S3, IAM 카운트로 유효성 확인
+자동 수정: JSON 구문 오류 자동 수정 시도
+폴백 로직: Enriched 데이터 실패 시 Raw 데이터 사용
+HTML 보고서 생성:
+
+데이터 선택: Enriched vs Raw 데이터 중 유효한 것 선택
+HTML 생성: generate_html_from_json() 함수 사용
+파일 저장: /tmp/reports/aws_report_{account}_{timestamp}.html
+Slack 업로드: 파일 업로드 + URL 제공
+요약 메시지:
+
+Raw 데이터 기준: 정확한 카운트를 위해 Raw 데이터 사용
+안전한 접근: dict.get() 방식으로 키 누락 방지
+CloudTrail/CloudWatch 처리:
+
+별도 분기로 처리 시작
+📊 1401-1600줄 분석
+CloudTrail/CloudWatch 처리:
+
+한국어 프롬프트: 컨텍스트 + 계정 ID + 분석 기간 포함
+날짜 지시사항: 사용자가 지정한 월 범위 명시
+Q CLI 실행:
+
+통일된 타임아웃: 모든 질문 유형 10분 (600초)
+명령어: q chat --no-interactive --trust-all-tools
+오케스트레이션 감지: 서브에이전트 호출 로깅
+응답 처리:
+
+보고서 타입: ANSI 코드만 제거 (JSON 보존)
+일반 질문: simple_clean_output() 함수로 정리
+Slack 메시지: 계정 prefix + 응답 내용
+HTML 보고서 생성 (보고서 타입만):
+
+JSON 파일 확인: output_json_path 존재 여부
+JSON 로드: UTF-8 인코딩으로 파일 읽기
+래퍼 처리: security_report 키 언래핑
+구조 변환: convert_qcli_json_to_template_format() 호출
+HTML 생성: generate_html_from_json() 함수 사용
+파일 저장: /tmp/reports/aws_report_{account}_{timestamp}.html
+Slack 업로드: 파일 업로드 + URL 제공
+JSON 구조 변환:
+
+Q CLI 형식 → 템플릿 형식
+ec2_instances → ec2
+s3_buckets → s3
+rds_instances → rds
+📊 1601-1800줄 분석
+JSON 구조 변환 완료:
+
+기본값 설정: 누락된 섹션들에 대한 기본 구조 생성
+표준화: 모든 섹션이 일관된 구조를 가지도록 보장
+에러 처리: 변환 실패 시 원본 데이터 반환
+유틸리티 함수들:
+
+1. clean_report_output():
+
+ANSI 코드 제거: 터미널 색상 코드 제거
+도구 실행 과정 제거: Q CLI 실행 로그 필터링
+보고서 내용만 추출: "### 보고서" 부분부터 수집
+2. clean_json_string():
+
+diff 마커 제거: Git diff 형식 정리
+주석 제거: // 및 /* */ 스타일 주석
+trailing comma 제거: JSON 구문 오류 수정
+빈 줄 정리: 연속된 빈 줄 정리
+3. generate_text_based_html():
+
+Fallback HTML: JSON 파싱 실패 시 텍스트 기반 HTML 생성
+기본 스타일링: AWS 색상 테마 적용
+4. simple_clean_output():
+
+일반 질문용: 도구 사용 내역 완전 제거
+강화된 패턴: 다양한 Q CLI 실행 로그 패턴 필터링
+핵심 패턴:
+
+구조 표준화: Q CLI 출력을 템플릿 형식으로 변환
+에러 복구: 다양한 수준의 fallback 메커니즘
+출력 정리: 사용자에게 깔끔한 결과만 제공
+📊 1801-2000줄 분석
+simple_clean_output() 함수 완료:
+
+광범위한 패턴: 시스템 명령어, 패키지 설치, Git 명령어 등 모든 도구 실행 로그 제거
+강력한 필터링: 100개 이상의 패턴으로 Q CLI 실행 과정 완전 제거
+결과만 추출: 사용자에게 필요한 답변만 남김
+normalize_security_report_json() 함수:
+
+다양한 형식 지원: Q CLI가 생성하는 여러 JSON 구조 패턴 처리
+키 매핑: 다양한 키 이름을 표준 형식으로 변환
+reportMetadata / report_metadata → metadata
+resourceInventory / resource_inventory → resources
+iamSecurity / iam_security → iam_security
+securityGroupAnalysis → security_groups
+trustedAdvisor / trusted_advisor → trusted_advisor
+cloudTrailAnalysis / cloudtrail_events → cloudtrail_events
+cloudWatchAlarms → cloudwatch
+권장사항 변환:
+
+문자열 배열 → 딕셔너리 배열: 템플릿 호환성을 위한 구조 변환
+우선순위 자동 할당: 처음 3개는 high, 나머지는 medium
+표준 필드 추가: priority, category, title, description, action
+핵심 패턴:
+
+유연한 키 매핑: 다양한 Q CLI 출력 형식 지원
+기본값 제공: 누락된 데이터에 대한 안전한 기본값
+구조 표준화: 템플릿이 기대하는 일관된 형식으로 변환
+📊 2001-2200줄 분석
+JSON 정규화 완료:
+
+빈 템플릿 반환: 알 수 없는 형식일 때 기본 구조 제공
+에러 처리: 정규화 실패 시 원본 데이터 반환
+generate_html_from_json() 함수:
+
+템플릿 로드: /root/templates/json_report_template.html 우선, 로컬 fallback
+데이터 추출: 정규화된 JSON에서 각 섹션별 데이터 추출
+계산된 값: MFA 비율, 암호화 비율 등 동적 계산
+테이블 생성: 각 리소스 타입별 HTML 테이블 생성 함수 호출
+템플릿 매핑: 모든 변수를 템플릿에 매핑하여 최종 HTML 생성
+HTML 테이블 생성 함수들:
+
+1. generate_ec2_table():
+
+컬럼: ID, 이름, 타입, 상태, IP
+상태 표시: running은 ok 클래스, 나머지는 warning 클래스
+빈 데이터 처리: 인스턴스가 없을 때 메시지 표시
+2. generate_s3_table():
+
+컬럼: 이름, 리전, 암호화, 버저닝, 퍼블릭 접근
+보안 표시: 암호화 여부, 퍼블릭 접근 여부에 따른 색상 클래스
+불린 값 변환: true/false를 "예"/"아니오"로 표시
+핵심 패턴:
+
+템플릿 기반: HTML 템플릿에 동적 데이터 주입
+안전한 접근: dict.get()으로 키 누락 방지
+시각적 표시: CSS 클래스로 상태별 색상 구분
+빈 데이터 처리: 데이터가 없을 때 적절한 메시지 표시
+
+2201-2400줄 상세 분석:
+
+HTML 테이블 생성 함수들 (2201-2369줄):
+
+generate_lambda_table(functions) (2201-2215줄):
+
+Lambda 함수 정보를 HTML 테이블로 변환
+컬럼: 이름, 런타임, 메모리, 타임아웃
+빈 데이터 처리
+generate_rds_table(instances) (2217-2235줄):
+
+RDS 인스턴스 정보를 HTML 테이블로 변환
+컬럼: ID, 엔진, 버전, 클래스, 암호화 상태
+암호화 여부에 따른 CSS 클래스 적용 (ok/error)
+generate_iam_users_table(users) (2237-2255줄):
+
+IAM 사용자 정보를 HTML 테이블로 변환
+컬럼: 사용자명, MFA 상태, 액세스 키 개수, 정책
+MFA 활성화 여부에 따른 CSS 클래스 적용
+generate_iam_issues_list(issues) (2257-2271줄):
+
+IAM 보안 이슈를 리스트 형태로 변환
+심각도별 배지 표시 (badge-{severity})
+generate_sg_table(security_groups) (2273-2290줄):
+
+보안 그룹 정보를 HTML 테이블로 변환
+위험한 규칙 개수에 따른 색상 구분
+generate_ta_content(ta_data) (2292-2313줄):
+
+Trusted Advisor 체크 결과를 HTML 테이블로 변환
+Business/Enterprise 플랜 필요 메시지 처리
+상태별 CSS 클래스 적용 (error/warning/ok)
+generate_ct_events_table(events) (2315-2332줄):
+
+CloudTrail 이벤트를 HTML 테이블로 변환
+최대 10개 이벤트만 표시
+성공/실패에 따른 색상 구분
+generate_cw_alarms_table(alarms) (2334-2351줄):
+
+CloudWatch 알람을 HTML 테이블로 변환
+알람 상태별 색상 구분 (ALARM=error, OK=ok)
+generate_recommendations_list(recommendations) (2353-2369줄):
+
+권장사항을 카드 형태로 변환
+우선순위별 배지 표시
+Service Screener HTML 보고서 생성 시작 (2370-2400줄):
+
+generate_screener_html_report(account_id, report_content, timestamp) (2370-2400줄):
+Service Screener 결과를 완전한 HTML 보고서로 변환
+마크다운 스타일 텍스트를 HTML로 변환
+한국어 폰트 및 반응형 CSS 스타일 적용
+함수가 2400줄에서 잘림 (계속 읽어야 함)
+
+2401-2600줄 상세 분석:
+
+Service Screener HTML 보고서 완료 (2401-2465줄):
+
+CSS 스타일 정의: 반응형 디자인, 그라데이션 헤더, 카드 레이아웃
+HTML 구조: 헤더(계정 ID, 타임스탬프) + 콘텐츠 + 푸터
+마크다운 → HTML 변환 완료
+완전한 독립 실행 가능한 HTML 문서 생성
+핵심 Raw 데이터 수집 함수 시작 (2466-2600줄):
+
+collect_raw_security_data() 함수 (2466줄~):
+
+목적: boto3로 AWS Raw 데이터 수집 → Q CLI 분석용
+매개변수: 계정 ID, 날짜 범위(UTC+9), 리전, 자격증명
+반환값: 구조화된 Raw 보안 데이터 JSON
+자격증명 처리 (2477-2495줄):
+
+파라미터 우선, 없으면 환경변수 사용
+Cross-account 임시 자격증명 지원
+SESSION_TOKEN 포함한 완전한 자격증명
+boto3 클라이언트 생성 (2496-2505줄):
+
+EC2, S3, IAM, Support(Trusted Advisor), CloudTrail, CloudWatch
+Support는 us-east-1 리전만 지원 (Trusted Advisor 제약)
+데이터 구조 초기화 (2506-2521줄):
+
+{
+  "metadata": {...},
+  "resources": {},
+  "iam_security": {},
+  "security_groups": {},
+  "encryption": {},
+  "trusted_advisor": {},
+  "cloudtrail_events": {},
+  "cloudwatch": {},
+  "recommendations": []
+}
+EC2 인스턴스 수집 (2522-2545줄):
+
+describe_instances() 호출
+Raw 데이터 전체 보존 (모든 필드 포함)
+요약 정보 계산: total, running, stopped
+에러 처리 및 기본값 설정
+S3 버킷 수집 시작 (2546-2600줄):
+
+list_buckets() 기본 정보
+각 버킷별 상세 정보 수집:
+리전 정보 (get_bucket_location)
+암호화 설정 (get_bucket_encryption)
+버저닝 설정 (get_bucket_versioning)
+퍼블릭 액세스 블록 (get_public_access_block)
+개별 버킷 에러 처리 (일부 실패해도 계속 진행)
+
+2601-2800줄 상세 분석:
+
+S3 수집 완료 (2601-2614줄):
+
+암호화된 버킷 개수 계산 (Encryption 필드 존재 여부)
+퍼블릭 버킷 개수 계산 (PublicAccessBlock 없으면 퍼블릭 가능)
+요약 정보와 Raw 데이터 모두 저장
+Lambda 함수 수집 (2615-2629줄):
+
+list_functions() 호출
+Raw 데이터 전체 보존 (런타임, 메모리, 타임아웃 등 모든 필드)
+간단한 요약 정보 (총 개수만)
+RDS 인스턴스 수집 (2630-2644줄):
+
+describe_db_instances() 호출
+Raw 데이터 전체 보존 (Multi-AZ, Engine, BackupRetentionPeriod 등)
+주석에서 중요 필드들 명시
+IAM 사용자 수집 (2645-2685줄):
+
+list_users() 기본 정보
+각 사용자별 상세 정보:
+MFA 디바이스 확인 (list_mfa_devices)
+액세스 키 확인 (list_access_keys)
+보안 이슈 자동 감지 (MFA 미설정 → Critical 이슈)
+구조화된 데이터: users(총계, MFA 활성화 수, 상세), issues
+보안 그룹 수집 (2686-2720줄):
+
+describe_security_groups() 호출
+위험한 규칙 자동 감지:
+0.0.0.0/0 CIDR 블록 검사
+포트별 위험도 분류 (SSH 22, RDP 3389, MySQL 3306, PostgreSQL 5432 = High)
+위험한 보안 그룹만 별도 저장 (처음 5개만)
+암호화 상태 수집 (2721-2760줄):
+
+EBS 볼륨: describe_volumes() → 암호화 여부 확인
+S3, RDS: 이전 수집 데이터에서 요약 정보 재계산
+RDS 암호화율 계산 (StorageEncrypted 필드)
+미암호화 볼륨 ID 목록 (최대 16개)
+Trusted Advisor 수집 시작 (2761-2800줄):
+
+가장 중요한 부분 (주석에서 강조)
+describe_trusted_advisor_checks() → 전체 체크 목록
+각 체크별 결과 수집 시작:
+describe_trusted_advisor_check_result() 호출
+체크 ID, 이름, 카테고리별 처리
+
+2801-3000줄 상세 분석:
+
+Trusted Advisor 수집 완료 (2801-2835줄):
+
+문제가 있는 체크만 필터링 (warning/error 상태 + 리소스 > 0)
+카테고리 한글 번역 (보안, 비용 최적화, 성능, 내결함성, 서비스 한도)
+체크명은 영문 그대로 유지 (템플릿에서 번역)
+상세 정보는 생략하고 개수만 저장
+CloudTrail 이벤트 수집 (2836-2935줄):
+
+정확한 시간대 처리: UTC+9 (한국시간) → UTC 변환
+중요 이벤트 목록 정의:
+Critical: DeleteBucket, DeleteDBInstance, TerminateInstances, DeleteUser, DeleteAccessKey
+High: PutBucketPolicy, AuthorizeSecurityGroupIngress, CreateAccessKey, PutUserPolicy, AttachUserPolicy
+이벤트별 개별 수집: lookup_events() 각 이벤트 타입별 호출
+구조화된 데이터: 심각도, 카테고리, 설명, 개수, Raw 이벤트 데이터
+0건 이벤트도 기록 (모니터링 완전성)
+CloudWatch 알람 수집 (2936-2955줄):
+
+describe_alarms() 호출
+Raw 데이터 전체 보존
+상태별 요약: total, in_alarm, ok, insufficient_data
+권장사항 생성 시작 (2956-3000줄):
+
+자동 권장사항 생성 (수집된 데이터 기반)
+MFA 권장사항: MFA 미설정 사용자 감지 → Critical 권장사항
+보안 그룹 권장사항: 위험한 규칙 감지 → Critical 권장사항
+EBS 암호화 권장사항: 미암호화 볼륨 감지 → High 권장사항
+각 권장사항 구조: priority, category, title, description, affected_resources, action
+
+3001-3200줄 상세 분석:
+
+권장사항 생성 완료 (3001-3025줄):
+
+S3 암호화 권장사항: 미암호화 버킷 감지 → High 권장사항
+미암호화 버킷 목록 추출 (Encryption 필드 None인 버킷)
+권장사항 배열에 추가 및 완료 로그
+데이터 수집 완료 처리 (3026-3032줄):
+
+datetime 객체 JSON 직렬화 변환 (convert_datetime_to_json_serializable)
+완료 로그 및 데이터 반환
+Slack 통신 함수들 (3033-3085줄):
+
+send_message(channel, message) (3033-3056줄):
+
+Slack Chat API 호출 (chat.postMessage)
+Bearer 토큰 인증
+응답 상태 확인 및 에러 처리
+메시지 길이 로깅
+upload_file_to_slack(channel, file_path, title) (3057-3085줄):
+
+Slack Files API 호출 (files.upload)
+파일 스트림 업로드
+20초 타임아웃 설정
+상세한 응답 로깅
+HTML 보고서 생성 함수들 (3086-3200줄):
+
+generate_ec2_rows(instances) (3086-3133줄):
+
+EC2 인스턴스를 HTML 테이블 행으로 변환
+8개 컬럼: Name, Instance ID, Type, State, Public IP, IMDSv2, Monitoring, EBS 삭제 방지
+보안 체크 항목들:
+IMDSv2 설정 (HttpTokens required/optional)
+상세 모니터링 활성화 여부
+EBS 볼륨 삭제 방지 설정 (DeleteOnTermination)
+각 항목별 CSS 클래스 적용 (ok/warning/error)
+generate_s3_rows(buckets) (3134-3188줄):
+
+S3 버킷을 HTML 테이블 행으로 변환
+6개 컬럼: Name, Location, Encryption, Versioning, Public Access Block, Creation Date
+보안 체크 항목들:
+서버 측 암호화 설정 여부
+버저닝 활성화 여부 (Status == 'Enabled')
+퍼블릭 액세스 차단 4개 설정 모두 확인
+생성일 포맷팅 (날짜만 표시)
+generate_rds_content(instances) (3189-3200줄):
+
+RDS 인스턴스 콘텐츠 생성 시작
+기본 정보 추출: DB ID, Engine, Class, Multi-AZ, Encryption
+함수가 3200줄에서 잘림 (계속 읽어야 함)
+
+3201-3400줄 상세 분석:
+
+RDS 콘텐츠 생성 완료 (3201-3242줄):
+
+9개 컬럼: DB 식별자, 엔진, 타입, Multi-AZ, 암호화, 백업 보관, 삭제 방지, 퍼블릭 액세스, 상태
+보안 체크 항목들:
+Multi-AZ 설정 (고가용성)
+스토리지 암호화 (StorageEncrypted)
+백업 보관 기간 (30일 이상=ok, 7일 이상=warning, 미만=error)
+삭제 방지 (DeletionProtection)
+퍼블릭 액세스 (PubliclyAccessible - false가 안전)
+CSS 클래스별 색상 구분
+Lambda 콘텐츠 생성 (3243-3249줄):
+
+현재는 단순 구현 (빈 데이터 메시지만)
+향후 확장 가능한 구조
+IAM 사용자 행 생성 (3250-3300줄):
+
+5개 컬럼: 사용자명, MFA, 액세스 키 개수, 키 생성일, 보안 상태
+보안 체크 로직:
+MFA 활성화 여부
+액세스 키 개수 (다중 키 경고)
+키 생성일 (90일 이상 경과 시 경고)
+종합 보안 상태 (MFA 미설정, 다중 키, 오래된 키)
+가장 오래된 키 기준으로 날짜 표시
+보안 그룹 위험 규칙 행 생성 (3301-3339줄):
+
+7개 컬럼: SG ID, 이름, VPC, 포트, 프로토콜, 소스, 위험도
+각 위험한 규칙을 개별 행으로 표시
+위험도별 CSS 클래스 (critical/high/medium/low)
+0.0.0.0/0 소스는 항상 error 클래스
+유틸리티 함수들 (3340-3400줄):
+
+get_compliance_class(rate) (3340-3348줄):
+
+준수율에 따른 CSS 클래스 반환
+90% 이상=ok, 70% 이상=warning, 미만=critical
+calculate_critical_issues(data) (3349-3400줄):
+
+Critical 이슈 자동 계산 및 그룹화
+IAM MFA 이슈: MFA 미설정 사용자들을 하나로 그룹화
+보안 그룹 이슈: SSH(22), RDP(3389) 포트별로 그룹화
+EBS 암호화 이슈: 미암호화 볼륨 그룹화
+각 이슈별 개수 및 영향받는 리소스 목록 (최대 5개 표시)
+
+3401-3600줄 상세 분석:
+
+Critical 이슈 섹션 생성 (3401-3422줄):
+
+Critical 이슈들을 HTML 섹션으로 변환
+이슈 타입을 사용자 친화적 형태로 변환 (_ → 공백, Title Case)
+경고 박스 형태로 표시 (⚠️ 아이콘 포함)
+Trusted Advisor 데이터 처리 (3423-3461줄):
+
+카테고리별 집계: 보안, 내결함성, 비용 최적화, operational_excellence
+상태별 카운트: error, warning 개수 계산
+Error 항목 테이블 행 생성: 카테고리, 체크명, 상태, 영향받는 리소스 수
+반환값: 카테고리별 통계 + HTML 테이블 행
+CloudTrail 이벤트 행 생성 (3462-3500줄):
+
+발생 횟수 0인 항목 제외 (중요한 필터링)
+5개 컬럼: 이벤트 타입, 심각도, 카테고리, 발생 횟수, 설명
+심각도별 배지 색상 (critical/high/medium)
+특이사항 없음 처리: 모든 이벤트가 0회면 안전 메시지 표시
+CloudWatch 알람 행 생성 (3501-3525줄):
+
+4개 컬럼: 알람명, 상태, 메트릭, 임계값
+상태별 배지 색상 (OK=ok, ALARM=error, INSUFFICIENT_DATA=warning)
+EBS 미암호화 볼륨 섹션 (3526-3545줄):
+
+미암호화 볼륨이 있을 때만 섹션 생성
+최대 10개 볼륨 ID 표시, 초과 시 "외 N개" 표시
+경고 박스 형태로 표시
+S3 보안 이슈 섹션 (3546-3600줄):
+
+두 가지 보안 이슈 체크:
+버저닝 미설정: Status != 'Enabled'
+퍼블릭 액세스 차단 미설정: 4개 설정 중 하나라도 false
+각 이슈별로 별도 경고 박스 생성
+최대 10개 버킷명 표시
+
+3601-3800줄 상세 분석:
+
+S3 보안 이슈 섹션 완료 (3601-3602줄):
+
+섹션 HTML 태그 닫기
+핵심 HTML 보고서 생성 함수 (3603-3800줄):
+
+generate_html_report(json_file_path) 함수 - 전체 보고서 생성의 핵심
+
+1. 기본 설정 (3603-3620줄):
+
+JSON 파일 로드
+HTML 템플릿 파일 읽기 (templates/json_report_template.html)
+메타데이터 추출 (계정 ID, 리전, 날짜 등)
+2. 각 서비스별 데이터 처리 (3621-3720줄):
+
+EC2 데이터: 총 개수, 실행 중, 중지됨, HTML 행 생성
+S3 데이터: 총 개수, 암호화된 개수, 암호화율 계산, HTML 행 생성
+RDS 데이터: 총 개수, Multi-AZ 개수 계산, HTML 콘텐츠 생성
+Lambda 데이터: 총 개수, HTML 콘텐츠 생성
+IAM 데이터: 총 사용자 수, MFA 활성화 수, MFA 비율 계산, HTML 행 생성
+보안 그룹 데이터: 총 개수, 위험한 규칙 수, HTML 행 생성
+3. 암호화 및 준수율 처리 (3721-3740줄):
+
+EBS, RDS 암호화 상태 및 비율 계산
+준수율에 따른 CSS 클래스 설정 (90% 이상=ok, 70% 이상=warning, 미만=critical)
+4. 고급 분석 데이터 처리 (3741-3770줄):
+
+Critical 이슈: 자동 계산 및 HTML 섹션 생성
+Trusted Advisor: 카테고리별 집계 및 테이블 행 생성
+CloudTrail: 중요 이벤트 분석 기간 및 HTML 행 생성
+CloudWatch: 알람 상태별 집계 및 HTML 행 생성
+5. 추가 보안 섹션 (3771-3775줄):
+
+EBS 미암호화 볼륨 섹션
+S3 보안 이슈 섹션
+6. 최종 HTML 생성 및 저장 (3776-3800줄):
+
+템플릿에 모든 변수 적용 (template.format(**template_vars))
+타임스탬프 기반 파일명 생성
+/tmp/reports/ 디렉터리에 HTML 파일 저장
+성공/실패 로깅 및 파일 경로 반환
+Flask 앱 실행 (3801줄):
+
+메인 실행 시 Flask 서버 시작 (0.0.0.0:3000)
+전체 분석 완료!
