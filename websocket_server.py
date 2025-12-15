@@ -18,7 +18,7 @@ class WebSocketServer:
     Reference 코드의 processing_questions 추적 방식을 WebSocket에 적용
     """
     
-    def __init__(self, host: str = "localhost", port: int = 8765):
+    def __init__(self, host: str = "0.0.0.0", port: int = 8765):
         self.host = host
         self.port = port
         
