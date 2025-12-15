@@ -27,15 +27,21 @@ Zendesk App ←→ WebSocket ←→ LangGraph Agent ←→ AWS Tools (Q CLI)
 
 ### ⚠️ 필수 준수사항
 
-1. **사용자 요청 전에 파일 수정/생성/삭제 금지**
+1. **작업 시작 시 환경 확인 (최우선)**
+   - 프로젝트 시작할 때 **반드시** 먼저 질문: "집에서 작업하시나요, 회사에서 작업하시나요?"
+   - 집에서 작업한다고 답하면: WSL 명령어 사용 (wsl bash -c "...")
+   - 회사에서 작업한다고 답하면: 일반 PowerShell 명령어 사용
+   - **이 질문을 빠뜨리지 말 것 - 매우 중요함**
+
+2. **사용자 요청 전에 파일 수정/생성/삭제 금지**
    - 반드시 사용자 확인 후 진행
    - "~해도 될까요?" 형태로 먼저 질문
 
-2. **명확한 확인 후 진행**
+3. **명확한 확인 후 진행**
    - 모호한 상황에서는 반드시 사용자에게 확인
    - 추측하지 말고 정확한 요구사항 파악
 
-3. **간결하고 직접적인 커뮤니케이션**
+4. **간결하고 직접적인 커뮤니케이션**
    - 불필요한 설명 최소화
    - 핵심만 간단명료하게 전달
 
@@ -69,15 +75,18 @@ Zendesk App ←→ WebSocket ←→ LangGraph Agent ←→ AWS Tools (Q CLI)
 
 ### Git 작업 범위
 ```bash
-# Kiro가 실행하는 범위
+# 집에서 작업 시 (WSL 사용)
+wsl bash -c "cd /mnt/c/Users/kimhs/Desktop/Work/Kiro/aws-zendesk-assistant && git add . && git commit -m '메시지' && git push origin main"
+
+# 회사에서 작업 시 (일반 PowerShell)
 git add .
 git commit -m "메시지"
 git push origin main
 ```
 
-### EC2 작업 (사용자 직접 실행)
+### EC2 배포 명령어 (항상 제공)
+**Git push 완료 후 반드시 다음 명령어를 사용자에게 제공:**
 ```bash
-# 사용자가 EC2에서 실행할 명령어 (Kiro가 제공)
 cd /root/aws-zendesk-assistant
 git pull origin main
 sudo pkill -f main.py
@@ -85,7 +94,10 @@ nohup python3 main.py > /tmp/websocket_server.log 2>&1 &
 tail -f /tmp/websocket_server.log
 ```
 
-**중요**: Kiro는 git push까지만 실행하고, EC2 명령어는 사용자에게 제공만 함
+**중요**: 
+- Kiro는 git push까지만 실행
+- EC2 명령어는 사용자에게 제공만 함
+- **매번 git push 후 위 EC2 명령어를 반드시 제공할 것**
 
 ## 현재 상태
 

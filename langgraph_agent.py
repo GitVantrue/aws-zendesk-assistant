@@ -361,7 +361,7 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                 "authenticated": True
             }
         elif question_type in ["cloudtrail", "cloudwatch", "general"]:
-            # Q CLI 직접 호출 (1단계 구현)
+            # Q CLI 직접 호출
             from aws_tools.q_cli import call_q_cli
             
             q_result = await call_q_cli(

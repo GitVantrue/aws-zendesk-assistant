@@ -58,9 +58,10 @@ async def call_q_cli(
         log_debug(f"Q CLI 완료. 반환코드: {result.returncode}")
         
         # 5. 결과 처리
-        if result.returncode == 0:
-            raw_answer = result.stdout.strip()
-            # Reference 코드와 동일한 출력 정리 적용
+        raw_answer = result.stdout.strip() if result.stdout else ""
+        
+        if result.returncode == 0 and raw_answer:
+            # 정상 성공
             clean_answer = clean_q_cli_output(raw_answer)
             log_info(f"Q CLI 성공: {len(clean_answer)} 문자 (원본: {len(raw_answer)})")
             
@@ -73,8 +74,23 @@ async def call_q_cli(
                 "stdout": result.stdout,
                 "stderr": result.stderr
             }
+        elif raw_answer:
+            # returncode가 0이 아니지만 출력이 있는 경우 (Q CLI 특성상 가능)
+            clean_answer = clean_q_cli_output(raw_answer)
+            log_info(f"Q CLI 부분 성공 (코드: {result.returncode}): {len(clean_answer)} 문자")
+            
+            return {
+                "success": True,
+                "answer": clean_answer,
+                "question": question,
+                "question_type": question_type,
+                "account_id": account_id,
+                "stdout": result.stdout,
+                "stderr": result.stderr
+            }
         else:
-            error_msg = result.stderr.strip() or "Q CLI 실행 실패"
+            # 실제 실패
+            error_msg = result.stderr.strip() or f"Q CLI 실행 실패 (코드: {result.returncode})"
             log_error(f"Q CLI 실패: {error_msg}")
             
             return {
@@ -280,7 +296,61 @@ def clean_q_cli_output(text: str) -> str:
         r'.*new lines.*',
         r'╭.*╮',
         r'│.*│',
-        r'╰.*╯'
+        r'╰.*╯',
+        # 추가 정리 패턴
+        r'.*Requirement already satisfied.*',
+        r'.*Collecting.*',
+        r'.*Downloading.*',
+        r'.*Successfully installed.*',
+        r'.*Successfully uninstalled.*',
+        r'.*Attempting uninstall.*',
+        r'.*Found existing installation.*',
+        r'.*WARNING: Running pip as.*',
+        r'.*PythonDeprecationWarning.*',
+        r'.*warnings\.warn.*',
+        r'.*filters:.*',
+        r'.*which aws.*',
+        r'.*urllib3 available.*',
+        r'.*boto3 available.*',
+        r'.*python3 -c.*',
+        r'.*import boto3.*',
+        r'.*import json.*',
+        r'.*from datetime.*',
+        r'.*ec2 = boto3.*',
+        r'.*try:.*',
+        r'.*except.*',
+        r'.*print\(.*',
+        r'.*response = ec2.*',
+        r'.*running_instances.*',
+        r'.*for reservation.*',
+        r'.*for instance.*',
+        r'.*name_tag.*',
+        r'.*if.*Tags.*',
+        r'.*for tag.*',
+        r'.*if tag.*Key.*',
+        r'.*break.*',
+        r'.*append.*',
+        r'.*InstanceId.*',
+        r'.*Name.*',
+        r'.*InstanceType.*',
+        r'.*State.*',
+        r'.*LaunchTime.*',
+        r'.*PrivateIpAddress.*',
+        r'.*PublicIpAddress.*',
+        r'.*VpcId.*',
+        r'.*SubnetId.*',
+        r'.*strftime.*',
+        r'.*get\(.*',
+        r'.*enumerate.*',
+        r'.*curl -s.*',
+        r'.*connect-timeout.*',
+        r'.*meta-data.*',
+        r'.*echo.*',
+        r'.*sts = boto3.*',
+        r'.*identity = sts.*',
+        r'.*get_caller_identity.*',
+        r'.*env \| grep.*',
+        r'.*AWS_.*=.*'
     ]
 
     lines = clean_text.split('\n')
