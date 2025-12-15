@@ -27,6 +27,10 @@ class HybridServer:
         # 연결된 클라이언트 관리
         self.connected_clients: Dict[str, Any] = {}
         
+        # Heartbeat 관리
+        self.heartbeat_interval = 30  # 30초마다 ping
+        self.heartbeat_task = None
+        
         # HTTP 앱
         self.app = web.Application()
         self.setup_routes()
@@ -71,7 +75,12 @@ class HybridServer:
         try:
             async for msg in ws:
                 if msg.type == WSMsgType.TEXT:
-                    await self.handle_websocket_message(client_id, msg.data)
+                    data = json.loads(msg.data)
+                    if data.get("type") == "ping":
+                        # Ping에 대한 Pong 응답
+                        await ws.send_str(json.dumps({"type": "pong", "timestamp": datetime.now().isoformat()}))
+                    else:
+                        await self.handle_websocket_message(client_id, msg.data)
                 elif msg.type == WSMsgType.ERROR:
                     log_error(f'WebSocket 오류: {ws.exception()}')
                     break
@@ -220,13 +229,48 @@ class HybridServer:
         log_info(f"HTTP 헬스체크: http://{self.host}:{self.port}/health")
         log_info(f"WebSocket 연결: ws://{self.host}:{self.port}/ws")
         
+        # Heartbeat 시작
+        self.heartbeat_task = asyncio.create_task(self.heartbeat_loop())
+        
         # 서버 실행 유지
         try:
             while True:
                 await asyncio.sleep(1)
         except KeyboardInterrupt:
             log_info("서버 종료 중...")
+            if self.heartbeat_task:
+                self.heartbeat_task.cancel()
             await runner.cleanup()
+    
+    async def heartbeat_loop(self):
+        """주기적으로 클라이언트에게 ping 전송"""
+        while True:
+            try:
+                await asyncio.sleep(self.heartbeat_interval)
+                
+                # 연결된 모든 클라이언트에게 ping 전송
+                disconnected_clients = []
+                for client_id, ws in self.connected_clients.items():
+                    try:
+                        ping_message = {
+                            "type": "ping",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        await ws.send_str(json.dumps(ping_message))
+                        log_debug(f"Heartbeat 전송: {client_id}")
+                    except Exception as e:
+                        log_debug(f"Heartbeat 실패, 클라이언트 제거: {client_id} - {e}")
+                        disconnected_clients.append(client_id)
+                
+                # 연결이 끊어진 클라이언트 정리
+                for client_id in disconnected_clients:
+                    if client_id in self.connected_clients:
+                        del self.connected_clients[client_id]
+                        
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log_error(f"Heartbeat 루프 오류: {e}")
     
     def get_server_stats(self) -> Dict[str, Any]:
         """서버 통계 정보 반환"""

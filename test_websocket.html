@@ -67,6 +67,12 @@
                             addMessage(`결과: ${data.data.answer}`, 'success');
                         } else if (data.type === 'error') {
                             addMessage(`오류: ${data.message}`, 'error');
+                        } else if (data.type === 'ping') {
+                            // 서버 ping에 대한 pong 응답
+                            ws.send(JSON.stringify({type: 'pong', timestamp: new Date().toISOString()}));
+                            console.log('Heartbeat: ping received, pong sent');
+                        } else if (data.type === 'pong') {
+                            console.log('Heartbeat: pong received');
                         }
                     } catch (e) {
                         addMessage(`메시지 파싱 오류: ${event.data}`, 'error');
