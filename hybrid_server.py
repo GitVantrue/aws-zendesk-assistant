@@ -75,11 +75,19 @@ class HybridServer:
         try:
             async for msg in ws:
                 if msg.type == WSMsgType.TEXT:
-                    data = json.loads(msg.data)
-                    if data.get("type") == "ping":
-                        # Ping에 대한 Pong 응답
-                        await ws.send_str(json.dumps({"type": "pong", "timestamp": datetime.now().isoformat()}))
-                    else:
+                    try:
+                        data = json.loads(msg.data)
+                        if data.get("type") == "ping":
+                            # 클라이언트 ping에 대한 Pong 응답
+                            await ws.send_str(json.dumps({"type": "pong", "timestamp": datetime.now().isoformat()}))
+                        elif data.get("type") == "pong":
+                            # 서버 ping에 대한 클라이언트 pong 응답 - 무시
+                            log_debug(f"Pong 수신: {client_id}")
+                        else:
+                            # 일반 질문 메시지 처리
+                            await self.handle_websocket_message(client_id, msg.data)
+                    except json.JSONDecodeError:
+                        # JSON이 아닌 메시지는 일반 메시지로 처리
                         await self.handle_websocket_message(client_id, msg.data)
                 elif msg.type == WSMsgType.ERROR:
                     log_error(f'WebSocket 오류: {ws.exception()}')
