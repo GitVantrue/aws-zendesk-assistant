@@ -73,7 +73,21 @@
                         } else if (data.type === 'progress') {
                             addMessage(`진행: ${data.message}`, 'info');
                         } else if (data.type === 'result') {
-                            addMessage(`결과: ${data.data.answer}`, 'success');
+                            // 마크다운 스타일 텍스트를 HTML로 간단 변환
+                            let formattedAnswer = data.data.answer
+                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **bold**
+                                .replace(/\*(.*?)\*/g, '<em>$1</em>')              // *italic*
+                                .replace(/`(.*?)`/g, '<code>$1</code>')            // `code`
+                                .replace(/### (.*?)$/gm, '<h3>$1</h3>')           // ### header
+                                .replace(/## (.*?)$/gm, '<h2>$1</h2>')            // ## header
+                                .replace(/# (.*?)$/gm, '<h1>$1</h1>')             // # header
+                                .replace(/\n/g, '<br>');                          // 줄바꿈
+                            
+                            const div = document.createElement('div');
+                            div.style.color = 'green';
+                            div.innerHTML = `[${new Date().toLocaleTimeString()}] 결과:<br><div style="margin-left: 10px; margin-top: 5px;">${formattedAnswer}</div>`;
+                            messages.appendChild(div);
+                            messages.scrollTop = messages.scrollHeight;
                         } else if (data.type === 'error') {
                             addMessage(`오류: ${data.message}`, 'error');
                         } else if (data.type === 'ping') {
