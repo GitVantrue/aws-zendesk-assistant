@@ -5,7 +5,7 @@ AWS Zendesk Assistant - WebSocket Server
 import asyncio
 import signal
 import sys
-from websocket_server import WebSocketServer
+from hybrid_server import HybridServer
 from utils.logging_config import setup_logging, log_info, log_error
 
 
@@ -16,8 +16,8 @@ async def main():
     
     log_info("AWS Zendesk Assistant 시작")
     
-    # WebSocket 서버 생성 (외부 접근 허용)
-    server = WebSocketServer(host="0.0.0.0", port=8765)
+    # Hybrid 서버 생성 (HTTP + WebSocket)
+    server = HybridServer(host="0.0.0.0", port=8765)
     
     # 종료 시그널 핸들러
     def signal_handler(signum, frame):

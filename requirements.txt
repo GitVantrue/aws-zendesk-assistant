@@ -13,6 +13,9 @@ botocore>=1.42.0
 # HTTP 요청
 requests>=2.31.0
 
+# HTTP/WebSocket 하이브리드 서버
+aiohttp>=3.8.0
+
 # Property-based testing
 hypothesis>=6.100.0
 

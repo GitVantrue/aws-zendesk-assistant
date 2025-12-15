@@ -46,7 +46,7 @@
         
         connectBtn.addEventListener('click', () => {
             try {
-                ws = new WebSocket('ws://localhost:8765');
+                ws = new WebSocket('ws://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com:8765/ws');
                 
                 ws.onopen = () => {
                     addMessage('✅ WebSocket 연결 성공!', 'success');
