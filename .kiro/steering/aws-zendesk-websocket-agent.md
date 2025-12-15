@@ -102,17 +102,28 @@ tail -f /tmp/websocket_server.log
 ## 현재 상태
 
 ### ✅ 완료된 작업
-- 기존 코드 정리 완료
-- Reference 파일 보존 (`reference_slack_bot.py`, `reference_contexts/`, `reference_templates/`)
-- 깨끗한 프로젝트 구조 준비
+- **프로젝트 구조**: 기존 코드 정리, Reference 파일 보존 완료
+- **스펙 문서**: Requirements → Design → Tasks 문서 작성 완료
+- **WebSocket 서버**: Hybrid HTTP/WebSocket 서버 구현 완료 (ALB 호환)
+- **하트비트**: 20초 간격 ping/pong으로 연결 지속성 확보
+- **AWS 인증**: Cross-account 인증 시스템 구현 완료
+- **LangGraph 에이전트**: 질문 라우팅 및 워크플로우 구현 완료
+- **Q CLI 통합**: general/cloudtrail/cloudwatch 질문 처리 완료
+- **MCP 서버**: 3개 MCP 서버 모두 실행 중 (aws-knowledge, cloudtrail, cloudwatch)
+- **출력 정리**: Q CLI 응답에서 불필요한 로그 제거 완료
+- **HTML 테스트**: 마크다운 렌더링 지원하는 테스트 환경 완료
 
-### 🎯 다음 단계
-1. 새로운 스펙 문서 작성 (Requirements → Design → Tasks)
-2. LangGraph 기반 WebSocket 서버 구현
-3. Reference 로직을 LangGraph Tool로 변환
-4. 로컬 테스트 및 검증
-5. EC2 배포 및 통합 테스트
-6. Zendesk 앱 개발
+### 🔧 기술 상세
+- **WebSocket**: aiohttp 기반 hybrid 서버 (HTTP 헬스체크 + WebSocket)
+- **인증**: Parameter Store → STS assume role → 임시 자격증명
+- **Q CLI**: MCP 서버 활용으로 고품질 AWS 분석 및 한국어 답변
+- **컨텍스트**: 질문 유형별 전용 컨텍스트 파일 자동 로드
+- **환경변수**: Reference 코드와 동일한 AWS 설정 (EC2 메타데이터 비활성화 등)
+
+### 🎯 다음 단계 (우선순위)
+1. **Service Screener 구현** (Task 5) - Python 스크립트 + Q CLI 분석
+2. **보안 보고서 구현** (Task 6) - boto3 수집 + Q CLI 분석 + HTML 생성
+3. **Zendesk 앱 개발** (최종 단계)
 
 ## 핵심 원칙
 
