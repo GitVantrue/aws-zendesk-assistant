@@ -15,7 +15,7 @@ async def call_q_cli(
     credentials: Optional[Dict[str, str]] = None,
     context_file: Optional[str] = None,
     question_type: str = "general",
-    timeout: int = 300
+    timeout: int = 600
 ) -> Dict[str, Any]:
     """
     Q CLI 호출 (Reference 코드 로직 재사용)
@@ -41,7 +41,7 @@ async def call_q_cli(
         env_vars = build_environment(credentials)
         
         # 3. Q CLI 명령어 구성
-        cmd = ['/root/.local/bin/q', 'chat', '--no-interactive', prompt]
+        cmd = ['/root/.local/bin/q', 'chat', '--no-interactive', '--trust-all-tools', prompt]
         
         log_debug(f"Q CLI 명령어: {' '.join(cmd[:3])}... (프롬프트 생략)")
         log_debug(f"타임아웃: {timeout}초")
@@ -186,9 +186,17 @@ def clean_q_cli_output(text: str) -> str:
     Q CLI 출력 정리 - Reference 코드의 simple_clean_output 로직 재사용
     도구 사용 내역 제거하고 깔끔한 답변만 추출
     """
-    # ANSI 색상 코드 제거
+    if not text or not text.strip():
+        return "응답을 처리할 수 없습니다."
+    
+    # ANSI 색상 코드 및 특수 문자 제거
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     clean_text = ansi_escape.sub('', text)
+    
+    # 유니코드 박스 문자 및 로딩 애니메이션 제거
+    clean_text = re.sub(r'[⢀-⣿]+', '', clean_text)  # Braille 패턴 (로딩 애니메이션)
+    clean_text = re.sub(r'[╭╮╯╰─│┌┐└┘├┤┬┴┼]', '', clean_text)  # 박스 문자
+    clean_text = re.sub(r'[•●○◦▪▫]', '', clean_text)  # 불릿 포인트
 
     # 도구 사용 및 명령어 실행 관련 라인 제거 패턴
     tool_patterns = [
@@ -255,7 +263,24 @@ def clean_q_cli_output(text: str) -> str:
         r'.*kB.*00:00.*',
         r'.*Transaction check.*',
         r'.*Transaction test.*',
-        r'.*Preparing.*:.*'
+        r'.*Preparing.*:.*',
+        # Q CLI 특화 패턴 추가
+        r'.*Kiro CLI.*',
+        r'.*Q Developer CLI.*',
+        r'.*kiro\.dev.*',
+        r'.*ctrl \+ j.*',
+        r'.*ctrl \+ s.*',
+        r'.*━+.*',
+        r'.*You are chatting with.*',
+        r'.*error: Tool approval required.*',
+        r'.*Use --trust-all-tools.*',
+        r'.*--no-interactive was specified.*',
+        r'.*help all commands.*',
+        r'.*fuzzy search.*',
+        r'.*new lines.*',
+        r'╭.*╮',
+        r'│.*│',
+        r'╰.*╯'
     ]
 
     lines = clean_text.split('\n')

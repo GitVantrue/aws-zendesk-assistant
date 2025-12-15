@@ -28,7 +28,7 @@ class HybridServer:
         self.connected_clients: Dict[str, Any] = {}
         
         # Heartbeat 관리
-        self.heartbeat_interval = 30  # 30초마다 ping
+        self.heartbeat_interval = 20  # 20초마다 ping (더 자주)
         self.heartbeat_task = None
         
         # HTTP 앱

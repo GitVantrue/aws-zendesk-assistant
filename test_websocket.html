@@ -28,6 +28,7 @@
     <script>
         let ws = null;
         let messageId = 1;
+        let clientHeartbeat = null;
         
         const connectBtn = document.getElementById('connectBtn');
         const disconnectBtn = document.getElementById('disconnectBtn');
@@ -54,6 +55,14 @@
                     connectBtn.disabled = true;
                     disconnectBtn.disabled = false;
                     sendBtn.disabled = false;
+                    
+                    // 클라이언트 측 하트비트 시작 (25초마다)
+                    clientHeartbeat = setInterval(() => {
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({type: 'ping', timestamp: new Date().toISOString()}));
+                            console.log('Client heartbeat: ping sent');
+                        }
+                    }, 25000);
                 };
                 
                 ws.onmessage = (event) => {
@@ -85,6 +94,12 @@
                     connectBtn.disabled = false;
                     disconnectBtn.disabled = true;
                     sendBtn.disabled = true;
+                    
+                    // 클라이언트 하트비트 정리
+                    if (clientHeartbeat) {
+                        clearInterval(clientHeartbeat);
+                        clientHeartbeat = null;
+                    }
                 };
                 
                 ws.onerror = (error) => {
@@ -99,6 +114,10 @@
         disconnectBtn.addEventListener('click', () => {
             if (ws) {
                 ws.close();
+            }
+            if (clientHeartbeat) {
+                clearInterval(clientHeartbeat);
+                clientHeartbeat = null;
             }
         });
         

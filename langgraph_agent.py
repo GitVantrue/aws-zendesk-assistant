@@ -370,7 +370,7 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                 credentials=credentials,
                 context_file=state.get("context_file"),
                 question_type=question_type,
-                timeout=300
+                timeout=600
             )
             
             if q_result["success"]:
