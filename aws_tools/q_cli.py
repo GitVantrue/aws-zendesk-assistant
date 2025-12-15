@@ -4,6 +4,7 @@ Reference 코드의 Q CLI 호출 로직 재사용
 """
 import subprocess
 import os
+import re
 from typing import Dict, Optional, Any
 from utils.logging_config import log_debug, log_error, log_info
 
@@ -58,12 +59,14 @@ async def call_q_cli(
         
         # 5. 결과 처리
         if result.returncode == 0:
-            answer = result.stdout.strip()
-            log_info(f"Q CLI 성공: {len(answer)} 문자")
+            raw_answer = result.stdout.strip()
+            # Reference 코드와 동일한 출력 정리 적용
+            clean_answer = clean_q_cli_output(raw_answer)
+            log_info(f"Q CLI 성공: {len(clean_answer)} 문자 (원본: {len(raw_answer)})")
             
             return {
                 "success": True,
-                "answer": answer,
+                "answer": clean_answer,
                 "question": question,
                 "question_type": question_type,
                 "account_id": account_id,
@@ -176,3 +179,104 @@ def build_environment(credentials: Optional[Dict[str, str]]) -> Dict[str, str]:
     env_vars['LC_ALL'] = 'ko_KR.UTF-8'
     
     return env_vars
+
+
+def clean_q_cli_output(text: str) -> str:
+    """
+    Q CLI 출력 정리 - Reference 코드의 simple_clean_output 로직 재사용
+    도구 사용 내역 제거하고 깔끔한 답변만 추출
+    """
+    # ANSI 색상 코드 제거
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    clean_text = ansi_escape.sub('', text)
+
+    # 도구 사용 및 명령어 실행 관련 라인 제거 패턴
+    tool_patterns = [
+        r'🛠️.*',
+        r'●\s+.*',
+        r'✓\s+.*',
+        r'↳\s+Purpose:.*',
+        r'Service name:.*',
+        r'Operation name:.*',
+        r'Parameters:.*',
+        r'Region:.*',
+        r'Label:.*',
+        r'⋮.*',
+        r'.*Using tool:.*',
+        r'.*Running.*command:.*',
+        r'.*Completed in.*',
+        r'.*Execution.*',
+        r'.*Reading (file|directory):.*',
+        r'.*Successfully read.*',
+        r'.*I will run the following.*',
+        r'^>.*',
+        r'- Name:.*',
+        r'- MaxItems:.*',
+        r'- Bucket:.*',
+        r'- UserName:.*',
+        r'\+\s+\d+:.*',
+        r'^\s*\d+:.*',
+        r'^total \d+',
+        r'^drwx.*',
+        r'^-rw.*',
+        r'^lrwx.*',
+        r'^/root/.*',
+        r'.*which:.*',
+        r'.*pip.*install.*',
+        r'.*apt.*update.*',
+        r'.*yum.*install.*',
+        r'.*git clone.*',
+        r'.*bash: line.*',
+        r'.*command not found.*',
+        r'.*Package.*is already installed.*',
+        r'.*Dependencies resolved.*',
+        r'.*Transaction Summary.*',
+        r'.*Downloading Packages.*',
+        r'.*Running transaction.*',
+        r'.*Installing.*:.*',
+        r'.*Verifying.*:.*',
+        r'.*Complete!.*',
+        r'.*ERROR: Could not find.*',
+        r'.*WARNING:.*pip version.*',
+        r'.*Last metadata expiration.*',
+        r'.*Nothing to do.*',
+        r'.*fatal: destination path.*',
+        r'.*cd /root.*',
+        r'.*ls -la.*',
+        r'.*A newer release.*',
+        r'.*Available Versions.*',
+        r'.*Run the following command.*',
+        r'.*dnf upgrade.*',
+        r'.*Release notes.*',
+        r'.*Installed:.*',
+        r'.*Total download size:.*',
+        r'.*Installed size:.*',
+        r'.*MB/s.*',
+        r'.*kB.*00:00.*',
+        r'.*Transaction check.*',
+        r'.*Transaction test.*',
+        r'.*Preparing.*:.*'
+    ]
+
+    lines = clean_text.split('\n')
+    filtered_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        
+        # 불필요한 도구 실행 패턴 제거
+        skip_line = False
+        for pattern in tool_patterns:
+            if re.match(pattern, stripped, re.IGNORECASE):
+                skip_line = True
+                break
+
+        # 패턴에 매칭되지 않고 내용이 있는 줄만 유지
+        if not skip_line and stripped:
+            filtered_lines.append(stripped)
+
+    # 결과 정리
+    result = '\n'.join(filtered_lines)
+    result = re.sub(r'\n{3,}', '\n\n', result)  # 연속된 빈 줄 정리
+
+    return result.strip() if result.strip() else "응답을 처리할 수 없습니다."
