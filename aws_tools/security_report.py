@@ -1201,7 +1201,57 @@ def generate_lambda_content(functions):
     if not functions:
         return '<div class="no-data">Lambda 함수가 없습니다</div>'
     
-    return '<div class="no-data">Lambda 함수가 없습니다</div>'
+    # Lambda 함수 목록을 HTML 테이블로 생성
+    rows = []
+    for func in functions:
+        function_name = func.get('FunctionName', 'N/A')
+        runtime = func.get('Runtime', 'N/A')
+        memory_size = func.get('MemorySize', 'N/A')
+        timeout = func.get('Timeout', 'N/A')
+        last_modified = func.get('LastModified', 'N/A')
+        
+        # 날짜 포맷팅
+        if last_modified != 'N/A':
+            try:
+                from datetime import datetime
+                # ISO 8601 형식 파싱
+                dt = datetime.fromisoformat(last_modified.replace('Z', '+00:00'))
+                last_modified = dt.strftime('%Y-%m-%d %H:%M')
+            except:
+                pass
+        
+        # 런타임 상태 체크 (deprecated 런타임 확인)
+        deprecated_runtimes = ['python2.7', 'python3.6', 'nodejs8.10', 'nodejs10.x', 'dotnetcore2.1', 'ruby2.5']
+        runtime_class = 'warning' if runtime in deprecated_runtimes else 'ok'
+        
+        rows.append(f"""
+        <tr>
+            <td><strong>{function_name}</strong></td>
+            <td class="{runtime_class}">{runtime}</td>
+            <td>{memory_size} MB</td>
+            <td>{timeout}초</td>
+            <td>{last_modified}</td>
+        </tr>
+        """)
+    
+    table_html = f"""
+    <table class="resource-table">
+        <thead>
+            <tr>
+                <th>함수명</th>
+                <th>런타임</th>
+                <th>메모리</th>
+                <th>타임아웃</th>
+                <th>최종 수정일</th>
+            </tr>
+        </thead>
+        <tbody>
+            {''.join(rows)}
+        </tbody>
+    </table>
+    """
+    
+    return table_html
 
 def generate_iam_users_rows(users):
     """IAM 사용자 테이블 행 생성"""
