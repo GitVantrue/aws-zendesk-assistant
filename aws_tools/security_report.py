@@ -562,6 +562,48 @@ def generate_html_report(json_file_path):
             'cw_content': generate_cloudwatch_content(cw_data.get('alarms', [])),
         })
         
+        # 누락된 템플릿 변수들 추가
+        template_vars.update({
+            # Critical issues
+            'critical_issues_section': '',  # 빈 섹션으로 설정
+            'critical_issues_count': 0,
+            
+            # EBS 암호화 관련
+            'ebs_compliance_class': 'critical' if ebs_rate < 50 else ('warning' if ebs_rate < 80 else ''),
+            
+            # S3 암호화 관련  
+            's3_compliance_class': 'critical' if s3_encrypted_rate < 50 else ('warning' if s3_encrypted_rate < 80 else ''),
+            
+            # RDS 암호화 관련
+            'rds_encrypted': 0,
+            'rds_encrypted_rate': 0,
+            'rds_compliance_class': 'critical',
+            
+            # Trusted Advisor 관련
+            'ta_security_error': 0,
+            'ta_security_warning': 0,
+            'ta_fault_tolerance_error': 0,
+            'ta_fault_tolerance_warning': 0,
+            'ta_cost_warning': 0,
+            'ta_performance_warning': 0,
+            'ta_error_rows': '<tr><td colspan="4" class="text-center text-muted">Trusted Advisor 데이터를 사용할 수 없습니다.</td></tr>',
+            
+            # CloudTrail 관련
+            'cloudtrail_days': 30,
+            'cloudtrail_critical_rows': '<tr><td colspan="5" class="text-center text-muted">분석 기간 중 중요 이벤트가 없습니다.</td></tr>',
+            
+            # CloudWatch 관련
+            'cloudwatch_alarms_total': cw_data.get('total_alarms', 0),
+            'cloudwatch_alarms_in_alarm': 0,
+            'cloudwatch_alarms_ok': 0,
+            'cloudwatch_alarms_insufficient': 0,
+            'cloudwatch_alarm_rows': '<tr><td colspan="4" class="text-center text-muted">CloudWatch 알람이 없습니다.</td></tr>',
+            
+            # 기타 섹션들
+            'ebs_unencrypted_section': '',
+            's3_security_issues_section': '',
+        })
+        
         # 템플릿 변수 치환
         html_content = template.format(**template_vars)
         
