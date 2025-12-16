@@ -590,14 +590,15 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                         "authenticated": True
                     }
                     
-            except Exception as e:
-                result = {
-                    "question": state["question"],
-                    "answer": f"❌ Service Screener 실행 중 오류가 발생했습니다: {str(e)}",
-                    "question_type": question_type,
-                    "account_id": account_id,
-                    "authenticated": True
-                }
+                except Exception as e:
+                    result = {
+                        "question": state["question"],
+                        "answer": f"❌ Service Screener 실행 중 오류가 발생했습니다: {str(e)}",
+                        "question_type": question_type,
+                        "account_id": account_id,
+                        "authenticated": True
+                    }
+        
         elif question_type == "report" and account_id and credentials:
             # 월간 보고서 생성 (기존 reference 코드 방식 사용)
             from aws_tools.security_report import collect_raw_security_data, generate_html_report
