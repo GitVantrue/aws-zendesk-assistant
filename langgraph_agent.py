@@ -495,14 +495,63 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
         
         # 실제 AWS 작업 실행
         if question_type == "screener" and account_id and credentials:
-            # TODO: Task 5에서 Service Screener 구현
-            result = {
-                "question": state["question"],
-                "answer": f"Service Screener 기능은 아직 구현 중입니다. (계정: {account_id})",
-                "question_type": question_type,
-                "account_id": account_id,
-                "authenticated": True
-            }
+            # Service Screener 실행
+            from aws_tools.screener import run_service_screener
+            
+            try:
+                # 진행 상황 업데이트
+                await send_websocket_progress(state, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...")
+                await send_websocket_progress(state, "📍 스캔 리전: ap-northeast-2, us-east-1")
+                await send_websocket_progress(state, "⏱️ 약 2-5분 소요될 수 있습니다...")
+                
+                # Service Screener 실행
+                screener_result = run_service_screener(account_id, credentials)
+                
+                if screener_result["success"]:
+                    # 성공 - 결과 메시지 구성
+                    answer_parts = [f"✅ Service Screener 스캔 완료!\n"]
+                    
+                    # 요약 정보 추가
+                    if screener_result["summary"]:
+                        answer_parts.append(screener_result["summary"])
+                    
+                    # 보고서 URL 추가
+                    if screener_result["report_url"]:
+                        answer_parts.append(f"\n📊 **Service Screener 상세 보고서 (영문)**:")
+                        answer_parts.append(f"[Service Screener 보고서 보기]({screener_result['report_url']})")
+                    
+                    # WA Summary URL 추가
+                    if screener_result["wa_report_url"]:
+                        answer_parts.append(f"\n📋 **Well-Architected 통합 분석 보고서 (영문)**:")
+                        answer_parts.append(f"[WA 통합 보고서 보기]({screener_result['wa_report_url']})")
+                    
+                    answer = "\n".join(answer_parts)
+                    
+                    result = {
+                        "question": state["question"],
+                        "answer": answer,
+                        "question_type": question_type,
+                        "account_id": account_id,
+                        "authenticated": True
+                    }
+                else:
+                    # 실패
+                    result = {
+                        "question": state["question"],
+                        "answer": f"❌ Service Screener 실행 실패:\n{screener_result['error']}",
+                        "question_type": question_type,
+                        "account_id": account_id,
+                        "authenticated": True
+                    }
+                    
+            except Exception as e:
+                result = {
+                    "question": state["question"],
+                    "answer": f"❌ Service Screener 실행 중 오류가 발생했습니다: {str(e)}",
+                    "question_type": question_type,
+                    "account_id": account_id,
+                    "authenticated": True
+                }
         elif question_type == "report" and account_id and credentials:
             # 월간 보고서 생성 (기존 reference 코드 방식 사용)
             from aws_tools.security_report import collect_raw_security_data, generate_html_report
