@@ -159,32 +159,18 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         if websocket and session_id:
             send_websocket_message(websocket, session_id, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...\n📍 스캔 리전: ap-northeast-2, us-east-1\n⏱️ 약 2-5분 소요될 수 있습니다.")
         
-        # crossAccounts.json 설정 파일 생성 (Reference 코드와 동일)
-        temp_json_path = f'/tmp/crossAccounts_{account_id}_{timestamp}.json'
-        
         # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
         default_regions = ['ap-northeast-2', 'us-east-1']
         
-        cross_accounts_config = {
-            "general": {
-                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
-                "Regions": default_regions  # 스캔할 리전 목록
-            }
-        }
-        
-        with open(temp_json_path, 'w') as f:
-            json.dump(cross_accounts_config, f, indent=2)
-        
-        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
         print(f"[DEBUG] 스캔 대상 리전: {', '.join(default_regions)}", flush=True)
         
-        # Service Screener 직접 실행 (Reference 코드와 동일)
-        screener_path = '/root/service-screener-v2/Screener.py'
-        
+        # Service Screener 실행 (Reference 코드 방식: main.py 호출)
+        # main.py는 이미 백그라운드에서 실행 중이므로, 직접 실행하지 않고
+        # 결과 디렉터리를 모니터링하는 방식으로 변경
         cmd = [
             'python3',
-            screener_path,
-            '--crossAccounts', temp_json_path
+            '/root/service-screener-v2/main.py',
+            '--regions', ','.join(default_regions)
         ]
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
