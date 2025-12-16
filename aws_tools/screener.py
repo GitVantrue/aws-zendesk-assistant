@@ -142,8 +142,9 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 "error": f"계정 검증 실패: {verify_result.stderr[:200]}"
             }
         
-        # 기존 Service Screener 결과 삭제 (실제 경로 기준)
-        old_result_dir = f'/root/service-screener-v2/aws/{account_id}'
+        # 기존 Service Screener 결과 삭제 (Reference 코드 방식)
+        # adminlte/aws 경로에 결과가 저장되므로 이 경로를 삭제
+        old_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
         if os.path.exists(old_result_dir):
             print(f"[DEBUG] 기존 결과 삭제: {old_result_dir}", flush=True)
             shutil.rmtree(old_result_dir)
