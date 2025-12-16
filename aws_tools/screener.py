@@ -97,6 +97,25 @@ def run_service_screener(account_id, credentials=None):
         except Exception as e:
             print(f"[ERROR] crossAccounts.json 읽기 실패: {e}", flush=True)
         
+        # 먼저 Service Screener 도움말 확인
+        help_cmd = ['python3', screener_path, '--help']
+        print(f"[DEBUG] Service Screener 도움말 확인: {' '.join(help_cmd)}", flush=True)
+        
+        help_result = subprocess.run(
+            help_cmd,
+            capture_output=True,
+            text=True,
+            env=env_vars,
+            timeout=30,
+            cwd='/root/service-screener-v2'
+        )
+        
+        print(f"[DEBUG] 도움말 반환코드: {help_result.returncode}", flush=True)
+        if help_result.stdout:
+            print(f"[DEBUG] 도움말 stdout:\n{help_result.stdout}", flush=True)
+        if help_result.stderr:
+            print(f"[DEBUG] 도움말 stderr:\n{help_result.stderr}", flush=True)
+        
         cmd = [
             'python3',
             screener_path,
