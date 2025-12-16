@@ -569,27 +569,27 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                         session_id=state.get("client_id")  # session_id -> client_id 수정
                     )
                 
-                if screener_result["success"]:
-                    # 비동기 시작 성공 - 즉시 응답
-                    answer = screener_result["message"]
-                    
-                    result = {
-                        "question": state["question"],
-                        "answer": answer,
-                        "question_type": question_type,
-                        "account_id": account_id,
-                        "authenticated": True
-                    }
-                else:
-                    # 실패
-                    result = {
-                        "question": state["question"],
-                        "answer": f"❌ Service Screener 실행 실패:\n{screener_result['error']}",
-                        "question_type": question_type,
-                        "account_id": account_id,
-                        "authenticated": True
-                    }
-                    
+                    if screener_result["success"]:
+                        # 비동기 시작 성공 - 즉시 응답
+                        answer = screener_result["message"]
+                        
+                        result = {
+                            "question": state["question"],
+                            "answer": answer,
+                            "question_type": question_type,
+                            "account_id": account_id,
+                            "authenticated": True
+                        }
+                    else:
+                        # 실패
+                        result = {
+                            "question": state["question"],
+                            "answer": f"❌ Service Screener 실행 실패:\n{screener_result['error']}",
+                            "question_type": question_type,
+                            "account_id": account_id,
+                            "authenticated": True
+                        }
+                        
                 except Exception as e:
                     result = {
                         "question": state["question"],
