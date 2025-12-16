@@ -101,11 +101,11 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
         scan_regions = ['ap-northeast-2', 'us-east-1']
         
-        # crossAccounts.json 생성 (Reference 코드와 동일)
+        # crossAccounts.json 생성 (Reference 코드와 완전히 동일)
         temp_json_path = f'/tmp/crossAccounts_{account_id}.json'
         cross_accounts_config = {
-            account_id: {
-                "role_arn": f"arn:aws:iam::{account_id}:role/SaltwareCrossAccount",
+            "general": {
+                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
                 "Regions": scan_regions  # 스캔할 리전 목록
             }
         }
@@ -242,26 +242,27 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             # 스캔이 백그라운드에서 계속 진행될 수 있음
             print(f"[DEBUG] 추가 대기 중... (CloudFormation 오류 무시)", flush=True)
             
-            # 추가 대기 (스캔이 완료될 때까지)
+            # Reference 코드와 동일: 더 긴 대기 시간 (15분)
             import time
-            for wait_count in range(300):  # 600초 = 300 * 2초 (10분)
+            for wait_count in range(450):  # 900초 = 450 * 2초 (15분)
                 time.sleep(2)
                 if os.path.exists(account_result_dir):
                     print(f"[DEBUG] 지연 성공! 결과 디렉터리 생성됨: {account_result_dir} (대기시간: {(wait_count+1)*2}초)", flush=True)
                     # 재귀 호출로 결과 처리
                     return run_service_screener_sync(account_id, credentials, websocket, session_id)
                 
-                # 진행 상황 업데이트 (10초마다)
-                if websocket and session_id and (wait_count + 1) % 5 == 0:
-                    send_websocket_message(websocket, session_id, f"⏳ 스캔 진행 중... ({(wait_count+1)*2}초 경과)")
+                # 진행 상황 업데이트 (30초마다)
+                if websocket and session_id and (wait_count + 1) % 15 == 0:
+                    elapsed_minutes = ((wait_count+1)*2) // 60
+                    send_websocket_message(websocket, session_id, f"⏳ 스캔 진행 중... ({elapsed_minutes}분 경과)")
             
-            print(f"[DEBUG] 600초 대기 후에도 결과 디렉터리 없음", flush=True)
+            print(f"[DEBUG] 900초(15분) 대기 후에도 결과 디렉터리 없음", flush=True)
             
             return {
                 "success": False,
                 "summary": None,
                 "report_url": None,
-                "error": f"스캔이 완료되었지만 결과 디렉터리를 찾을 수 없습니다: {account_result_dir}"
+                "error": f"스캔이 15분 대기 후에도 결과 디렉터리를 찾을 수 없습니다: {account_result_dir}"
             }
     
     except subprocess.TimeoutExpired:
