@@ -126,6 +126,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             send_websocket_message(websocket, session_id, "⚙️ AWS 리소스 스캔을 진행하고 있습니다...")
         
         # Service Screener 실행 (긴 시간 소요 - 5~10분)
+        print(f"[DEBUG] Service Screener 시작 시간: {datetime.now()}", flush=True)
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -134,6 +135,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             timeout=900,  # 15분 타임아웃
             cwd='/root/service-screener-v2'
         )
+        print(f"[DEBUG] Service Screener 종료 시간: {datetime.now()}", flush=True)
         
         print(f"[DEBUG] Service Screener 완료 - 반환코드: {result.returncode}", flush=True)
         print(f"[DEBUG] stdout 길이: {len(result.stdout)}, stderr 길이: {len(result.stderr)}", flush=True)
@@ -242,7 +244,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             
             # 추가 대기 (스캔이 완료될 때까지)
             import time
-            for wait_count in range(60):  # 120초 = 60 * 2초
+            for wait_count in range(300):  # 600초 = 300 * 2초 (10분)
                 time.sleep(2)
                 if os.path.exists(account_result_dir):
                     print(f"[DEBUG] 지연 성공! 결과 디렉터리 생성됨: {account_result_dir} (대기시간: {(wait_count+1)*2}초)", flush=True)
@@ -253,7 +255,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 if websocket and session_id and (wait_count + 1) % 5 == 0:
                     send_websocket_message(websocket, session_id, f"⏳ 스캔 진행 중... ({(wait_count+1)*2}초 경과)")
             
-            print(f"[DEBUG] 120초 대기 후에도 결과 디렉터리 없음", flush=True)
+            print(f"[DEBUG] 600초 대기 후에도 결과 디렉터리 없음", flush=True)
             
             return {
                 "success": False,
