@@ -149,18 +149,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             shutil.rmtree(old_result_dir)
         
         # ========================================
-        # Reference 코드 방식: Q CLI 오케스트레이션 사용
+        # Reference 코드 방식: 직접 Service Screener 실행
         # ========================================
-        
-        # Service Screener 컨텍스트 파일 로드 (현재 프로젝트 경로)
-        screener_context_path = 'reference_contexts/service_screener.md'
-        try:
-            with open(screener_context_path, 'r', encoding='utf-8') as f:
-                screener_context = f.read()
-            print(f"[DEBUG] Service Screener 컨텍스트 파일 로드 성공", flush=True)
-        except Exception as e:
-            print(f"[DEBUG] 컨텍스트 파일 로드 실패: {e}", flush=True)
-            screener_context = ""
         
         # 타임스탬프 생성 (보고서 URL용)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -169,39 +159,46 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         if websocket and session_id:
             send_websocket_message(websocket, session_id, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...\n📍 스캔 리전: ap-northeast-2, us-east-1\n⏱️ 약 2-5분 소요될 수 있습니다.")
         
-        # Reference 코드와 동일한 Q CLI 프롬프트 구성
-        korean_prompt = f"""다음 컨텍스트를 참고하여 AWS Service Screener를 실행해주세요:
-
-{screener_context}
-
-=== 필수 요구사항 ===
-1. 반드시 계정 {account_id}에 대해서만 스캔하세요
-2. 현재 환경 변수에 설정된 AWS 자격증명을 사용하세요 (이미 계정 {account_id}의 자격증명이 설정되어 있습니다)
-3. Service Screener를 실제로 실행하세요 (기존 결과를 읽지 마세요)
-4. 스캔 완료 후 /root/service-screener-v2/aws/{account_id}/ 디렉터리에 결과가 생성되어야 합니다
-
-=== 사용자 질문 ===
-{account_id} 스캔
-
-위 요구사항을 반드시 따라 계정 {account_id}에 대해 Service Screener를 실행하고, 한국어로 상세한 보고서를 작성해주세요."""
-
-        print(f"[DEBUG] Q CLI 오케스트레이션 실행 시작", flush=True)
-        print(f"[DEBUG] 환경변수 전달 확인: AWS_ACCESS_KEY_ID={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
-        print(f"[DEBUG] 환경변수 전달 확인: AWS_EC2_METADATA_DISABLED={env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
+        # crossAccounts.json 설정 파일 생성 (Reference 코드와 동일)
+        temp_json_path = f'/tmp/crossAccounts_{account_id}_{timestamp}.json'
         
-        # Q CLI 오케스트레이션 실행 (Reference 코드와 동일)
-        cmd = ['/root/.local/bin/q', 'chat', '--no-interactive', '--trust-all-tools', korean_prompt]
+        # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
+        default_regions = ['ap-northeast-2', 'us-east-1']
         
-        print(f"[DEBUG] Q CLI 실행: {' '.join(cmd[:4])}... (프롬프트 생략)", flush=True)
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
+                "Regions": default_regions  # 스캔할 리전 목록
+            }
+        }
+        
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        print(f"[DEBUG] 스캔 대상 리전: {', '.join(default_regions)}", flush=True)
+        
+        # Service Screener 직접 실행 (Reference 코드와 동일)
+        screener_path = '/root/service-screener-v2/Screener.py'
+        
+        cmd = [
+            'python3',
+            screener_path,
+            '--crossAccounts', temp_json_path
+        ]
+        
+        print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
+        print(f"[DEBUG] 작업 디렉터리: /root/service-screener-v2", flush=True)
         print(f"[DEBUG] Service Screener 시작 시간: {datetime.now()}", flush=True)
         
-        # Q CLI 실행 (타임아웃 10분)
+        # Service Screener 실행 (타임아웃 10분)
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             env=env_vars,
-            timeout=600  # 10분 타임아웃
+            timeout=600,  # 10분 타임아웃
+            cwd='/root/service-screener-v2'
         )
         
         print(f"[DEBUG] Service Screener 종료 시간: {datetime.now()}", flush=True)
@@ -833,14 +830,13 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
         shutil.copytree(screener_result_dir, temp_account_dir)
         print(f"[DEBUG] 계정 폴더 복사: {screener_result_dir} -> {temp_account_dir}", flush=True)
         
-        # WAFS.html을 CPFindings.html로 복사 (WA Summarizer 호환성)
-        wafs_file = os.path.join(temp_account_dir, 'WAFS.html')
+        # CPFindings.html 파일 존재 확인 (WA Summarizer 필수 파일)
         cpfindings_file = os.path.join(temp_account_dir, 'CPFindings.html')
-        if os.path.exists(wafs_file):
-            shutil.copy(wafs_file, cpfindings_file)
-            print(f"[DEBUG] WAFS.html을 CPFindings.html로 복사: {cpfindings_file}", flush=True)
+        if os.path.exists(cpfindings_file):
+            print(f"[DEBUG] CPFindings.html 파일 확인됨: {cpfindings_file}", flush=True)
         else:
-            print(f"[DEBUG] WAFS.html 파일을 찾을 수 없음: {wafs_file}", flush=True)
+            print(f"[DEBUG] CPFindings.html 파일을 찾을 수 없음: {cpfindings_file}", flush=True)
+            print(f"[DEBUG] 계정 디렉터리 내용: {os.listdir(temp_account_dir) if os.path.exists(temp_account_dir) else '디렉터리 없음'}", flush=True)
 
         # res 폴더 복사 (CSS/JS 등 공통 리소스) - Reference 코드와 동일한 경로 사용
         res_source = '/root/service-screener-v2/aws/res'
