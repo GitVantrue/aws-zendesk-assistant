@@ -45,9 +45,16 @@ def run_service_screener(account_id, credentials=None):
         
         print(f"[DEBUG] 자격증명 확인: ACCESS_KEY={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}..., SESSION_TOKEN={'있음' if env_vars.get('AWS_SESSION_TOKEN') else '없음'}", flush=True)
         
-        # Service Screener 직접 실행 (Reference 코드와 완전히 동일)
-        cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
-        print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
+        # 기존 Service Screener 결과 삭제 (Reference 코드와 동일)
+        old_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
+        if os.path.exists(old_result_dir):
+            print(f"[DEBUG] 기존 결과 삭제: {old_result_dir}", flush=True)
+            shutil.rmtree(old_result_dir)
+        
+        # Service Screener 실행 - CloudFormation 없이 실행하는 방법 시도
+        # 1차: --no-cfn 옵션 시도 (CloudFormation 비활성화)
+        cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1', '--no-cfn']
+        print(f"[DEBUG] Service Screener 실행 (CloudFormation 비활성화): {' '.join(cmd)}", flush=True)
         
         # 로그 파일 생성
         log_file = f'/tmp/screener_{account_id}.log'
@@ -72,6 +79,26 @@ def run_service_screener(account_id, credentials=None):
             print(f"[DEBUG] Service Screener 로그 (마지막 1000자):\n{log_content[-1000:]}", flush=True)
         except Exception as e:
             print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
+        
+        # CloudFormation 오류가 발생하면 다른 방법 시도
+        if result.returncode != 0 and 'cloudformation:CreateStack' in log_content:
+            print(f"[DEBUG] CloudFormation 오류 감지, 기본 옵션으로 재시도", flush=True)
+            
+            # 2차: 기본 옵션으로 재시도 (--no-cfn 제거)
+            cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
+            print(f"[DEBUG] Service Screener 재시도: {' '.join(cmd)}", flush=True)
+            
+            with open(log_file, 'w') as f:
+                result = subprocess.run(
+                    cmd,
+                    stdout=f,
+                    stderr=subprocess.STDOUT,
+                    env=env_vars,
+                    timeout=600,
+                    cwd='/root/service-screener-v2'
+                )
+            
+            print(f"[DEBUG] Service Screener 재시도 완료. 반환코드: {result.returncode}", flush=True)
         
         # 결과 처리
         if result.returncode == 0:
