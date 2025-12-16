@@ -90,11 +90,12 @@ def run_service_screener(account_id, credentials=None):
                 'cmd': ['python3', '/root/service-screener-v2/Screener.py', '--regions', ','.join(scan_regions)],
                 'name': '단일 계정 방식 (Screener.py + regions)'
             },
-            # 4. 단일 계정 방식 (main.py)
+            # 4. 단일 계정 방식 (main.py) - 올바른 방법
             {
                 'path': '/root/service-screener-v2/main.py',
                 'cmd': ['python3', '/root/service-screener-v2/main.py', '--regions', ','.join(scan_regions)],
-                'name': '단일 계정 방식 (main.py + regions)'
+                'name': '단일 계정 방식 (main.py + regions)',
+                'ignore_errors': True  # CloudFormation 오류 무시
             }
         ]
         
@@ -108,12 +109,15 @@ def run_service_screener(account_id, credentials=None):
             print(f"[DEBUG] {attempt['name']} 시도: {' '.join(attempt['cmd'])}", flush=True)
             
             try:
+                # main.py + regions 방식은 더 긴 타임아웃 사용
+                timeout = 600 if 'main.py + regions' in attempt['name'] else 120
+                
                 result = subprocess.run(
                     attempt['cmd'],
                     capture_output=True,
                     text=True,
                     env=env_vars,
-                    timeout=120,  # 2분 타임아웃으로 단축
+                    timeout=timeout,
                     cwd='/root/service-screener-v2'
                 )
                 
@@ -127,10 +131,29 @@ def run_service_screener(account_id, credentials=None):
                 
                 # 결과 디렉터리 확인
                 account_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
+                
+                # CloudFormation 오류를 무시하고 부분 결과라도 확인
+                ignore_errors = attempt.get('ignore_errors', False)
+                
                 if os.path.exists(account_result_dir):
                     print(f"[DEBUG] {attempt['name']} 성공! 결과 디렉터리 생성됨: {account_result_dir}", flush=True)
                     successful_result = result
                     break
+                elif ignore_errors and result.returncode != 0:
+                    # CloudFormation 오류가 있어도 스캔이 진행되었는지 확인
+                    if "Processing the following account id" in result.stdout:
+                        print(f"[DEBUG] {attempt['name']} - CloudFormation 오류 있지만 스캔 진행됨, 결과 대기 중...", flush=True)
+                        
+                        # 추가로 5초 대기 후 다시 확인
+                        import time
+                        time.sleep(5)
+                        
+                        if os.path.exists(account_result_dir):
+                            print(f"[DEBUG] {attempt['name']} 지연 성공! 결과 디렉터리 생성됨: {account_result_dir}", flush=True)
+                            successful_result = result
+                            break
+                        else:
+                            print(f"[DEBUG] {attempt['name']} - 5초 대기 후에도 결과 디렉터리 없음", flush=True)
                 else:
                     print(f"[DEBUG] {attempt['name']} - 결과 디렉터리 없음", flush=True)
                     
