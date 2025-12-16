@@ -104,8 +104,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         # crossAccounts.json 생성 (Reference 코드와 동일)
         temp_json_path = f'/tmp/crossAccounts_{account_id}.json'
         cross_accounts_config = {
-            "general": {
-                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
+            account_id: {
+                "role_arn": f"arn:aws:iam::{account_id}:role/SaltwareCrossAccount",
                 "Regions": scan_regions  # 스캔할 리전 목록
             }
         }
