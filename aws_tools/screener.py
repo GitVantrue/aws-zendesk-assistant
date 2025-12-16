@@ -832,6 +832,15 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
         temp_account_dir = os.path.join(temp_wa_input_dir, account_id)
         shutil.copytree(screener_result_dir, temp_account_dir)
         print(f"[DEBUG] 계정 폴더 복사: {screener_result_dir} -> {temp_account_dir}", flush=True)
+        
+        # WAFS.html을 CPFindings.html로 복사 (WA Summarizer 호환성)
+        wafs_file = os.path.join(temp_account_dir, 'WAFS.html')
+        cpfindings_file = os.path.join(temp_account_dir, 'CPFindings.html')
+        if os.path.exists(wafs_file):
+            shutil.copy(wafs_file, cpfindings_file)
+            print(f"[DEBUG] WAFS.html을 CPFindings.html로 복사: {cpfindings_file}", flush=True)
+        else:
+            print(f"[DEBUG] WAFS.html 파일을 찾을 수 없음: {wafs_file}", flush=True)
 
         # res 폴더 복사 (CSS/JS 등 공통 리소스) - Reference 코드와 동일한 경로 사용
         res_source = '/root/service-screener-v2/aws/res'
