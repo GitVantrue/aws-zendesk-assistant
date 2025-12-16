@@ -629,12 +629,10 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
         temp_wa_input_dir = f"/tmp/wa_input_{account_id}_{timestamp}"
         os.makedirs(temp_wa_input_dir, exist_ok=True)
         
-        # WA Summarizer가 기대하는 구조: aws/{account_id}/
-        temp_aws_dir = os.path.join(temp_wa_input_dir, 'aws')
-        temp_account_dir = os.path.join(temp_aws_dir, account_id)
-        os.makedirs(temp_aws_dir, exist_ok=True)
+        # 해당 계정 폴더만 복사 (Reference와 동일한 구조)
+        temp_account_dir = os.path.join(temp_wa_input_dir, account_id)
         shutil.copytree(screener_result_dir, temp_account_dir)
-        print(f"[DEBUG] 계정 폴더 복사 (aws 구조): {screener_result_dir} -> {temp_account_dir}", flush=True)
+        print(f"[DEBUG] 계정 폴더 복사: {screener_result_dir} -> {temp_account_dir}", flush=True)
         
         # 디버깅: 복사된 파일들 확인
         print(f"[DEBUG] WA Input 디렉터리 구조 확인:", flush=True)
@@ -648,9 +646,9 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
                 if 'CPFindings' in file or 'findings' in file.lower():
                     print(f"[DEBUG] *** 발견된 Findings 파일: {file} ***", flush=True)
         
-        # res 폴더 복사 (CSS/JS 등 공통 리소스) - aws 디렉터리 내부에
+        # res 폴더 복사 (CSS/JS 등 공통 리소스)
         res_source = '/root/service-screener-v2/aws/res'
-        res_dest = os.path.join(temp_aws_dir, 'res')
+        res_dest = os.path.join(temp_wa_input_dir, 'res')
         if os.path.exists(res_source):
             shutil.copytree(res_source, res_dest)
             print(f"[DEBUG] res 폴더 복사: {res_source} -> {res_dest}", flush=True)
@@ -684,6 +682,13 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
             cwd=wa_summarizer_dir,
             env=wa_env
         )
+        
+        # 임시 디렉터리 정리 (Reference 코드와 동일한 위치)
+        try:
+            shutil.rmtree(temp_wa_input_dir)
+            print(f"[DEBUG] 임시 디렉터리 삭제: {temp_wa_input_dir}", flush=True)
+        except Exception as e:
+            print(f"[DEBUG] 임시 디렉터리 삭제 실패 (무시): {e}", flush=True)
         
         print(f"[DEBUG] WA Summarizer 완료. 반환코드: {result.returncode}", flush=True)
         if result.stdout:
@@ -747,11 +752,3 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
         print(f"[ERROR] WA Summarizer 실행 중 오류: {str(e)}", flush=True)
         traceback.print_exc()
         return None
-    finally:
-        # 임시 디렉터리 정리 (마지막에 실행)
-        try:
-            if 'temp_wa_input_dir' in locals() and os.path.exists(temp_wa_input_dir):
-                shutil.rmtree(temp_wa_input_dir)
-                print(f"[DEBUG] 임시 디렉터리 삭제: {temp_wa_input_dir}", flush=True)
-        except Exception as e:
-            print(f"[DEBUG] 임시 디렉터리 삭제 실패 (무시): {e}", flush=True)
