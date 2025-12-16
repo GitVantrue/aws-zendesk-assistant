@@ -120,7 +120,7 @@ def analyze_question_type(question: str) -> tuple[str, Optional[str]]:
     log_debug(f"질문 타입 분석 시작: '{question_lower}'")
 
     # 우선순위 1: Service Screener 관련 (가장 우선)
-    screener_keywords = ['screener', '스크리너', '스캔', 'scan', '점검', '검사', '진단', 'wa', 'well-architected', '웰아키텍처', 'well architected']
+    screener_keywords = ['screener', '스크리너', '스캔', 'scan', '점검', '검사', '진단']
     if any(keyword in question_lower for keyword in screener_keywords):
         log_debug("질문 타입: screener")
         return 'screener', None, None
@@ -496,108 +496,52 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
         
         # 실제 AWS 작업 실행
         if question_type == "screener" and account_id and credentials:
-            # WA 키워드 체크 - WA만 실행할지 전체 스캔할지 결정
-            question_lower = state["question"].lower()
-            wa_keywords = ['wa', 'well-architected', '웰아키텍처', 'well architected']
-            is_wa_only = any(keyword in question_lower for keyword in wa_keywords)
+            # Service Screener 실행
+            from aws_tools.screener import run_service_screener_async
             
-            if is_wa_only:
-                # WA Summary만 실행 (스캔 스킵)
-                from aws_tools.screener import generate_wa_summary_report
-                from datetime import datetime
+            try:
+                # 진행 상황 업데이트
+                await send_websocket_progress(state, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...")
+                await send_websocket_progress(state, "📍 스캔 리전: ap-northeast-2, us-east-1")
+                await send_websocket_progress(state, "⏱️ 약 5-10분 소요될 수 있습니다...")
                 
-                try:
-                    # 기존 Service Screener 결과 디렉터리 찾기
-                    screener_result_dir = f'/root/service-screener-v2/aws/{account_id}'
-                    if not os.path.exists(screener_result_dir):
-                        screener_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
+                # Service Screener 비동기 실행 (즉시 반환)
+                screener_result = run_service_screener_async(
+                    account_id=account_id, 
+                    credentials=credentials,
+                    websocket=state.get("websocket"),
+                    session_id=state.get("client_id")  # session_id -> client_id 수정
+                )
+            
+                if screener_result["success"]:
+                    # 비동기 시작 성공 - 즉시 응답
+                    answer = screener_result["message"]
                     
-                    if os.path.exists(screener_result_dir):
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        log_debug(f"WA Summary만 실행: {account_id}")
-                        
-                        await send_websocket_progress(state, f"📋 계정 {account_id}의 기존 Service Screener 결과로 WA Summary를 생성합니다...")
-                        
-                        # WA Summary 생성
-                        wa_report_url = generate_wa_summary_report(account_id, screener_result_dir, timestamp)
-                        
-                        if wa_report_url:
-                            answer = f"✅ Well-Architected Summary 생성 완료!\n📋 {wa_report_url}"
-                        else:
-                            answer = f"❌ Well-Architected Summary 생성에 실패했습니다.\n기존 Service Screener 결과를 확인해주세요."
-                        
-                        result = {
-                            "question": state["question"],
-                            "answer": answer,
-                            "question_type": question_type,
-                            "account_id": account_id,
-                            "authenticated": True
-                        }
-                    else:
-                        answer = f"❌ 계정 {account_id}의 Service Screener 결과를 찾을 수 없습니다.\n먼저 Service Screener를 실행해주세요."
-                        result = {
-                            "question": state["question"],
-                            "answer": answer,
-                            "question_type": question_type,
-                            "account_id": account_id,
-                            "authenticated": True
-                        }
-                except Exception as e:
-                    log_error(f"WA Summary 실행 중 오류: {str(e)}")
                     result = {
                         "question": state["question"],
-                        "answer": f"❌ WA Summary 실행 중 오류가 발생했습니다: {str(e)}",
+                        "answer": answer,
                         "question_type": question_type,
                         "account_id": account_id,
                         "authenticated": True
                     }
-            else:
-                # Service Screener 전체 실행
-                from aws_tools.screener import run_service_screener_async
-                
-                try:
-                    # 진행 상황 업데이트
-                    await send_websocket_progress(state, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...")
-                    await send_websocket_progress(state, "📍 스캔 리전: ap-northeast-2, us-east-1")
-                    await send_websocket_progress(state, "⏱️ 약 5-10분 소요될 수 있습니다...")
-                    
-                    # Service Screener 비동기 실행 (즉시 반환)
-                    screener_result = run_service_screener_async(
-                        account_id=account_id, 
-                        credentials=credentials,
-                        websocket=state.get("websocket"),
-                        session_id=state.get("client_id")  # session_id -> client_id 수정
-                    )
-                
-                    if screener_result["success"]:
-                        # 비동기 시작 성공 - 즉시 응답
-                        answer = screener_result["message"]
-                        
-                        result = {
-                            "question": state["question"],
-                            "answer": answer,
-                            "question_type": question_type,
-                            "account_id": account_id,
-                            "authenticated": True
-                        }
-                    else:
-                        # 실패
-                        result = {
-                            "question": state["question"],
-                            "answer": f"❌ Service Screener 실행 실패:\n{screener_result['error']}",
-                            "question_type": question_type,
-                            "account_id": account_id,
-                            "authenticated": True
-                        }
-                        
-                except Exception as e:
+                else:
+                    # 실패
                     result = {
                         "question": state["question"],
-                        "answer": f"❌ Service Screener 실행 중 오류가 발생했습니다: {str(e)}",
+                        "answer": f"❌ Service Screener 실행 실패:\n{screener_result['error']}",
                         "question_type": question_type,
                         "account_id": account_id,
                         "authenticated": True
                     }
+                    
+            except Exception as e:
+                result = {
+                    "question": state["question"],
+                    "answer": f"❌ Service Screener 실행 중 오류가 발생했습니다: {str(e)}",
+                    "question_type": question_type,
+                    "account_id": account_id,
+                    "authenticated": True
+                }
         
         elif question_type == "report" and account_id and credentials:
             # 월간 보고서 생성 (기존 reference 코드 방식 사용)
