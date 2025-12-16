@@ -147,6 +147,57 @@ def analyze_question_type(question: str) -> tuple[str, Optional[str]]:
     return 'general', '/root/core_contexts/general_aws.md'
 
 
+def parse_month_from_question(question: str) -> tuple[str, str]:
+    """
+    질문에서 년월 정보를 추출하여 해당 월의 시작일과 종료일을 반환
+    
+    Args:
+        question: 사용자 질문
+        
+    Returns:
+        tuple: (시작일, 종료일) YYYY-MM-DD 형식
+    """
+    import re
+    from datetime import datetime, timedelta
+    from calendar import monthrange
+    
+    # 현재 날짜
+    now = datetime.now()
+    current_year = now.year
+    current_month = now.month
+    
+    # 패턴 매칭
+    patterns = [
+        r'(\d{4})년\s*(\d{1,2})월',  # 2024년 11월
+        r'(\d{4})-(\d{1,2})',       # 2024-11
+        r'(\d{1,2})월',             # 11월 (현재 년도)
+    ]
+    
+    target_year = current_year
+    target_month = current_month
+    
+    for pattern in patterns:
+        match = re.search(pattern, question)
+        if match:
+            if len(match.groups()) == 2:  # 년도와 월 모두 있음
+                target_year = int(match.group(1))
+                target_month = int(match.group(2))
+            else:  # 월만 있음 (현재 년도 사용)
+                target_month = int(match.group(1))
+            break
+    
+    # 유효성 검사
+    if target_month < 1 or target_month > 12:
+        target_month = current_month
+    
+    # 해당 월의 첫날과 마지막날 계산
+    start_date = datetime(target_year, target_month, 1)
+    _, last_day = monthrange(target_year, target_month)
+    end_date = datetime(target_year, target_month, last_day)
+    
+    return start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')
+
+
 def load_context_file(context_path: str) -> str:
     """
     컨텍스트 파일 로드
@@ -455,17 +506,17 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
         elif question_type == "report" and account_id and credentials:
             # 월간 보고서 생성
             from aws_tools.security_report import generate_security_report, get_report_url
-            from datetime import datetime, timedelta
             
-            # 기본 분석 기간 설정 (최근 30일)
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=30)
+            # 질문에서 년월 정보 추출
+            start_date_str, end_date_str = parse_month_from_question(state["question"])
             
-            start_date_str = start_date.strftime('%Y-%m-%d')
-            end_date_str = end_date.strftime('%Y-%m-%d')
+            # 분석 기간 정보 추출 (표시용)
+            from datetime import datetime
+            start_dt = datetime.strptime(start_date_str, '%Y-%m-%d')
+            period_text = f"{start_dt.year}년 {start_dt.month}월"
             
             # 진행 상황 업데이트
-            await send_websocket_progress(state, "📊 월간 보고서를 생성하고 있습니다...")
+            await send_websocket_progress(state, f"📊 {period_text} 월간 보고서를 생성하고 있습니다...")
             
             # 월간 보고서 생성
             report_result = generate_security_report(
@@ -481,10 +532,10 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                 html_url = get_report_url(report_result["html_path"])
                 
                 answer = f"""
-## 📊 AWS 월간 보고서 생성 완료
+## 📊 {period_text} AWS 월간 보고서 생성 완료
 
 **계정 ID**: {account_id}
-**분석 기간**: {start_date_str} ~ {end_date_str}
+**분석 기간**: {start_date_str} ~ {end_date_str} ({period_text})
 
 ### 📋 생성된 보고서
 - **HTML 보고서**: [월간 보안 점검 보고서 보기]({html_url})
