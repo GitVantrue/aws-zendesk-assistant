@@ -72,6 +72,31 @@ def run_service_screener(account_id, credentials=None):
 
         # Service Screener 실행 - Reference 코드와 완전히 동일한 방식
         screener_path = '/root/service-screener-v2/Screener.py'
+        
+        # 파일 존재 확인
+        print(f"[DEBUG] Screener.py 파일 존재 확인: {os.path.exists(screener_path)}", flush=True)
+        if not os.path.exists(screener_path):
+            print(f"[ERROR] Screener.py 파일이 존재하지 않음: {screener_path}", flush=True)
+            # 대체 경로 확인
+            alt_paths = [
+                '/root/service-screener-v2/main.py',
+                '/root/service-screener-v2/screener.py',
+                '/root/service-screener-v2/ServiceScreener.py'
+            ]
+            for alt_path in alt_paths:
+                if os.path.exists(alt_path):
+                    print(f"[DEBUG] 대체 파일 발견: {alt_path}", flush=True)
+                    screener_path = alt_path
+                    break
+        
+        # crossAccounts.json 파일 내용 확인
+        try:
+            with open(temp_json_path, 'r') as f:
+                config_content = f.read()
+            print(f"[DEBUG] crossAccounts.json 내용:\n{config_content}", flush=True)
+        except Exception as e:
+            print(f"[ERROR] crossAccounts.json 읽기 실패: {e}", flush=True)
+        
         cmd = [
             'python3',
             screener_path,
@@ -79,6 +104,7 @@ def run_service_screener(account_id, credentials=None):
         ]
         print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
         print(f"[DEBUG] 작업 디렉터리: /root/service-screener-v2", flush=True)
+        print(f"[DEBUG] 환경변수 AWS_ACCESS_KEY_ID: {env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
         
         # Service Screener 실행
         result = subprocess.run(
@@ -91,8 +117,18 @@ def run_service_screener(account_id, credentials=None):
         )
         
         print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
-        print(f"[DEBUG] stdout (처음 1000자): {result.stdout[:1000]}", flush=True)
-        print(f"[DEBUG] stderr (처음 1000자): {result.stderr[:1000]}", flush=True)
+        print(f"[DEBUG] stdout 길이: {len(result.stdout)}, stderr 길이: {len(result.stderr)}", flush=True)
+        if result.stdout:
+            print(f"[DEBUG] stdout (전체):\n{result.stdout}", flush=True)
+        if result.stderr:
+            print(f"[DEBUG] stderr (전체):\n{result.stderr}", flush=True)
+        
+        # 작업 디렉터리 내용 확인
+        try:
+            cwd_contents = os.listdir('/root/service-screener-v2')
+            print(f"[DEBUG] 작업 디렉터리 내용: {cwd_contents}", flush=True)
+        except Exception as e:
+            print(f"[ERROR] 작업 디렉터리 확인 실패: {e}", flush=True)
         
         # Reference 코드와 동일: 반환코드 무시하고 결과 디렉터리 확인
         # (CloudFormation 오류가 있어도 결과가 생성될 수 있음)
