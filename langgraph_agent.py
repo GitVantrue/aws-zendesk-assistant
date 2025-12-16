@@ -5,6 +5,7 @@ AWS 작업을 오케스트레이션하는 LangGraph 에이전트
 from typing import TypedDict, Optional, Dict, Any, List
 from datetime import datetime
 import os
+import json
 import websockets
 from utils.logging_config import log_debug, log_error, log_info
 
@@ -118,7 +119,13 @@ def analyze_question_type(question: str) -> tuple[str, Optional[str]]:
     question_lower = question.lower()
     log_debug(f"질문 타입 분석 시작: '{question_lower}'")
 
-    # 우선순위 1: Service Screener 관련 (가장 우선)
+    # 우선순위 0: WA Summary 관련 (screener보다 우선)
+    wa_keywords = ['wa', 'well-architected', '웰아키텍처', 'well architected']
+    if any(keyword in question_lower for keyword in wa_keywords):
+        log_debug("질문 타입: wa_summary")
+        return 'wa_summary'
+    
+    # 우선순위 1: Service Screener 관련
     screener_keywords = ['screener', '스크리너', '스캔', 'scan', '점검', '검사', '진단']
     if any(keyword in question_lower for keyword in screener_keywords):
         log_debug("질문 타입: screener")
@@ -494,7 +501,58 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
         await send_websocket_progress(state, f"⚙️ {question_type} 작업을 실행합니다...")
         
         # 실제 AWS 작업 실행
-        if question_type == "screener" and account_id and credentials:
+        if question_type == "wa_summary" and account_id:
+            # WA Summary만 실행 (기존 Service Screener 결과 사용)
+            from aws_tools.screener import generate_wa_summary_report
+            from datetime import datetime
+            
+            # 기존 Service Screener 결과 디렉터리 찾기
+            screener_result_dir = f'/root/service-screener-v2/aws/{account_id}'
+            if not os.path.exists(screener_result_dir):
+                screener_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
+            
+            if os.path.exists(screener_result_dir):
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                
+                # WebSocket 메시지 전송
+                if websocket and session_id:
+                    await websocket.send_str(json.dumps({
+                        "type": "message",
+                        "session_id": session_id,
+                        "message": f"📋 계정 {account_id}의 기존 Service Screener 결과로 WA Summary를 생성합니다...",
+                        "timestamp": datetime.now().isoformat()
+                    }))
+                
+                # WA Summary 생성
+                wa_report_url = generate_wa_summary_report(account_id, screener_result_dir, timestamp)
+                
+                if wa_report_url:
+                    response_message = f"✅ Well-Architected Summary 생성 완료!\n📋 {wa_report_url}"
+                else:
+                    response_message = f"❌ Well-Architected Summary 생성에 실패했습니다.\n기존 Service Screener 결과를 확인해주세요."
+                
+                # 결과 전송
+                if websocket and session_id:
+                    await websocket.send_str(json.dumps({
+                        "type": "message", 
+                        "session_id": session_id,
+                        "message": response_message,
+                        "timestamp": datetime.now().isoformat()
+                    }))
+                
+                return {"messages": [AIMessage(content=response_message)]}
+            else:
+                error_message = f"❌ 계정 {account_id}의 Service Screener 결과를 찾을 수 없습니다.\n먼저 Service Screener를 실행해주세요."
+                if websocket and session_id:
+                    await websocket.send_str(json.dumps({
+                        "type": "message",
+                        "session_id": session_id, 
+                        "message": error_message,
+                        "timestamp": datetime.now().isoformat()
+                    }))
+                return {"messages": [AIMessage(content=error_message)]}
+        
+        elif question_type == "screener" and account_id and credentials:
             # Service Screener 실행
             from aws_tools.screener import run_service_screener_async
             
