@@ -128,7 +128,7 @@ def analyze_question_type(question: str) -> tuple[str, Optional[str]]:
     # 우선순위 2: 월간 보고서 생성 관련 (가장 구체적)
     report_keywords = ['보고서', 'report', '리포트', '월간보고서', '월간 보고서', '보안보고서', '감사보고서']
     if any(keyword in question_lower for keyword in report_keywords):
-        return 'report', '/root/core_contexts/security_report.md'
+        return 'report', 'reference_contexts/security_report.md'
 
     # 우선순위 3: CloudTrail/감사 관련 (활동 추적)
     cloudtrail_keywords = ['cloudtrail', '클라우드트레일', '추적', '누가', '언제', '활동', '이벤트', '로그인', '이력', '히스토리', 'history']
@@ -136,16 +136,16 @@ def analyze_question_type(question: str) -> tuple[str, Optional[str]]:
                           '수정사항', '변경사항', '삭제사항', '생성사항', '바꿨', '지웠', '만들었']
     if (any(keyword in question_lower for keyword in cloudtrail_keywords) or
         any(phrase in question_lower for phrase in cloudtrail_phrases)):
-        return 'cloudtrail', '/root/core_contexts/cloudtrail_mcp.md'
+        return 'cloudtrail', 'reference_contexts/cloudtrail_mcp.md'
 
     # 우선순위 4: CloudWatch/모니터링 관련
     cloudwatch_keywords = ['cloudwatch', '클라우드워치', '모니터링', '알람', '메트릭', 'dashboard', '성능', '로그 그룹', '지표', 'metric', 'cpu', '메모리', '디스크']
     if any(keyword in question_lower for keyword in cloudwatch_keywords):
-        return 'cloudwatch', '/root/core_contexts/cloudwatch_mcp.md'
+        return 'cloudwatch', 'reference_contexts/cloudwatch_mcp.md'
 
     # 우선순위 5: 일반 AWS 질문
     log_debug("질문 타입: general")
-    return 'general', '/root/core_contexts/general_aws.md'
+    return 'general', 'reference_contexts/general_aws.md'
 
 
 def parse_month_from_question(question: str) -> tuple[str, str]:
