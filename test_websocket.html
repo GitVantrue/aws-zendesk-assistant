@@ -73,6 +73,22 @@
                             addMessage(`서버: ${data.message}`, 'success');
                         } else if (data.type === 'progress') {
                             addMessage(`진행: ${data.message}`, 'info');
+                        } else if (data.type === 'message') {
+                            // Service Screener 결과 메시지 처리
+                            let formattedMessage = data.message
+                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **bold**
+                                .replace(/\*(.*?)\*/g, '<em>$1</em>')              // *italic*
+                                .replace(/`(.*?)`/g, '<code>$1</code>')            // `code`
+                                .replace(/### (.*?)$/gm, '<h3>$1</h3>')           // ### header
+                                .replace(/## (.*?)$/gm, '<h2>$1</h2>')            // ## header
+                                .replace(/# (.*?)$/gm, '<h1>$1</h1>')             // # header
+                                .replace(/\n/g, '<br>');                          // 줄바꿈
+                            
+                            const div = document.createElement('div');
+                            div.style.color = 'green';
+                            div.innerHTML = `[${new Date().toLocaleTimeString()}] 메시지:<br><div style="margin-left: 10px; margin-top: 5px;">${formattedMessage}</div>`;
+                            messages.appendChild(div);
+                            messages.scrollTop = messages.scrollHeight;
                         } else if (data.type === 'streaming_start') {
                             // 스트리밍 시작
                             currentStreamingDiv = document.createElement('div');

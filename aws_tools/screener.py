@@ -298,6 +298,22 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                             print(f"[DEBUG] 대체 경로에서 res 복사 완료: {alt_path} -> {res_dest}", flush=True)
                             break
                 
+                # Reference 코드와 동일: 전역 res 디렉터리도 /tmp/reports/ 최상위에 복사 (../res/ 경로 참조 대응)
+                tmp_res_dir = '/tmp/reports/res'
+                screener_res_dir = '/root/service-screener-v2/adminlte/aws/res'
+                
+                print(f"[DEBUG] 전역 res 소스 경로 확인: {screener_res_dir}, 존재={os.path.exists(screener_res_dir)}", flush=True)
+                
+                if os.path.exists(screener_res_dir):
+                    # 기존 res 폴더가 있으면 삭제하고 새로 복사
+                    if os.path.exists(tmp_res_dir):
+                        print(f"[DEBUG] 기존 전역 res 디렉터리 삭제: {tmp_res_dir}", flush=True)
+                        shutil.rmtree(tmp_res_dir)
+                    shutil.copytree(screener_res_dir, tmp_res_dir)
+                    print(f"[DEBUG] 전역 res 디렉터리 복사 완료: {tmp_res_dir}", flush=True)
+                else:
+                    print(f"[ERROR] 전역 res 소스 디렉터리를 찾을 수 없음: {screener_res_dir}", flush=True)
+                
                 # 요약 메시지 생성
                 summary = parse_screener_results(account_result_dir, account_id)
                 
