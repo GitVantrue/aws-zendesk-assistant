@@ -196,16 +196,22 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         if result.stderr:
             print(f"[DEBUG] Service Screener stderr (전체):\n{result.stderr}", flush=True)
         
-        # Service Screener 실행 결과 확인
+        # CloudFormation 에러는 무시하고 결과 디렉터리 확인 (Reference 코드 방식)
+        # Service Screener는 CloudFormation 스택 생성 중 권한 에러가 발생할 수 있지만
+        # 이미 생성된 결과가 있으면 계속 진행
         if result.returncode != 0:
-            error_msg = result.stderr.strip() if result.stderr else "Service Screener 실행 실패"
-            print(f"[ERROR] Service Screener 실행 실패: {error_msg}", flush=True)
-            return {
-                "success": False,
-                "summary": None,
-                "report_url": None,
-                "error": f"Service Screener 실행 실패: {error_msg[:500]}"
-            }
+            cloudformation_error = "cloudformation:CreateStack" in result.stderr or "cloudformation:CreateStack" in result.stdout
+            if not cloudformation_error:
+                error_msg = result.stderr.strip() if result.stderr else "Service Screener 실행 실패"
+                print(f"[ERROR] Service Screener 실행 실패: {error_msg}", flush=True)
+                return {
+                    "success": False,
+                    "summary": None,
+                    "report_url": None,
+                    "error": f"Service Screener 실행 실패: {error_msg[:500]}"
+                }
+            else:
+                print(f"[DEBUG] CloudFormation 권한 에러 감지 - 기존 결과 확인 진행", flush=True)
         
         # Reference 코드와 동일: Service Screener가 생성한 실제 결과 디렉터리 찾기
         screener_dir = '/root/service-screener-v2'
