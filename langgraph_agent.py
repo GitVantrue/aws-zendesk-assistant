@@ -124,8 +124,8 @@ def analyze_question_type(question: str) -> tuple[str, Optional[str]]:
         log_debug("질문 타입: screener")
         return 'screener', None
 
-    # 우선순위 2: 보고서 생성 관련 (가장 구체적)
-    report_keywords = ['보고서', 'report', '리포트', '감사보고서', '보안보고서']
+    # 우선순위 2: 월간 보고서 생성 관련 (가장 구체적)
+    report_keywords = ['보고서', 'report', '리포트', '월간보고서', '월간 보고서', '보안보고서', '감사보고서']
     if any(keyword in question_lower for keyword in report_keywords):
         return 'report', '/root/core_contexts/security_report.md'
 
@@ -453,7 +453,7 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                 "authenticated": True
             }
         elif question_type == "report" and account_id and credentials:
-            # 보안 보고서 생성
+            # 월간 보고서 생성
             from aws_tools.security_report import generate_security_report, get_report_url
             from datetime import datetime, timedelta
             
@@ -468,11 +468,11 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
             await send_websocket_result(
                 websocket=state["websocket"],
                 client_id=state["client_id"],
-                message="📊 보안 보고서를 생성하고 있습니다...",
+                message="📊 월간 보고서를 생성하고 있습니다...",
                 message_type="progress"
             )
             
-            # 보안 보고서 생성
+            # 월간 보고서 생성
             report_result = generate_security_report(
                 account_id=account_id,
                 start_date_str=start_date_str,
@@ -486,13 +486,13 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                 html_url = get_report_url(report_result["html_path"])
                 
                 answer = f"""
-## 📊 AWS 보안 보고서 생성 완료
+## 📊 AWS 월간 보고서 생성 완료
 
 **계정 ID**: {account_id}
 **분석 기간**: {start_date_str} ~ {end_date_str}
 
 ### 📋 생성된 보고서
-- **HTML 보고서**: [보안 점검 보고서 보기]({html_url})
+- **HTML 보고서**: [월간 보안 점검 보고서 보기]({html_url})
 - **JSON 데이터**: {os.path.basename(report_result["json_path"])}
 
 ### 📈 보고서 내용
@@ -519,7 +519,7 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
             else:
                 result = {
                     "question": state["question"],
-                    "answer": f"❌ 보안 보고서 생성에 실패했습니다.\n\n오류: {report_result.get('error', '알 수 없는 오류')}",
+                    "answer": f"❌ 월간 보고서 생성에 실패했습니다.\n\n오류: {report_result.get('error', '알 수 없는 오류')}",
                     "question_type": question_type,
                     "account_id": account_id,
                     "authenticated": True,

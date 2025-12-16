@@ -1,5 +1,5 @@
 """
-AWS 보안 보고서 생성 모듈
+AWS 월간 보고서 생성 모듈
 Reference 코드의 collect_raw_security_data와 generate_html_report 기능을 재사용
 """
 
@@ -824,7 +824,7 @@ def analyze_security_data_with_qcli(json_file_path, credentials=None):
         with open(json_file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        # 보안 보고서 컨텍스트 파일 경로
+        # 월간 보고서 컨텍스트 파일 경로
         context_file = '/root/core_contexts/security_report.md'
         
         # Q CLI 분석을 위한 프롬프트 생성
@@ -1019,7 +1019,7 @@ def normalize_security_report_json(data):
         dict: 정규화된 데이터
     """
     try:
-        print(f"[DEBUG] 📝 보안 보고서 JSON 정규화 시작", flush=True)
+        print(f"[DEBUG] 📝 월간 보고서 JSON 정규화 시작", flush=True)
         
         # security_report 래퍼가 있는 경우 언래핑
         if 'analysis' in data and isinstance(data['analysis'], dict):
@@ -1046,7 +1046,7 @@ def normalize_security_report_json(data):
         return data
 def generate_security_report(account_id, start_date_str, end_date_str, region='ap-northeast-2', credentials=None):
     """
-    전체 보안 보고서 생성 워크플로우
+    전체 월간 보고서 생성 워크플로우
     1. Raw 데이터 수집 (boto3)
     2. Q CLI 분석
     3. HTML 보고서 생성
@@ -1062,7 +1062,7 @@ def generate_security_report(account_id, start_date_str, end_date_str, region='a
         dict: 결과 정보 (json_path, html_path, success)
     """
     try:
-        print(f"[DEBUG] 🚀 보안 보고서 생성 시작: 계정 {account_id}", flush=True)
+        print(f"[DEBUG] 🚀 월간 보고서 생성 시작: 계정 {account_id}", flush=True)
         
         # 1. Raw 데이터 수집
         print(f"[DEBUG] 1️⃣ Raw 데이터 수집 중...", flush=True)
@@ -1107,7 +1107,7 @@ def generate_security_report(account_id, start_date_str, end_date_str, region='a
         html_file_path = generate_html_report(json_file_path)
         
         if html_file_path:
-            print(f"[DEBUG] ✅ 보안 보고서 생성 완료!", flush=True)
+            print(f"[DEBUG] ✅ 월간 보고서 생성 완료!", flush=True)
             print(f"[DEBUG] JSON: {json_file_path}", flush=True)
             print(f"[DEBUG] HTML: {html_file_path}", flush=True)
             
@@ -1128,7 +1128,7 @@ def generate_security_report(account_id, start_date_str, end_date_str, region='a
             }
             
     except Exception as e:
-        print(f"[ERROR] ❌ 보안 보고서 생성 실패: {e}", flush=True)
+        print(f"[ERROR] ❌ 월간 보고서 생성 실패: {e}", flush=True)
         traceback.print_exc()
         return {
             "success": False,

@@ -150,6 +150,7 @@
 
 
 
+
   - [ ]* 7.5 Write property test for report generation consistency
     - **Property 7: HTML report generation consistency**
     - **Validates: Requirements 3.4, 6.3**
