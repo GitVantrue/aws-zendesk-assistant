@@ -556,7 +556,7 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
             # 월간 보고서 생성 (기존 reference 코드 방식 사용)
             from aws_tools.security_report import collect_raw_security_data, generate_html_report
             import json
-            from datetime import datetime, date
+            from datetime import date
             
             # 질문에서 년월 정보 추출
             start_date_str, end_date_str = parse_month_from_question(state["question"])
