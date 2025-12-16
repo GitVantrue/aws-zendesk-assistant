@@ -551,8 +551,11 @@ def generate_simple_wa_summary(account_id, screener_result_dir, timestamp):
         if os.path.exists(screener_result_dir):
             for file in os.listdir(screener_result_dir):
                 if file.endswith('.html') and file != 'index.html':
-                    service_name = file.replace('.html', '')
+                    service_name = file.replace('.html', '').upper()
                     summary_data["services_scanned"].append(service_name)
+        
+        # 서비스 목록 정렬
+        summary_data["services_scanned"].sort()
         
         # 간단한 HTML 보고서 생성
         html_content = f"""
@@ -682,13 +685,6 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
             env=wa_env
         )
         
-        # 임시 디렉터리 정리
-        try:
-            shutil.rmtree(temp_wa_input_dir)
-            print(f"[DEBUG] 임시 디렉터리 삭제: {temp_wa_input_dir}", flush=True)
-        except Exception as e:
-            print(f"[DEBUG] 임시 디렉터리 삭제 실패 (무시): {e}", flush=True)
-        
         print(f"[DEBUG] WA Summarizer 완료. 반환코드: {result.returncode}", flush=True)
         if result.stdout:
             print(f"[DEBUG] WA stdout (전체): {result.stdout}", flush=True)
@@ -751,3 +747,11 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
         print(f"[ERROR] WA Summarizer 실행 중 오류: {str(e)}", flush=True)
         traceback.print_exc()
         return None
+    finally:
+        # 임시 디렉터리 정리 (마지막에 실행)
+        try:
+            if 'temp_wa_input_dir' in locals() and os.path.exists(temp_wa_input_dir):
+                shutil.rmtree(temp_wa_input_dir)
+                print(f"[DEBUG] 임시 디렉터리 삭제: {temp_wa_input_dir}", flush=True)
+        except Exception as e:
+            print(f"[DEBUG] 임시 디렉터리 삭제 실패 (무시): {e}", flush=True)
