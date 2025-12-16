@@ -51,37 +51,51 @@ def run_service_screener(account_id, credentials=None):
             print(f"[DEBUG] 기존 결과 삭제: {old_result_dir}", flush=True)
             shutil.rmtree(old_result_dir)
         
-        # Service Screener 실행 - Reference 코드와 완전히 동일한 방식
-        cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
-        print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
+        # crossAccounts.json 생성 (Reference 코드와 완전히 동일)
+        temp_json_path = f'/tmp/crossAccounts_{account_id}.json'
         
-        # 로그 파일 생성
-        log_file = f'/tmp/screener_{account_id}.log'
+        # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
+        scan_regions = ['ap-northeast-2', 'us-east-1']
+        
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
+                "Regions": scan_regions  # 스캔할 리전 목록
+            }
+        }
+
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
+
+        # Service Screener 실행 - Reference 코드와 완전히 동일한 방식
+        screener_path = '/root/service-screener-v2/Screener.py'
+        cmd = [
+            'python3',
+            screener_path,
+            '--crossAccounts', temp_json_path
+        ]
+        print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
+        print(f"[DEBUG] 작업 디렉터리: /root/service-screener-v2", flush=True)
         
         # Service Screener 실행
-        with open(log_file, 'w') as f:
-            result = subprocess.run(
-                cmd,
-                stdout=f,
-                stderr=subprocess.STDOUT,
-                env=env_vars,
-                timeout=600,  # 10분 타임아웃
-                cwd='/root/service-screener-v2'
-            )
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env_vars,
+            timeout=600,  # 10분 타임아웃
+            cwd='/root/service-screener-v2'
+        )
         
         print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
-        
-        # 로그 파일 내용 읽기
-        try:
-            with open(log_file, 'r') as f:
-                log_content = f.read()
-            print(f"[DEBUG] Service Screener 로그 (마지막 1000자):\n{log_content[-1000:]}", flush=True)
-        except Exception as e:
-            print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
+        print(f"[DEBUG] stdout (처음 1000자): {result.stdout[:1000]}", flush=True)
+        print(f"[DEBUG] stderr (처음 1000자): {result.stderr[:1000]}", flush=True)
         
         # Reference 코드와 동일: 반환코드 무시하고 결과 디렉터리 확인
         # (CloudFormation 오류가 있어도 결과가 생성될 수 있음)
-        # Reference 코드와 동일: 결과 디렉터리 확인 (반환코드 무관)
         screener_dir = '/root/service-screener-v2'
         account_result_dir = os.path.join(screener_dir, 'adminlte', 'aws', account_id)
         
@@ -89,84 +103,91 @@ def run_service_screener(account_id, credentials=None):
         
         if os.path.exists(account_result_dir):
             print(f"[DEBUG] 계정 디렉터리 발견: {account_result_dir}", flush=True)
-                
-                # index.html 찾기
-                index_html_path = None
-                for root, dirs, files in os.walk(account_result_dir):
-                    for file in files:
-                        if file.lower() == 'index.html':
-                            index_html_path = os.path.join(root, file)
-                            print(f"[DEBUG] index.html 발견: {index_html_path}", flush=True)
-                            break
-                    if index_html_path:
+            
+            # index.html 찾기
+            index_html_path = None
+            for root, dirs, files in os.walk(account_result_dir):
+                for file in files:
+                    if file.lower() == 'index.html':
+                        index_html_path = os.path.join(root, file)
+                        print(f"[DEBUG] index.html 발견: {index_html_path}", flush=True)
                         break
-                
                 if index_html_path:
-                    # 전체 디렉토리를 /tmp/reports로 복사 (ALB를 통해 제공하기 위함)
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    tmp_report_dir = f"/tmp/reports/screener_{account_id}_{timestamp}"
-                    
-                    # 기존 디렉토리가 있으면 삭제
-                    if os.path.exists(tmp_report_dir):
-                        shutil.rmtree(tmp_report_dir)
-                    
-                    # 전체 디렉토리 복사 (index.html이 있는 디렉토리)
-                    source_dir = os.path.dirname(index_html_path)
-                    shutil.copytree(source_dir, tmp_report_dir)
-                    print(f"[DEBUG] 전체 디렉터리 복사 완료: {tmp_report_dir}", flush=True)
-                    
-                    # res 디렉토리도 복사 (CSS/JS/이미지 파일들)
-                    res_source = os.path.join(screener_dir, 'adminlte')
-                    res_dest = os.path.join(tmp_report_dir, 'res')
-                    print(f"[DEBUG] res 소스 경로 확인: {res_source}, 존재={os.path.exists(res_source)}", flush=True)
-                    
-                    if os.path.exists(res_source):
-                        if os.path.exists(res_dest):
-                            shutil.rmtree(res_dest)
-                        shutil.copytree(res_source, res_dest)
-                        print(f"[DEBUG] res 디렉터리 복사 완료: {res_dest}", flush=True)
-                    else:
-                        print(f"[ERROR] res 소스 디렉터리를 찾을 수 없음: {res_source}", flush=True)
-                        # 대체 경로 시도
-                        alt_paths = [
-                            '/root/service-screener-v2/res',
-                            '/root/service-screener-v2/templates/res',
-                            '/root/service-screener-v2/templates/adminlte'
-                        ]
-                        for alt_path in alt_paths:
-                            print(f"[DEBUG] 대체 경로 확인: {alt_path}, 존재={os.path.exists(alt_path)}", flush=True)
-                            if os.path.exists(alt_path):
-                                shutil.copytree(alt_path, res_dest)
-                                print(f"[DEBUG] 대체 경로에서 res 복사 완료: {alt_path} -> {res_dest}", flush=True)
-                                break
-                    
-                    # 요약 메시지 생성
-                    summary = parse_screener_results(account_result_dir, account_id)
-                    
-                    # Service Screener 보고서 URL 생성
-                    report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/screener_{account_id}_{timestamp}/index.html"
-                    print(f"[DEBUG] Service Screener 보고서 URL 생성: {report_url}", flush=True)
-                    
-                    # Well-Architected 통합 보고서 생성
-                    print(f"[DEBUG] Well-Architected 통합 보고서 생성 시작", flush=True)
-                    wa_report_url = generate_wa_summary_report(account_id, account_result_dir, timestamp)
-                    
-                    return {
-                        "success": True,
-                        "summary": summary,
-                        "report_url": report_url,
-                        "wa_report_url": wa_report_url,
-                        "error": None
-                    }
+                    break
+            
+            if index_html_path:
+                # 전체 디렉토리를 /tmp/reports로 복사 (ALB를 통해 제공하기 위함)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                tmp_report_dir = f"/tmp/reports/screener_{account_id}_{timestamp}"
+                
+                # 기존 디렉토리가 있으면 삭제
+                if os.path.exists(tmp_report_dir):
+                    shutil.rmtree(tmp_report_dir)
+                
+                # 전체 디렉토리 복사 (index.html이 있는 디렉토리)
+                source_dir = os.path.dirname(index_html_path)
+                shutil.copytree(source_dir, tmp_report_dir)
+                print(f"[DEBUG] 전체 디렉터리 복사 완료: {tmp_report_dir}", flush=True)
+                
+                # res 디렉토리도 복사 (CSS/JS/이미지 파일들)
+                res_source = os.path.join(screener_dir, 'adminlte')
+                res_dest = os.path.join(tmp_report_dir, 'res')
+                print(f"[DEBUG] res 소스 경로 확인: {res_source}, 존재={os.path.exists(res_source)}", flush=True)
+                
+                if os.path.exists(res_source):
+                    if os.path.exists(res_dest):
+                        shutil.rmtree(res_dest)
+                    shutil.copytree(res_source, res_dest)
+                    print(f"[DEBUG] res 디렉터리 복사 완료: {res_dest}", flush=True)
                 else:
-                    print(f"[DEBUG] index.html을 찾을 수 없음", flush=True)
-                    return {
-                        "success": True,
-                        "summary": f"📊 계정 {account_id} 스캔이 완료되었으나 index.html을 찾을 수 없습니다.",
-                        "report_url": None,
-                        "wa_report_url": None,
-                        "error": None
-                    }
+                    print(f"[ERROR] res 소스 디렉터리를 찾을 수 없음: {res_source}", flush=True)
+                    # 대체 경로 시도
+                    alt_paths = [
+                        '/root/service-screener-v2/res',
+                        '/root/service-screener-v2/templates/res',
+                        '/root/service-screener-v2/templates/adminlte'
+                    ]
+                    for alt_path in alt_paths:
+                        print(f"[DEBUG] 대체 경로 확인: {alt_path}, 존재={os.path.exists(alt_path)}", flush=True)
+                        if os.path.exists(alt_path):
+                            shutil.copytree(alt_path, res_dest)
+                            print(f"[DEBUG] 대체 경로에서 res 복사 완료: {alt_path} -> {res_dest}", flush=True)
+                            break
+                
+                # 요약 메시지 생성
+                summary = parse_screener_results(account_result_dir, account_id)
+                
+                # Service Screener 보고서 URL 생성
+                report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/screener_{account_id}_{timestamp}/index.html"
+                print(f"[DEBUG] Service Screener 보고서 URL 생성: {report_url}", flush=True)
+                
+                # Well-Architected 통합 보고서 생성
+                print(f"[DEBUG] Well-Architected 통합 보고서 생성 시작", flush=True)
+                wa_report_url = generate_wa_summary_report(account_id, account_result_dir, timestamp)
+                
+                # 임시 파일 정리
+                try:
+                    os.remove(temp_json_path)
+                    print(f"[DEBUG] 임시 파일 삭제: {temp_json_path}", flush=True)
+                except:
+                    pass
+                
+                return {
+                    "success": True,
+                    "summary": summary,
+                    "report_url": report_url,
+                    "wa_report_url": wa_report_url,
+                    "error": None
+                }
+            else:
+                print(f"[DEBUG] index.html을 찾을 수 없음", flush=True)
+                return {
+                    "success": True,
+                    "summary": f"📊 계정 {account_id} 스캔이 완료되었으나 index.html을 찾을 수 없습니다.",
+                    "report_url": None,
+                    "wa_report_url": None,
+                    "error": None
+                }
         else:
             print(f"[DEBUG] 계정 디렉터리 없음: {account_result_dir}", flush=True)
             return {
@@ -176,13 +197,6 @@ def run_service_screener(account_id, credentials=None):
                 "wa_report_url": None,
                 "error": None
             }
-        
-        # 임시 파일 정리
-        try:
-            os.remove(log_file)
-            print(f"[DEBUG] 임시 로그 파일 삭제: {log_file}", flush=True)
-        except:
-            pass
     
     except subprocess.TimeoutExpired:
         print(f"[ERROR] Service Screener 타임아웃", flush=True)
