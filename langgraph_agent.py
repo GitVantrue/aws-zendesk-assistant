@@ -123,7 +123,7 @@ def analyze_question_type(question: str) -> tuple[str, Optional[str]]:
     screener_keywords = ['screener', '스크리너', '스캔', 'scan', '점검', '검사', '진단']
     if any(keyword in question_lower for keyword in screener_keywords):
         log_debug("질문 타입: screener")
-        return 'screener', None, None
+        return 'screener', None
 
     # 우선순위 2: 월간 보고서 생성 관련 (가장 구체적)
     report_keywords = ['보고서', 'report', '리포트', '월간보고서', '월간 보고서', '보안보고서', '감사보고서']
