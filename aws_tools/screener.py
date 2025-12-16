@@ -152,25 +152,9 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         scan_regions = ['ap-northeast-2', 'us-east-1']
         
         # ========================================
-        # Reference 코드 방식: crossAccounts.json 생성 및 사용
+        # Reference 코드 방식: 환경 변수만 사용 (crossAccounts.json 없이)
         # ========================================
         print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
-        
-        # crossAccounts.json 생성 (Reference 코드와 동일)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        temp_json_path = f'/tmp/crossAccounts_{account_id}_{timestamp}.json'
-        
-        cross_accounts_config = {
-            "general": {
-                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
-                "Regions": scan_regions  # 스캔할 리전 목록
-            }
-        }
-        
-        with open(temp_json_path, 'w') as f:
-            json.dump(cross_accounts_config, f, indent=2)
-        
-        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
         
         # ========================================
         # Reference 코드 방식: Service Screener 직접 실행 (main.py 방식)
@@ -214,12 +198,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         except Exception as e:
             print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
         
-        # 임시 파일 정리
-        try:
-            os.remove(temp_json_path)
-            print(f"[DEBUG] 임시 파일 삭제: {temp_json_path}", flush=True)
-        except:
-            pass
+        # 임시 파일 정리 (crossAccounts.json 없으므로 생략)
         
         # Reference 코드와 동일: Service Screener가 생성한 실제 결과 디렉터리 찾기
         screener_dir = '/root/service-screener-v2'
