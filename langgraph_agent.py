@@ -509,7 +509,7 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                     account_id=account_id, 
                     credentials=credentials,
                     websocket=state.get("websocket"),
-                    session_id=state.get("session_id")
+                    session_id=state.get("client_id")  # session_id -> client_id 수정
                 )
                 
                 if screener_result["success"]:

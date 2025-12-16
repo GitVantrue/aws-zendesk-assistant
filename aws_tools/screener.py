@@ -73,13 +73,27 @@ def run_service_screener_async(account_id, credentials=None, websocket=None, ses
 
 def run_service_screener_sync(account_id, credentials=None, websocket=None, session_id=None):
     """
-    AWS Service Screener 동기 실행 (실제 작업)
+    AWS Service Screener 동기 실행 (Reference 코드 방식)
     """
     print(f"[DEBUG] ✅ Service Screener 실행 시작: 계정 {account_id}", flush=True)
     
+    # 세션 격리를 위한 임시 디렉터리 생성 (Reference 코드와 동일)
+    import tempfile
+    temp_dir = None
+    
     try:
-        # 환경 변수 설정
+        # ========================================
+        # 세션 격리: 임시 디렉터리 생성 (Reference 코드와 동일)
+        # ========================================
+        temp_dir = tempfile.mkdtemp(prefix=f'q_session_{account_id}_screener_')
+        print(f"[DEBUG] 임시 세션 디렉터리 생성: {temp_dir}", flush=True)
+        
+        # 환경 변수 설정 (Reference 코드와 동일)
         env_vars = os.environ.copy()
+        
+        # AWS 설정 파일 경로 격리 (Reference 코드와 동일)
+        env_vars['AWS_CONFIG_FILE'] = os.path.join(temp_dir, 'config')
+        env_vars['AWS_SHARED_CREDENTIALS_FILE'] = os.path.join(temp_dir, 'credentials')
         
         # 자격증명 설정 (파라미터 우선, 없으면 환경 변수)
         if credentials:
@@ -87,10 +101,46 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             env_vars['AWS_SECRET_ACCESS_KEY'] = credentials.get('AWS_SECRET_ACCESS_KEY', '')
             env_vars['AWS_SESSION_TOKEN'] = credentials.get('AWS_SESSION_TOKEN', '')
         
-        # EC2 메타데이터 비활성화 (Reference 코드와 동일)
+        # 캐싱 및 메타데이터 비활성화 (Reference 코드와 동일)
         env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
+        env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
         
         print(f"[DEBUG] 자격증명 확인: ACCESS_KEY={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}..., SESSION_TOKEN={'있음' if env_vars.get('AWS_SESSION_TOKEN') else '없음'}", flush=True)
+        
+        # ========================================
+        # 계정 검증 (Reference 코드와 동일)
+        # ========================================
+        verify_cmd = ['aws', 'sts', 'get-caller-identity', '--query', 'Account', '--output', 'text']
+        verify_result = subprocess.run(
+            verify_cmd,
+            capture_output=True,
+            text=True,
+            env=env_vars,
+            timeout=10
+        )
+        
+        if verify_result.returncode == 0:
+            actual_account = verify_result.stdout.strip()
+            print(f"[DEBUG] 계정 검증 - 요청: {account_id}, 실제: {actual_account}", flush=True)
+            
+            if actual_account != account_id:
+                print(f"[ERROR] 계정 불일치! 요청: {account_id}, 실제: {actual_account}", flush=True)
+                return {
+                    "success": False,
+                    "summary": None,
+                    "report_url": None,
+                    "error": f"계정 자격증명 오류 - 요청: {account_id}, 실제: {actual_account}"
+                }
+            else:
+                print(f"[DEBUG] ✅ 계정 검증 성공: {actual_account}", flush=True)
+        else:
+            print(f"[ERROR] 계정 검증 실패: {verify_result.stderr}", flush=True)
+            return {
+                "success": False,
+                "summary": None,
+                "report_url": None,
+                "error": f"계정 검증 실패: {verify_result.stderr[:200]}"
+            }
         
         # 기존 Service Screener 결과 삭제 (Reference 코드와 동일)
         old_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
@@ -101,14 +151,32 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
         scan_regions = ['ap-northeast-2', 'us-east-1']
         
-        # Reference 코드 방식: crossAccounts.json 불필요 (main.py 직접 실행)
+        # ========================================
+        # Reference 코드 방식: crossAccounts.json 생성 및 사용
+        # ========================================
         print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
         
-        # Reference 코드 방식: main.py --regions (직접 실행)
-        regions_str = ','.join(scan_regions)
-        cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', regions_str]
+        # crossAccounts.json 생성 (Reference 코드와 동일)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        temp_json_path = f'/tmp/crossAccounts_{account_id}_{timestamp}.json'
         
-        print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
+                "Regions": scan_regions  # 스캔할 리전 목록
+            }
+        }
+        
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        
+        # Reference 코드 방식: Screener.py --crossAccounts 사용
+        screener_path = '/root/service-screener-v2/Screener.py'
+        cmd = ['python3', screener_path, '--crossAccounts', temp_json_path]
+        
+        print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_ACCESS_KEY_ID={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_EC2_METADATA_DISABLED={env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
         
@@ -116,39 +184,27 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         if websocket and session_id:
             send_websocket_message(websocket, session_id, "⚙️ AWS 리소스 스캔을 진행하고 있습니다...")
         
-        # Reference 코드와 동일: 로그 파일 방식으로 실행
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_file = f'/tmp/screener_{account_id}_{timestamp}.log'
-        
         print(f"[DEBUG] Service Screener 시작 시간: {datetime.now()}", flush=True)
         
-        # Reference 코드와 동일한 방식: 로그 파일로 출력
-        with open(log_file, 'w') as f:
-            result = subprocess.run(
-                cmd,
-                stdout=f,
-                stderr=subprocess.STDOUT,
-                env=env_vars,
-                timeout=600,  # Reference와 동일: 10분 타임아웃
-                cwd='/root/service-screener-v2'
-            )
+        # Reference 코드와 동일: subprocess.run으로 실행
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env_vars,
+            timeout=600,  # 10분 타임아웃
+            cwd='/root/service-screener-v2'
+        )
         
         print(f"[DEBUG] Service Screener 종료 시간: {datetime.now()}", flush=True)
-        
-        # 로그 파일 내용 읽기 (Reference 코드와 동일)
-        try:
-            with open(log_file, 'r') as f:
-                log_content = f.read()
-            print(f"[DEBUG] Service Screener 로그 (마지막 1000자):\n{log_content[-1000:]}", flush=True)
-        except Exception as e:
-            print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
-        
         print(f"[DEBUG] Service Screener 완료 - 반환코드: {result.returncode}", flush=True)
+        print(f"[DEBUG] stdout (처음 1000자): {result.stdout[:1000]}", flush=True)
+        print(f"[DEBUG] stderr (처음 1000자): {result.stderr[:1000]}", flush=True)
         
-        # 로그 파일 정리
+        # 임시 파일 정리
         try:
-            os.remove(log_file)
-            print(f"[DEBUG] 로그 파일 삭제: {log_file}", flush=True)
+            os.remove(temp_json_path)
+            print(f"[DEBUG] 임시 파일 삭제: {temp_json_path}", flush=True)
         except:
             pass
         
@@ -173,9 +229,21 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 if index_html_path:
                     break
             
+        # 결과 처리 (대기 후에도 처리)
+        if os.path.exists(account_result_dir):
+            # index.html 찾기
+            index_html_path = None
+            for root, dirs, files in os.walk(account_result_dir):
+                for file in files:
+                    if file.lower() == 'index.html':
+                        index_html_path = os.path.join(root, file)
+                        print(f"[DEBUG] index.html 발견: {index_html_path}", flush=True)
+                        break
+                if index_html_path:
+                    break
+            
             if index_html_path:
                 # 전체 디렉토리를 /tmp/reports로 복사 (ALB를 통해 제공하기 위함)
-                # timestamp는 이미 위에서 생성됨
                 tmp_report_dir = f"/tmp/reports/screener_{account_id}_{timestamp}"
                 
                 # 기존 디렉토리가 있으면 삭제
@@ -187,7 +255,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 shutil.copytree(source_dir, tmp_report_dir)
                 print(f"[DEBUG] 전체 디렉터리 복사 완료: {tmp_report_dir}", flush=True)
                 
-                # res 디렉토리도 복사 (CSS/JS/이미지 파일들)
+                # res 디렉토리도 복사 (CSS/JS/이미지 파일들) - Reference 코드와 동일
                 res_source = os.path.join(screener_dir, 'adminlte')
                 res_dest = os.path.join(tmp_report_dir, 'res')
                 print(f"[DEBUG] res 소스 경로 확인: {res_source}, 존재={os.path.exists(res_source)}", flush=True)
@@ -199,7 +267,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                     print(f"[DEBUG] res 디렉터리 복사 완료: {res_dest}", flush=True)
                 else:
                     print(f"[ERROR] res 소스 디렉터리를 찾을 수 없음: {res_source}", flush=True)
-                    # 대체 경로 시도
+                    # 대체 경로 시도 (Reference 코드와 동일)
                     alt_paths = [
                         '/root/service-screener-v2/res',
                         '/root/service-screener-v2/templates/res',
@@ -248,22 +316,26 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 time.sleep(2)
                 if os.path.exists(account_result_dir):
                     print(f"[DEBUG] 지연 성공! 결과 디렉터리 생성됨: {account_result_dir} (대기시간: {(wait_count+1)*2}초)", flush=True)
-                    # 재귀 호출로 결과 처리
-                    return run_service_screener_sync(account_id, credentials, websocket, session_id)
+                    # 재귀 호출 대신 직접 처리 (무한 루프 방지)
+                    break
                 
                 # 진행 상황 업데이트 (30초마다)
                 if websocket and session_id and (wait_count + 1) % 15 == 0:
                     elapsed_minutes = ((wait_count+1)*2) // 60
                     send_websocket_message(websocket, session_id, f"⏳ 스캔 진행 중... ({elapsed_minutes}분 경과)")
             
-            print(f"[DEBUG] 900초(15분) 대기 후에도 결과 디렉터리 없음", flush=True)
-            
-            return {
-                "success": False,
-                "summary": None,
-                "report_url": None,
-                "error": f"스캔이 15분 대기 후에도 결과 디렉터리를 찾을 수 없습니다: {account_result_dir}"
-            }
+            # 대기 후 다시 확인
+            if not os.path.exists(account_result_dir):
+                print(f"[DEBUG] 900초(15분) 대기 후에도 결과 디렉터리 없음", flush=True)
+                
+                return {
+                    "success": False,
+                    "summary": None,
+                    "report_url": None,
+                    "error": f"스캔이 15분 대기 후에도 결과 디렉터리를 찾을 수 없습니다: {account_result_dir}"
+                }
+            else:
+                print(f"[DEBUG] 대기 후 결과 디렉터리 발견: {account_result_dir}", flush=True)
     
     except subprocess.TimeoutExpired:
         print(f"[ERROR] Service Screener 타임아웃", flush=True)
@@ -271,7 +343,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             "success": False,
             "summary": None,
             "report_url": None,
-            "error": "스캔 시간이 초과되었습니다. (15분)"
+            "error": "스캔 시간이 초과되었습니다. (10분)"
         }
     except Exception as e:
         print(f"[ERROR] Service Screener 실행 중 오류: {str(e)}", flush=True)
@@ -282,6 +354,16 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             "report_url": None,
             "error": f"스캔 실행 중 오류: {str(e)}"
         }
+    finally:
+        # ========================================
+        # 임시 세션 디렉터리 정리 (Reference 코드와 동일)
+        # ========================================
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir)
+                print(f"[DEBUG] 임시 세션 디렉터리 삭제: {temp_dir}", flush=True)
+            except Exception as e:
+                print(f"[DEBUG] 임시 디렉터리 삭제 실패 (무시): {e}", flush=True)
 
 def generate_wa_summary_async(account_id, screener_result_dir, timestamp, websocket=None, session_id=None):
     """
