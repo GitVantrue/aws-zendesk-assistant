@@ -38,7 +38,7 @@ def run_service_screener_async(account_id, credentials=None, websocket=None, ses
                         report_message = f"📊 Service Screener 상세 보고서:\n{result['report_url']}"
                         send_websocket_message(websocket, session_id, report_message)
                     
-                    # WA Summary를 별도 스레드에서 실행
+                    # WA Summary를 별도 스레드에서 실행 (Reference 코드와 동일)
                     if result.get("screener_result_dir") and result.get("timestamp"):
                         wa_thread = threading.Thread(
                             target=generate_wa_summary_async,
@@ -142,8 +142,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 "error": f"계정 검증 실패: {verify_result.stderr[:200]}"
             }
         
-        # 기존 Service Screener 결과 삭제 (Reference 코드와 동일)
-        old_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
+        # 기존 Service Screener 결과 삭제 (실제 경로 기준)
+        old_result_dir = f'/root/service-screener-v2/aws/{account_id}'
         if os.path.exists(old_result_dir):
             print(f"[DEBUG] 기존 결과 삭제: {old_result_dir}", flush=True)
             shutil.rmtree(old_result_dir)
@@ -227,12 +227,12 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         # Reference 코드와 동일: Service Screener가 생성한 실제 결과 디렉터리 찾기
         screener_dir = '/root/service-screener-v2'
         
-        # Reference 코드와 동일: 결과 디렉터리 패턴 확인
-        # 1. adminlte/aws/{account_id} (새 버전)
-        # 2. aws/{account_id} (구 버전)
+        # Service Screener 결과 디렉터리 패턴 확인
+        # 1. aws/{account_id} (원본 생성 경로)
+        # 2. adminlte/aws/{account_id} (복사된 경로 - 계정 격리용)
         possible_dirs = [
-            os.path.join(screener_dir, 'adminlte', 'aws', account_id),
-            os.path.join(screener_dir, 'aws', account_id)
+            os.path.join(screener_dir, 'aws', account_id),
+            os.path.join(screener_dir, 'adminlte', 'aws', account_id)
         ]
         
         account_result_dir = None
@@ -298,7 +298,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                             print(f"[DEBUG] 대체 경로에서 res 복사 완료: {alt_path} -> {res_dest}", flush=True)
                             break
                 
-                # Reference 코드와 동일: 전역 res 디렉터리도 /tmp/reports/ 최상위에 복사 (../res/ 경로 참조 대응)
+        # 전역 res 디렉터리도 /tmp/reports/ 최상위에 복사 (../res/ 경로 참조 대응)
                 tmp_res_dir = '/tmp/reports/res'
                 screener_res_dir = '/root/service-screener-v2/adminlte/aws/res'
                 
@@ -529,6 +529,198 @@ def parse_screener_results(output_dir, account_id):
         print(f"[ERROR] 결과 파싱 실패: {str(e)}", flush=True)
         return f"📊 계정 {account_id} 스캔이 완료되었습니다.\n상세 결과는 첨부된 보고서를 확인하세요."
 
+def generate_enhanced_wa_summary(account_id, screener_result_dir, timestamp):
+    """
+    향상된 WA Summary 구현
+    Service Screener 결과를 Q CLI로 분석하여 Well-Architected 관점의 보고서 생성
+    """
+    try:
+        print(f"[DEBUG] 향상된 WA Summary 생성 시작: {account_id}", flush=True)
+        
+        # Service Screener 결과 파일들 수집
+        result_files = []
+        service_data = {}
+        
+        if os.path.exists(screener_result_dir):
+            for file in os.listdir(screener_result_dir):
+                if file.endswith('.html') and file != 'index.html':
+                    service_name = file.replace('.html', '')
+                    file_path = os.path.join(screener_result_dir, file)
+                    result_files.append((service_name, file_path))
+                    service_data[service_name] = file_path
+        
+        # Q CLI를 사용하여 Well-Architected 분석 수행
+        wa_context = """
+AWS Well-Architected Framework의 5가지 기둥을 기준으로 분석해주세요:
+
+1. **Operational Excellence (운영 우수성)**
+   - 시스템 운영 및 모니터링
+   - 지속적인 개선 프로세스
+
+2. **Security (보안)**
+   - 데이터 보호 및 시스템 보안
+   - 접근 제어 및 권한 관리
+
+3. **Reliability (안정성)**
+   - 장애 복구 능력
+   - 확장성 및 가용성
+
+4. **Performance Efficiency (성능 효율성)**
+   - 리소스 최적화
+   - 성능 모니터링
+
+5. **Cost Optimization (비용 최적화)**
+   - 비용 효율적인 리소스 사용
+   - 불필요한 비용 제거
+
+각 기둥별로 현재 상태를 평가하고 개선 권장사항을 제시해주세요.
+"""
+        
+        # Service Screener 결과 요약 생성
+        services_summary = f"스캔된 서비스: {', '.join(service_data.keys())}"
+        
+        # Q CLI 프롬프트 구성
+        wa_prompt = f"""다음 AWS 계정의 Service Screener 결과를 Well-Architected Framework 관점에서 분석해주세요:
+
+{wa_context}
+
+=== 계정 정보 ===
+계정 ID: {account_id}
+스캔 시간: {timestamp}
+{services_summary}
+
+=== 분석 요청 ===
+위 계정의 Service Screener 결과를 바탕으로 Well-Architected Framework의 5가지 기둥별로 현재 상태를 평가하고, 각 기둥별 개선 권장사항을 한국어로 상세히 작성해주세요.
+
+특히 다음 사항들을 포함해주세요:
+- 각 기둥별 현재 상태 점수 (1-5점)
+- 주요 발견사항 및 위험요소
+- 구체적인 개선 권장사항
+- 우선순위별 액션 아이템
+
+HTML 형식으로 보기 좋게 정리해서 응답해주세요."""
+
+        print(f"[DEBUG] Q CLI로 WA 분석 시작", flush=True)
+        
+        # Q CLI 실행
+        cmd = ['/root/.local/bin/q', 'chat', '--no-interactive', '--trust-all-tools', wa_prompt]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5분 타임아웃
+        )
+        
+        if result.returncode == 0 and result.stdout:
+            # Q CLI 응답을 HTML로 변환
+            wa_analysis = result.stdout.strip()
+            
+            # HTML 보고서 생성
+            html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Well-Architected Analysis - Account {account_id}</title>
+    <meta charset="utf-8">
+    <style>
+        body {{ 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 0;
+            background-color: #f5f5f5;
+        }}
+        .header {{ 
+            background: linear-gradient(135deg, #232f3e 0%, #ff9900 100%);
+            color: white; 
+            padding: 30px;
+            text-align: center;
+        }}
+        .content {{ 
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        .pillar {{
+            margin: 20px 0;
+            padding: 20px;
+            border-left: 5px solid #ff9900;
+            background: #f9f9f9;
+        }}
+        .pillar h3 {{
+            color: #232f3e;
+            margin-top: 0;
+        }}
+        .score {{
+            display: inline-block;
+            padding: 5px 15px;
+            background: #ff9900;
+            color: white;
+            border-radius: 20px;
+            font-weight: bold;
+        }}
+        .recommendation {{
+            background: #e8f4f8;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }}
+        .footer {{
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏗️ Well-Architected Framework Analysis</h1>
+        <p>Account: {account_id} | Generated: {timestamp}</p>
+    </div>
+    <div class="content">
+        <div style="margin-bottom: 30px;">
+            <h2>📊 Analysis Summary</h2>
+            <p><strong>Scanned Services:</strong> {len(service_data)} services</p>
+            <p><strong>Services:</strong> {', '.join(service_data.keys())}</p>
+        </div>
+        
+        <div>
+            <h2>🔍 Well-Architected Analysis</h2>
+            {wa_analysis}
+        </div>
+    </div>
+    <div class="footer">
+        <p>Generated by AWS Well-Architected Analysis Tool | Based on Service Screener Results</p>
+    </div>
+</body>
+</html>
+"""
+            
+            # HTML 파일 저장
+            dest_filename = f"wa_analysis_{account_id}_{timestamp}.html"
+            dest_path = f"/tmp/reports/{dest_filename}"
+            
+            with open(dest_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            print(f"[DEBUG] 향상된 WA Summary 저장 완료: {dest_path}", flush=True)
+            
+            # URL 생성
+            wa_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/{dest_filename}"
+            return wa_url
+        else:
+            print(f"[ERROR] Q CLI WA 분석 실패: {result.stderr}", flush=True)
+            # 기본 WA Summary로 폴백
+            return generate_simple_wa_summary(account_id, screener_result_dir, timestamp)
+        
+    except Exception as e:
+        print(f"[ERROR] 향상된 WA Summary 생성 실패: {e}", flush=True)
+        # 기본 WA Summary로 폴백
+        return generate_simple_wa_summary(account_id, screener_result_dir, timestamp)
+
 def generate_simple_wa_summary(account_id, screener_result_dir, timestamp):
     """
     간단한 WA Summary 대체 구현
@@ -608,72 +800,67 @@ def generate_simple_wa_summary(account_id, screener_result_dir, timestamp):
 
 def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
     """
-    Well-Architected 통합 분석 보고서 생성
-    Reference 코드의 완전한 generate_wa_summary_report 함수
+    Well-Architected 통합 분석 보고서 생성 (Reference 코드와 동일한 동작)
+    
+    Args:
+        account_id (str): AWS 계정 ID
+        screener_result_dir (str): Service Screener 결과 디렉터리
+        timestamp (str): 타임스탬프
+    
+    Returns:
+        str: 보고서 URL 또는 None
     """
     try:
         # wa-ss-summarizer 경로 확인
         wa_summarizer_dir = '/root/wa-ss-summarizer'
         wa_script = os.path.join(wa_summarizer_dir, 'run_wa_summarizer.sh')
-        
+
         if not os.path.exists(wa_script):
             print(f"[DEBUG] wa-ss-summarizer 스크립트 없음: {wa_script}", flush=True)
             return None
-        
+
         # 실행 권한 확인 및 부여
         if not os.access(wa_script, os.X_OK):
             print(f"[DEBUG] wa-ss-summarizer 스크립트에 실행 권한 부여", flush=True)
             os.chmod(wa_script, 0o755)
-        
+
         # 임시 디렉터리 생성 (해당 계정만 포함)
         temp_wa_input_dir = f"/tmp/wa_input_{account_id}_{timestamp}"
         os.makedirs(temp_wa_input_dir, exist_ok=True)
-        
-        # 해당 계정 폴더만 복사 (Reference와 동일한 구조)
+
+        # 해당 계정 폴더만 복사
         temp_account_dir = os.path.join(temp_wa_input_dir, account_id)
         shutil.copytree(screener_result_dir, temp_account_dir)
         print(f"[DEBUG] 계정 폴더 복사: {screener_result_dir} -> {temp_account_dir}", flush=True)
-        
-        # 디버깅: 복사된 파일들 확인
-        print(f"[DEBUG] WA Input 디렉터리 구조 확인:", flush=True)
-        for root, dirs, files in os.walk(temp_wa_input_dir):
-            level = root.replace(temp_wa_input_dir, '').count(os.sep)
-            indent = ' ' * 2 * level
-            print(f"[DEBUG] {indent}{os.path.basename(root)}/", flush=True)
-            subindent = ' ' * 2 * (level + 1)
-            for file in files:
-                print(f"[DEBUG] {subindent}{file}", flush=True)
-                if 'CPFindings' in file or 'findings' in file.lower():
-                    print(f"[DEBUG] *** 발견된 Findings 파일: {file} ***", flush=True)
-        
-        # res 폴더 복사 (CSS/JS 등 공통 리소스)
+
+        # res 폴더 복사 (CSS/JS 등 공통 리소스) - Reference 코드와 동일한 경로 사용
         res_source = '/root/service-screener-v2/aws/res'
         res_dest = os.path.join(temp_wa_input_dir, 'res')
         if os.path.exists(res_source):
             shutil.copytree(res_source, res_dest)
             print(f"[DEBUG] res 폴더 복사: {res_source} -> {res_dest}", flush=True)
-        
+        else:
+            # 대체 경로 시도 (adminlte 구조)
+            alt_res_source = '/root/service-screener-v2/adminlte/aws/res'
+            if os.path.exists(alt_res_source):
+                shutil.copytree(alt_res_source, res_dest)
+                print(f"[DEBUG] 대체 res 폴더 복사: {alt_res_source} -> {res_dest}", flush=True)
+            else:
+                print(f"[DEBUG] res 폴더를 찾을 수 없음: {res_source}, {alt_res_source}", flush=True)
+
         # 출력 디렉터리는 wa-ss-summarizer의 기본 output 디렉터리 사용
         wa_output_dir = os.path.join(wa_summarizer_dir, 'output')
         os.makedirs(wa_output_dir, exist_ok=True)
-        
+
         print(f"[DEBUG] WA Summarizer 실행: {wa_script} -d {temp_wa_input_dir}", flush=True)
-        
-        # WA Summarizer 스크립트 내용 확인
-        try:
-            with open(wa_script, 'r') as f:
-                script_content = f.read()
-            print(f"[DEBUG] WA Summarizer 스크립트 내용 (처음 500자):\n{script_content[:500]}", flush=True)
-        except Exception as e:
-            print(f"[DEBUG] WA Summarizer 스크립트 읽기 실패: {e}", flush=True)
-        
-        # wa-ss-summarizer 실행 (Q CLI PATH 추가 + 한국어 출력 설정)
+
+        # wa-ss-summarizer 실행 (Q CLI PATH 추가 + 한국어 출력 설정) - Reference 코드와 동일
         wa_env = os.environ.copy()
         wa_env['PATH'] = f"/root/.local/bin:{wa_env.get('PATH', '')}"
         # Q CLI에게 한국어로 응답하도록 지시
         wa_env['Q_LANGUAGE'] = 'Korean'
         wa_env['LANG'] = 'ko_KR.UTF-8'
-        
+
         result = subprocess.run(
             [wa_script, '-d', temp_wa_input_dir],
             capture_output=True,
@@ -682,41 +869,40 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
             cwd=wa_summarizer_dir,
             env=wa_env
         )
-        
-        # 임시 디렉터리 정리 (Reference 코드와 동일한 위치)
+
+        # 임시 디렉터리 정리
         try:
             shutil.rmtree(temp_wa_input_dir)
             print(f"[DEBUG] 임시 디렉터리 삭제: {temp_wa_input_dir}", flush=True)
         except Exception as e:
             print(f"[DEBUG] 임시 디렉터리 삭제 실패 (무시): {e}", flush=True)
-        
+
         print(f"[DEBUG] WA Summarizer 완료. 반환코드: {result.returncode}", flush=True)
         if result.stdout:
             print(f"[DEBUG] WA stdout (전체): {result.stdout}", flush=True)
         if result.stderr:
             print(f"[DEBUG] WA stderr (전체): {result.stderr}", flush=True)
-        
+
         if result.returncode == 0:
-            print(f"[DEBUG] WA Summarizer 성공!", flush=True)
             # 생성된 HTML 파일 찾기 (최근 생성된 파일 기준)
             html_files = [f for f in os.listdir(wa_output_dir) if f.startswith('wa_summary_report_') and f.endswith('.html')]
-            
+
             if html_files:
                 # 파일 생성 시간 기준으로 가장 최근 파일 선택
                 html_files_with_time = [(f, os.path.getmtime(os.path.join(wa_output_dir, f))) for f in html_files]
                 html_files_with_time.sort(key=lambda x: x[1], reverse=True)
                 html_file = html_files_with_time[0][0]
                 html_path = os.path.join(wa_output_dir, html_file)
-                
+
                 print(f"[DEBUG] 최신 WA 보고서 파일 발견: {html_file}", flush=True)
-                
+
                 # /tmp/reports/로 복사 (Flask가 서빙할 수 있도록)
                 dest_filename = f"wa_summary_{account_id}_{timestamp}.html"
                 dest_path = f"/tmp/reports/{dest_filename}"
-                
+
                 shutil.copy(html_path, dest_path)
                 print(f"[DEBUG] WA 보고서 복사 완료: {dest_path}", flush=True)
-                
+
                 # URL 생성
                 wa_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/{dest_filename}"
                 return wa_url
@@ -726,29 +912,12 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
                 return None
         else:
             print(f"[ERROR] WA Summarizer 실패: {result.stderr[:500]}", flush=True)
-            print(f"[DEBUG] WA Summarizer 실패 원인 분석:", flush=True)
-            print(f"[DEBUG] - 스크립트 경로: {wa_script}, 존재={os.path.exists(wa_script)}", flush=True)
-            print(f"[DEBUG] - 입력 디렉터리: {temp_wa_input_dir}, 존재={os.path.exists(temp_wa_input_dir)}", flush=True)
-            print(f"[DEBUG] - 작업 디렉터리: {wa_summarizer_dir}", flush=True)
-            
-            # 대체 구현: 간단한 WA Summary 생성
-            print(f"[DEBUG] 대체 WA Summary 생성 시도", flush=True)
-            try:
-                simple_wa_url = generate_simple_wa_summary(account_id, screener_result_dir, timestamp)
-                if simple_wa_url:
-                    print(f"[DEBUG] 대체 WA Summary 생성 성공: {simple_wa_url}", flush=True)
-                    return simple_wa_url
-                else:
-                    print(f"[DEBUG] 대체 WA Summary 생성도 실패", flush=True)
-            except Exception as e:
-                print(f"[ERROR] 대체 WA Summary 생성 중 오류: {e}", flush=True)
-            
             return None
-    
+
     except subprocess.TimeoutExpired:
         print(f"[ERROR] WA Summarizer 타임아웃 (15분)", flush=True)
         return None
     except Exception as e:
-        print(f"[ERROR] WA Summarizer 실행 중 오류: {str(e)}", flush=True)
+        print(f"[ERROR] WA 보고서 생성 중 오류: {str(e)}", flush=True)
         traceback.print_exc()
         return None
