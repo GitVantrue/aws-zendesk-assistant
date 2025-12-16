@@ -38,14 +38,10 @@ def run_service_screener_async(account_id, credentials=None, websocket=None, ses
                         report_message = f"📊 Service Screener 상세 보고서:\n{result['report_url']}"
                         send_websocket_message(websocket, session_id, report_message)
                     
-                    # WA Summary를 별도 스레드에서 실행
-                    if result.get("screener_result_dir") and result.get("timestamp"):
-                        wa_thread = threading.Thread(
-                            target=generate_wa_summary_async,
-                            args=(account_id, result["screener_result_dir"], result["timestamp"], websocket, session_id)
-                        )
-                        wa_thread.daemon = True
-                        wa_thread.start()
+                    # WA Summary는 현재 비활성화 (CPFindings.html 파일 구조 이슈)
+                    # TODO: WA Summary 기능 개선 필요
+                    if websocket and session_id:
+                        send_websocket_message(websocket, session_id, "ℹ️ Well-Architected 통합 분석은 현재 개발 중입니다.")
             else:
                 # 실패 시 오류 전송
                 if websocket and session_id:
