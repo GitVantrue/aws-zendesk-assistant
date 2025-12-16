@@ -101,9 +101,23 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
         scan_regions = ['ap-northeast-2', 'us-east-1']
         
-        # Reference 코드 방식: main.py 직접 실행 (긴 시간 소요)
-        screener_path = '/root/service-screener-v2/main.py'
-        cmd = ['python3', screener_path, '--regions', ','.join(scan_regions)]
+        # crossAccounts.json 생성 (Reference 코드와 동일)
+        temp_json_path = f'/tmp/crossAccounts_{account_id}.json'
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
+                "Regions": scan_regions  # 스캔할 리전 목록
+            }
+        }
+        
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        
+        # Reference 코드 방식: Screener.py --crossAccounts (긴 시간 소요)
+        screener_path = '/root/service-screener-v2/Screener.py'
+        cmd = ['python3', screener_path, '--crossAccounts', temp_json_path]
         
         print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
         
@@ -129,7 +143,15 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         if result.stderr:
             print(f"[DEBUG] stderr (처음 500자):\n{result.stderr[:500]}", flush=True)
         
-        # Reference 코드와 동일: CloudFormation 오류 무시하고 결과 디렉터리 확인
+        # 임시 파일 정리
+        try:
+            os.remove(temp_json_path)
+            print(f"[DEBUG] 임시 파일 삭제: {temp_json_path}", flush=True)
+        except:
+            pass
+        
+        # Reference 코드와 동일: 반환코드 무시하고 결과 디렉터리만 확인
+        # CloudFormation 오류가 있어도 부분적인 스캔 결과가 생성될 수 있음
         screener_dir = '/root/service-screener-v2'
         account_result_dir = os.path.join(screener_dir, 'adminlte', 'aws', account_id)
         
@@ -214,24 +236,24 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         else:
             print(f"[DEBUG] 계정 디렉터리 없음: {account_result_dir}", flush=True)
             
-            # CloudFormation 오류가 있어도 스캔이 진행되었는지 확인
-            if "Processing the following account id" in result.stdout:
-                print(f"[DEBUG] CloudFormation 오류 있지만 스캔 진행됨, 추가 대기 중...", flush=True)
+            # Reference 코드와 동일: CloudFormation 오류가 있어도 추가 대기
+            # 스캔이 백그라운드에서 계속 진행될 수 있음
+            print(f"[DEBUG] 추가 대기 중... (CloudFormation 오류 무시)", flush=True)
+            
+            # 추가 대기 (스캔이 완료될 때까지)
+            import time
+            for wait_count in range(60):  # 120초 = 60 * 2초
+                time.sleep(2)
+                if os.path.exists(account_result_dir):
+                    print(f"[DEBUG] 지연 성공! 결과 디렉터리 생성됨: {account_result_dir} (대기시간: {(wait_count+1)*2}초)", flush=True)
+                    # 재귀 호출로 결과 처리
+                    return run_service_screener_sync(account_id, credentials, websocket, session_id)
                 
-                # 추가 대기 (스캔이 완료될 때까지)
-                import time
-                for wait_count in range(30):  # 60초 = 30 * 2초
-                    time.sleep(2)
-                    if os.path.exists(account_result_dir):
-                        print(f"[DEBUG] 지연 성공! 결과 디렉터리 생성됨: {account_result_dir} (대기시간: {(wait_count+1)*2}초)", flush=True)
-                        # 재귀 호출로 결과 처리
-                        return run_service_screener_sync(account_id, credentials, websocket, session_id)
-                    
-                    # 진행 상황 업데이트 (10초마다)
-                    if websocket and session_id and (wait_count + 1) % 5 == 0:
-                        send_websocket_message(websocket, session_id, f"⏳ 스캔 진행 중... ({(wait_count+1)*2}초 경과)")
-                
-                print(f"[DEBUG] 60초 대기 후에도 결과 디렉터리 없음", flush=True)
+                # 진행 상황 업데이트 (10초마다)
+                if websocket and session_id and (wait_count + 1) % 5 == 0:
+                    send_websocket_message(websocket, session_id, f"⏳ 스캔 진행 중... ({(wait_count+1)*2}초 경과)")
+            
+            print(f"[DEBUG] 120초 대기 후에도 결과 디렉터리 없음", flush=True)
             
             return {
                 "success": False,
