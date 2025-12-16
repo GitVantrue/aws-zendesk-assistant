@@ -29,6 +29,7 @@
         let ws = null;
         let messageId = 1;
         let clientHeartbeat = null;
+        let currentStreamingDiv = null;
         
         const connectBtn = document.getElementById('connectBtn');
         const disconnectBtn = document.getElementById('disconnectBtn');
@@ -72,7 +73,38 @@
                             addMessage(`서버: ${data.message}`, 'success');
                         } else if (data.type === 'progress') {
                             addMessage(`진행: ${data.message}`, 'info');
+                        } else if (data.type === 'streaming_start') {
+                            // 스트리밍 시작
+                            currentStreamingDiv = document.createElement('div');
+                            currentStreamingDiv.style.color = 'green';
+                            currentStreamingDiv.innerHTML = `[${new Date().toLocaleTimeString()}] 결과:<br><div id="streaming-content" style="margin-left: 10px; margin-top: 5px;"></div>`;
+                            messages.appendChild(currentStreamingDiv);
+                            messages.scrollTop = messages.scrollHeight;
+                        } else if (data.type === 'streaming_chunk') {
+                            // 스트리밍 청크 추가
+                            if (currentStreamingDiv) {
+                                const contentDiv = currentStreamingDiv.querySelector('#streaming-content');
+                                if (contentDiv) {
+                                    // 마크다운 스타일 텍스트를 HTML로 간단 변환
+                                    let formattedChunk = data.chunk
+                                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **bold**
+                                        .replace(/\*(.*?)\*/g, '<em>$1</em>')              // *italic*
+                                        .replace(/`(.*?)`/g, '<code>$1</code>')            // `code`
+                                        .replace(/### (.*?)$/gm, '<h3>$1</h3>')           // ### header
+                                        .replace(/## (.*?)$/gm, '<h2>$1</h2>')            // ## header
+                                        .replace(/# (.*?)$/gm, '<h1>$1</h1>')             // # header
+                                        .replace(/\n/g, '<br>');                          // 줄바꿈
+                                    
+                                    contentDiv.innerHTML += formattedChunk + '<br>';
+                                    messages.scrollTop = messages.scrollHeight;
+                                }
+                            }
+                        } else if (data.type === 'streaming_complete') {
+                            // 스트리밍 완료
+                            currentStreamingDiv = null;
+                            console.log('스트리밍 완료');
                         } else if (data.type === 'result') {
+                            // 기존 방식 (짧은 답변용)
                             // 마크다운 스타일 텍스트를 HTML로 간단 변환
                             let formattedAnswer = data.data.answer
                                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **bold**

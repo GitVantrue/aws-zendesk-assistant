@@ -219,9 +219,58 @@ async def send_websocket_progress(state: AgentState, message: str):
             log_error(f"진행 상황 전송 실패: {e}")
 
 
+def split_answer_into_chunks(answer: str, chunk_size: int = 100) -> list[str]:
+    """
+    답변을 자연스러운 청크로 분할
+    
+    Args:
+        answer: 전체 답변 텍스트
+        chunk_size: 청크 크기 (문자 수)
+        
+    Returns:
+        청크 리스트
+    """
+    if not answer or len(answer) <= chunk_size:
+        return [answer]
+    
+    chunks = []
+    sentences = answer.replace('\n\n', '\n').split('\n')
+    
+    current_chunk = ""
+    for sentence in sentences:
+        # 현재 청크에 문장을 추가했을 때 크기 확인
+        if len(current_chunk + sentence) <= chunk_size:
+            current_chunk += sentence + '\n'
+        else:
+            # 현재 청크가 있으면 저장
+            if current_chunk.strip():
+                chunks.append(current_chunk.strip())
+            
+            # 문장이 너무 길면 강제로 분할
+            if len(sentence) > chunk_size:
+                words = sentence.split(' ')
+                temp_chunk = ""
+                for word in words:
+                    if len(temp_chunk + word) <= chunk_size:
+                        temp_chunk += word + ' '
+                    else:
+                        if temp_chunk.strip():
+                            chunks.append(temp_chunk.strip())
+                        temp_chunk = word + ' '
+                current_chunk = temp_chunk
+            else:
+                current_chunk = sentence + '\n'
+    
+    # 마지막 청크 추가
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+    
+    return chunks
+
+
 async def send_websocket_result(state: AgentState, result: Dict[str, Any]):
     """
-    WebSocket을 통한 최종 결과 전송
+    WebSocket을 통한 스트리밍 결과 전송
     
     Args:
         state: 에이전트 상태
@@ -230,17 +279,71 @@ async def send_websocket_result(state: AgentState, result: Dict[str, Any]):
     if state["websocket"]:
         try:
             import json
+            import asyncio
             from datetime import datetime
             
-            result_message = {
-                "type": "result",
+            answer = result.get("answer", "")
+            
+            # 답변이 짧으면 바로 전송
+            if len(answer) <= 200:
+                result_message = {
+                    "type": "result",
+                    "data": result,
+                    "timestamp": datetime.now().isoformat()
+                }
+                await state["websocket"].send_str(json.dumps(result_message, ensure_ascii=False))
+                log_debug("짧은 답변 즉시 전송 완료")
+                return
+            
+            # 긴 답변은 스트리밍으로 전송
+            log_debug(f"스트리밍 시작: {len(answer)} 문자")
+            
+            # 스트리밍 시작 신호
+            start_message = {
+                "type": "streaming_start",
+                "timestamp": datetime.now().isoformat()
+            }
+            await state["websocket"].send_str(json.dumps(start_message, ensure_ascii=False))
+            
+            # 청크별 전송
+            chunks = split_answer_into_chunks(answer, chunk_size=150)
+            for i, chunk in enumerate(chunks):
+                chunk_message = {
+                    "type": "streaming_chunk",
+                    "chunk": chunk,
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    "timestamp": datetime.now().isoformat()
+                }
+                await state["websocket"].send_str(json.dumps(chunk_message, ensure_ascii=False))
+                
+                # 자연스러운 타이핑 속도 (청크 크기에 따라 조절)
+                delay = min(0.3, len(chunk) * 0.01)
+                await asyncio.sleep(delay)
+            
+            # 스트리밍 완료 신호 (전체 결과 포함)
+            complete_message = {
+                "type": "streaming_complete",
                 "data": result,
                 "timestamp": datetime.now().isoformat()
             }
-            await state["websocket"].send_str(json.dumps(result_message, ensure_ascii=False))
-            log_debug("최종 결과 전송 완료")
+            await state["websocket"].send_str(json.dumps(complete_message, ensure_ascii=False))
+            
+            log_debug(f"스트리밍 완료: {len(chunks)} 청크 전송")
+            
         except Exception as e:
-            log_error(f"결과 전송 실패: {e}")
+            log_error(f"스트리밍 결과 전송 실패: {e}")
+            # 실패 시 기존 방식으로 폴백
+            try:
+                result_message = {
+                    "type": "result",
+                    "data": result,
+                    "timestamp": datetime.now().isoformat()
+                }
+                await state["websocket"].send_str(json.dumps(result_message, ensure_ascii=False))
+                log_debug("폴백 전송 완료")
+            except Exception as fallback_error:
+                log_error(f"폴백 전송도 실패: {fallback_error}")
 
 
 async def authenticate_aws(state: AgentState, local_test_mode: bool = True) -> AgentState:
