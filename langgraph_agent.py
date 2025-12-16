@@ -4,6 +4,7 @@ AWS 작업을 오케스트레이션하는 LangGraph 에이전트
 """
 from typing import TypedDict, Optional, Dict, Any, List
 from datetime import datetime
+import os
 import websockets
 from utils.logging_config import log_debug, log_error, log_info
 
@@ -452,14 +453,78 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                 "authenticated": True
             }
         elif question_type == "report" and account_id and credentials:
-            # TODO: Task 6에서 보안 보고서 구현
-            result = {
-                "question": state["question"],
-                "answer": f"보안 보고서 기능은 아직 구현 중입니다. (계정: {account_id})",
-                "question_type": question_type,
-                "account_id": account_id,
-                "authenticated": True
-            }
+            # 보안 보고서 생성
+            from aws_tools.security_report import generate_security_report, get_report_url
+            from datetime import datetime, timedelta
+            
+            # 기본 분석 기간 설정 (최근 30일)
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=30)
+            
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            # 진행 상황 업데이트
+            await send_websocket_result(
+                websocket=state["websocket"],
+                client_id=state["client_id"],
+                message="📊 보안 보고서를 생성하고 있습니다...",
+                message_type="progress"
+            )
+            
+            # 보안 보고서 생성
+            report_result = generate_security_report(
+                account_id=account_id,
+                start_date_str=start_date_str,
+                end_date_str=end_date_str,
+                region='ap-northeast-2',
+                credentials=credentials
+            )
+            
+            if report_result["success"]:
+                # 보고서 URL 생성
+                html_url = get_report_url(report_result["html_path"])
+                
+                answer = f"""
+## 📊 AWS 보안 보고서 생성 완료
+
+**계정 ID**: {account_id}
+**분석 기간**: {start_date_str} ~ {end_date_str}
+
+### 📋 생성된 보고서
+- **HTML 보고서**: [보안 점검 보고서 보기]({html_url})
+- **JSON 데이터**: {os.path.basename(report_result["json_path"])}
+
+### 📈 보고서 내용
+- EC2 인스턴스 보안 상태
+- S3 버킷 암호화 및 접근 제어
+- IAM 사용자 및 MFA 설정
+- 보안 그룹 규칙 분석
+- EBS 볼륨 암호화 상태
+- CloudTrail 중요 이벤트
+- CloudWatch 알람 상태
+- Trusted Advisor 권장사항 (Business/Enterprise 플랜)
+
+보고서를 클릭하여 상세한 보안 분석 결과를 확인하세요.
+"""
+                
+                result = {
+                    "question": state["question"],
+                    "answer": answer,
+                    "question_type": question_type,
+                    "account_id": account_id,
+                    "authenticated": True,
+                    "report_data": report_result
+                }
+            else:
+                result = {
+                    "question": state["question"],
+                    "answer": f"❌ 보안 보고서 생성에 실패했습니다.\n\n오류: {report_result.get('error', '알 수 없는 오류')}",
+                    "question_type": question_type,
+                    "account_id": account_id,
+                    "authenticated": True,
+                    "error": report_result.get('error')
+                }
         elif question_type in ["cloudtrail", "cloudwatch", "general"]:
             # Q CLI 직접 호출
             from aws_tools.q_cli import call_q_cli
