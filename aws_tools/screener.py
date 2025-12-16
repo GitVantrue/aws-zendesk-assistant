@@ -109,6 +109,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', regions_str]
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
+        print(f"[DEBUG] 환경변수 전달 확인: AWS_ACCESS_KEY_ID={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
+        print(f"[DEBUG] 환경변수 전달 확인: AWS_EC2_METADATA_DISABLED={env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
         
         # 진행 상황 업데이트
         if websocket and session_id:
