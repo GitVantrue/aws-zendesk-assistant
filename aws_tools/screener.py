@@ -116,27 +116,41 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         if websocket and session_id:
             send_websocket_message(websocket, session_id, "⚙️ AWS 리소스 스캔을 진행하고 있습니다...")
         
-        # Service Screener 실행 (긴 시간 소요 - 5~10분)
+        # Reference 코드와 동일: 로그 파일 방식으로 실행
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = f'/tmp/screener_{account_id}_{timestamp}.log'
+        
         print(f"[DEBUG] Service Screener 시작 시간: {datetime.now()}", flush=True)
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            env=env_vars,
-            timeout=900,  # 15분 타임아웃
-            cwd='/root/service-screener-v2'
-        )
+        
+        # Reference 코드와 동일한 방식: 로그 파일로 출력
+        with open(log_file, 'w') as f:
+            result = subprocess.run(
+                cmd,
+                stdout=f,
+                stderr=subprocess.STDOUT,
+                env=env_vars,
+                timeout=600,  # Reference와 동일: 10분 타임아웃
+                cwd='/root/service-screener-v2'
+            )
+        
         print(f"[DEBUG] Service Screener 종료 시간: {datetime.now()}", flush=True)
         
+        # 로그 파일 내용 읽기 (Reference 코드와 동일)
+        try:
+            with open(log_file, 'r') as f:
+                log_content = f.read()
+            print(f"[DEBUG] Service Screener 로그 (마지막 1000자):\n{log_content[-1000:]}", flush=True)
+        except Exception as e:
+            print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
+        
         print(f"[DEBUG] Service Screener 완료 - 반환코드: {result.returncode}", flush=True)
-        print(f"[DEBUG] stdout 길이: {len(result.stdout)}, stderr 길이: {len(result.stderr)}", flush=True)
         
-        if result.stdout:
-            print(f"[DEBUG] stdout (처음 500자):\n{result.stdout[:500]}", flush=True)
-        if result.stderr:
-            print(f"[DEBUG] stderr (처음 500자):\n{result.stderr[:500]}", flush=True)
-        
-        # Reference 코드 방식: 임시 파일 없음 (main.py 직접 실행)
+        # 로그 파일 정리
+        try:
+            os.remove(log_file)
+            print(f"[DEBUG] 로그 파일 삭제: {log_file}", flush=True)
+        except:
+            pass
         
         # Reference 코드와 동일: 반환코드 무시하고 결과 디렉터리만 확인
         # CloudFormation 오류가 있어도 부분적인 스캔 결과가 생성될 수 있음
@@ -161,7 +175,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             
             if index_html_path:
                 # 전체 디렉토리를 /tmp/reports로 복사 (ALB를 통해 제공하기 위함)
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                # timestamp는 이미 위에서 생성됨
                 tmp_report_dir = f"/tmp/reports/screener_{account_id}_{timestamp}"
                 
                 # 기존 디렉토리가 있으면 삭제
