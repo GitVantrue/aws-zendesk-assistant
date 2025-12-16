@@ -42,6 +42,9 @@ class HybridServer:
         self.app.router.add_get('/', self.health_check)
         self.app.router.add_get('/health', self.health_check)
         self.app.router.add_get('/ws', self.websocket_handler)
+        
+        # Static 파일 서빙 (보고서 파일들)
+        self.app.router.add_static('/reports', '/tmp/reports', name='reports')
     
     async def health_check(self, request):
         """ALB 헬스체크 엔드포인트"""
