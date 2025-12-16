@@ -38,10 +38,14 @@ def run_service_screener_async(account_id, credentials=None, websocket=None, ses
                         report_message = f"📊 Service Screener 상세 보고서:\n{result['report_url']}"
                         send_websocket_message(websocket, session_id, report_message)
                     
-                    # WA Summary는 현재 비활성화 (CPFindings.html 파일 구조 이슈)
-                    # TODO: WA Summary 기능 개선 필요
-                    if websocket and session_id:
-                        send_websocket_message(websocket, session_id, "ℹ️ Well-Architected 통합 분석은 현재 개발 중입니다.")
+                    # WA Summary를 별도 스레드에서 실행
+                    if result.get("screener_result_dir") and result.get("timestamp"):
+                        wa_thread = threading.Thread(
+                            target=generate_wa_summary_async,
+                            args=(account_id, result["screener_result_dir"], result["timestamp"], websocket, session_id)
+                        )
+                        wa_thread.daemon = True
+                        wa_thread.start()
             else:
                 # 실패 시 오류 전송
                 if websocket and session_id:
@@ -552,6 +556,18 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
         temp_account_dir = os.path.join(temp_wa_input_dir, account_id)
         shutil.copytree(screener_result_dir, temp_account_dir)
         print(f"[DEBUG] 계정 폴더 복사: {screener_result_dir} -> {temp_account_dir}", flush=True)
+        
+        # 디버깅: 복사된 파일들 확인
+        print(f"[DEBUG] WA Input 디렉터리 구조 확인:", flush=True)
+        for root, dirs, files in os.walk(temp_wa_input_dir):
+            level = root.replace(temp_wa_input_dir, '').count(os.sep)
+            indent = ' ' * 2 * level
+            print(f"[DEBUG] {indent}{os.path.basename(root)}/", flush=True)
+            subindent = ' ' * 2 * (level + 1)
+            for file in files:
+                print(f"[DEBUG] {subindent}{file}", flush=True)
+                if 'CPFindings' in file or 'findings' in file.lower():
+                    print(f"[DEBUG] *** 발견된 Findings 파일: {file} ***", flush=True)
         
         # res 폴더 복사 (CSS/JS 등 공통 리소스)
         res_source = '/root/service-screener-v2/aws/res'
