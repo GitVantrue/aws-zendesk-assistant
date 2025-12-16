@@ -71,31 +71,14 @@ def run_service_screener(account_id, credentials=None):
         print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
 
         # 여러 실행 방식 시도
+        # Reference 코드와 완전히 동일한 방식만 사용
         screener_attempts = [
-            # 1. Reference 코드 방식
-            {
-                'path': '/root/service-screener-v2/Screener.py',
-                'cmd': ['python3', '/root/service-screener-v2/Screener.py', '--crossAccounts', temp_json_path],
-                'name': 'Reference 방식 (Screener.py + crossAccounts)'
-            },
-            # 2. main.py 방식
-            {
-                'path': '/root/service-screener-v2/main.py',
-                'cmd': ['python3', '/root/service-screener-v2/main.py', '--crossAccounts', temp_json_path],
-                'name': 'main.py + crossAccounts'
-            },
-            # 3. 단일 계정 방식 (Screener.py)
-            {
-                'path': '/root/service-screener-v2/Screener.py',
-                'cmd': ['python3', '/root/service-screener-v2/Screener.py', '--regions', ','.join(scan_regions)],
-                'name': '단일 계정 방식 (Screener.py + regions)'
-            },
-            # 4. 단일 계정 방식 (main.py) - 올바른 방법
+            # Reference 코드 방식: main.py + regions (CloudFormation 오류 무시)
             {
                 'path': '/root/service-screener-v2/main.py',
                 'cmd': ['python3', '/root/service-screener-v2/main.py', '--regions', ','.join(scan_regions)],
-                'name': '단일 계정 방식 (main.py + regions)',
-                'ignore_errors': True  # CloudFormation 오류 무시
+                'name': 'Reference 방식 (main.py + regions)',
+                'ignore_errors': True  # CloudFormation 오류 무시하고 부분 결과 수집
             }
         ]
         
@@ -144,16 +127,24 @@ def run_service_screener(account_id, credentials=None):
                     if "Processing the following account id" in result.stdout:
                         print(f"[DEBUG] {attempt['name']} - CloudFormation 오류 있지만 스캔 진행됨, 결과 대기 중...", flush=True)
                         
-                        # 추가로 5초 대기 후 다시 확인
+                        # CloudFormation 오류 무시하고 더 긴 대기 (Reference 코드 방식)
+                        print(f"[DEBUG] {attempt['name']} - CloudFormation 오류 무시하고 스캔 완료 대기 중...", flush=True)
                         import time
-                        time.sleep(5)
                         
-                        if os.path.exists(account_result_dir):
-                            print(f"[DEBUG] {attempt['name']} 지연 성공! 결과 디렉터리 생성됨: {account_result_dir}", flush=True)
-                            successful_result = result
+                        # 30초 동안 2초마다 확인 (Reference 코드처럼 충분한 대기)
+                        for wait_count in range(15):  # 30초 = 15 * 2초
+                            time.sleep(2)
+                            if os.path.exists(account_result_dir):
+                                print(f"[DEBUG] {attempt['name']} 지연 성공! 결과 디렉터리 생성됨: {account_result_dir} (대기시간: {(wait_count+1)*2}초)", flush=True)
+                                successful_result = result
+                                break
+                            else:
+                                print(f"[DEBUG] {attempt['name']} - {(wait_count+1)*2}초 대기 중... 결과 디렉터리 확인 중", flush=True)
+                        
+                        if successful_result:
                             break
                         else:
-                            print(f"[DEBUG] {attempt['name']} - 5초 대기 후에도 결과 디렉터리 없음", flush=True)
+                            print(f"[DEBUG] {attempt['name']} - 30초 대기 후에도 결과 디렉터리 없음", flush=True)
                 else:
                     print(f"[DEBUG] {attempt['name']} - 결과 디렉터리 없음", flush=True)
                     
