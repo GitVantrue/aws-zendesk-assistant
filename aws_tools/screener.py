@@ -25,8 +25,8 @@ def run_service_screener_async(account_id, credentials=None, websocket=None, ses
     def screener_worker():
         """백그라운드에서 실행되는 Service Screener 작업"""
         try:
-            # 실제 Service Screener 실행
-            result = run_service_screener_sync(account_id, credentials, websocket, session_id)
+            # 실제 Service Screener 실행 (질문 텍스트도 전달)
+            result = run_service_screener_sync(account_id, credentials, websocket, session_id, "")
             
             if result["success"]:
                 # 성공 시 결과 전송
@@ -71,7 +71,7 @@ def run_service_screener_async(account_id, credentials=None, websocket=None, ses
         "async": True
     }
 
-def run_service_screener_sync(account_id, credentials=None, websocket=None, session_id=None):
+def run_service_screener_sync(account_id, credentials=None, websocket=None, session_id=None, question=""):
     """
     AWS Service Screener 동기 실행 (Reference 코드 방식 - Q CLI 오케스트레이션)
     """
@@ -202,18 +202,18 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         )
         
         print(f"[DEBUG] Service Screener 종료 시간: {datetime.now()}", flush=True)
-        print(f"[DEBUG] Q CLI 완료 - 반환코드: {result.returncode}", flush=True)
+        print(f"[DEBUG] Service Screener 완료 - 반환코드: {result.returncode}", flush=True)
         
-        # Q CLI 출력 로깅
+        # Service Screener 출력 로깅
         if result.stdout:
-            print(f"[DEBUG] Q CLI stdout (마지막 1000자):\n{result.stdout[-1000:]}", flush=True)
+            print(f"[DEBUG] Service Screener stdout (전체):\n{result.stdout}", flush=True)
         if result.stderr:
-            print(f"[DEBUG] Q CLI stderr (마지막 500자):\n{result.stderr[-500:]}", flush=True)
+            print(f"[DEBUG] Service Screener stderr (전체):\n{result.stderr}", flush=True)
         
-        # Q CLI 실행 결과 확인
+        # Service Screener 실행 결과 확인
         if result.returncode != 0:
-            error_msg = result.stderr.strip() if result.stderr else "Q CLI 실행 실패"
-            print(f"[ERROR] Q CLI 실행 실패: {error_msg}", flush=True)
+            error_msg = result.stderr.strip() if result.stderr else "Service Screener 실행 실패"
+            print(f"[ERROR] Service Screener 실행 실패: {error_msg}", flush=True)
             return {
                 "success": False,
                 "summary": None,
