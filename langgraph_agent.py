@@ -504,46 +504,64 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                 "authenticated": True
             }
         elif question_type == "report" and account_id and credentials:
-            # 월간 보고서 생성
-            from aws_tools.security_report import generate_security_report, get_report_url
+            # 월간 보고서 생성 (기존 reference 코드 방식 사용)
+            from aws_tools.security_report import collect_raw_security_data, generate_html_report
+            import json
+            from datetime import datetime, date
             
             # 질문에서 년월 정보 추출
             start_date_str, end_date_str = parse_month_from_question(state["question"])
             
             # 분석 기간 정보 추출 (표시용)
-            from datetime import datetime
             start_dt = datetime.strptime(start_date_str, '%Y-%m-%d')
             period_text = f"{start_dt.year}년 {start_dt.month}월"
             
-            # 진행 상황 업데이트
-            await send_websocket_progress(state, f"📊 {period_text} 월간 보고서를 생성하고 있습니다...")
-            
-            # 월간 보고서 생성
-            report_result = generate_security_report(
-                account_id=account_id,
-                start_date_str=start_date_str,
-                end_date_str=end_date_str,
-                region='ap-northeast-2',
-                credentials=credentials
-            )
-            
-            if report_result["success"]:
-                # 보고서 URL 생성
-                html_url = get_report_url(report_result["html_path"])
+            try:
+                # 진행 상황 업데이트
+                await send_websocket_progress(state, f"🔍 {period_text} AWS 보안 데이터를 수집하고 있습니다...")
                 
-                answer = f"""
+                # 1. Raw 데이터 수집 (기존 방식 그대로)
+                raw_data = collect_raw_security_data(
+                    account_id, 
+                    start_date_str, 
+                    end_date_str, 
+                    region='ap-northeast-2',
+                    credentials=credentials
+                )
+                
+                # 2. JSON 파일 저장
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                raw_json_path = f"/tmp/reports/security_data_{account_id}_{timestamp}.json"
+                
+                # /tmp/reports 디렉터리 생성
+                os.makedirs('/tmp/reports', exist_ok=True)
+                
+                with open(raw_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(raw_data, f, indent=2, ensure_ascii=False)
+                
+                # 3. HTML 보고서 생성
+                await send_websocket_progress(state, f"📊 {period_text} HTML 보고서를 생성하고 있습니다...")
+                
+                html_report_path = generate_html_report(raw_json_path)
+                
+                if html_report_path:
+                    # 보고서 URL 생성
+                    html_filename = os.path.basename(html_report_path)
+                    html_url = f"http://localhost:8000/reports/{html_filename}"
+                    
+                    answer = f"""
 ## 📊 {period_text} AWS 월간 보고서 생성 완료
 
 **계정 ID**: {account_id}
-**분석 기간**: {start_date_str} ~ {end_date_str} ({period_text})
+**분석 기간**: {start_date_str} ~ {end_date_str}
 
 ### 📋 생성된 보고서
 - **HTML 보고서**: [월간 보안 점검 보고서 보기]({html_url})
-- **JSON 데이터**: {os.path.basename(report_result["json_path"])}
+- **JSON 데이터**: {os.path.basename(raw_json_path)}
 
 ### 📈 보고서 내용
 - EC2 인스턴스 보안 상태
-- S3 버킷 암호화 및 접근 제어
+- S3 버킷 암호화 및 접근 제어  
 - IAM 사용자 및 MFA 설정
 - 보안 그룹 규칙 분석
 - EBS 볼륨 암호화 상태
@@ -553,23 +571,30 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
 
 보고서를 클릭하여 상세한 보안 분석 결과를 확인하세요.
 """
-                
+                    
+                    result = {
+                        "question": state["question"],
+                        "answer": answer,
+                        "question_type": question_type,
+                        "account_id": account_id,
+                        "authenticated": True
+                    }
+                else:
+                    result = {
+                        "question": state["question"],
+                        "answer": f"❌ {period_text} 월간 보고서 생성에 실패했습니다.",
+                        "question_type": question_type,
+                        "account_id": account_id,
+                        "authenticated": True
+                    }
+                    
+            except Exception as e:
                 result = {
                     "question": state["question"],
-                    "answer": answer,
+                    "answer": f"❌ {period_text} 월간 보고서 생성 중 오류가 발생했습니다: {str(e)}",
                     "question_type": question_type,
                     "account_id": account_id,
-                    "authenticated": True,
-                    "report_data": report_result
-                }
-            else:
-                result = {
-                    "question": state["question"],
-                    "answer": f"❌ 월간 보고서 생성에 실패했습니다.\n\n오류: {report_result.get('error', '알 수 없는 오류')}",
-                    "question_type": question_type,
-                    "account_id": account_id,
-                    "authenticated": True,
-                    "error": report_result.get('error')
+                    "authenticated": True
                 }
         elif question_type in ["cloudtrail", "cloudwatch", "general"]:
             # Q CLI 직접 호출
