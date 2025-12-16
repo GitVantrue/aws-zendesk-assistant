@@ -51,26 +51,14 @@ def run_service_screener(account_id, credentials=None):
             print(f"[DEBUG] 기존 결과 삭제: {old_result_dir}", flush=True)
             shutil.rmtree(old_result_dir)
         
-        # crossAccounts.json 생성 (Reference 코드와 완전히 동일)
-        temp_json_path = f'/tmp/crossAccounts_{account_id}.json'
-        
+        # 단일 계정 스캔 방식 (공식 문서 기준)
         # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
         scan_regions = ['ap-northeast-2', 'us-east-1']
+        regions_str = ','.join(scan_regions)
         
-        cross_accounts_config = {
-            "general": {
-                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
-                "Regions": scan_regions  # 스캔할 리전 목록
-            }
-        }
+        print(f"[DEBUG] 단일 계정 스캔 모드 - 스캔 대상 리전: {regions_str}", flush=True)
 
-        with open(temp_json_path, 'w') as f:
-            json.dump(cross_accounts_config, f, indent=2)
-        
-        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
-        print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
-
-        # Service Screener 실행 - Reference 코드와 완전히 동일한 방식
+        # Service Screener 실행 - 공식 문서 방식: screener --regions {YourRegion}
         screener_path = '/root/service-screener-v2/Screener.py'
         
         # 파일 존재 확인
@@ -89,39 +77,13 @@ def run_service_screener(account_id, credentials=None):
                     screener_path = alt_path
                     break
         
-        # crossAccounts.json 파일 내용 확인
-        try:
-            with open(temp_json_path, 'r') as f:
-                config_content = f.read()
-            print(f"[DEBUG] crossAccounts.json 내용:\n{config_content}", flush=True)
-        except Exception as e:
-            print(f"[ERROR] crossAccounts.json 읽기 실패: {e}", flush=True)
-        
-        # 먼저 Service Screener 도움말 확인
-        help_cmd = ['python3', screener_path, '--help']
-        print(f"[DEBUG] Service Screener 도움말 확인: {' '.join(help_cmd)}", flush=True)
-        
-        help_result = subprocess.run(
-            help_cmd,
-            capture_output=True,
-            text=True,
-            env=env_vars,
-            timeout=30,
-            cwd='/root/service-screener-v2'
-        )
-        
-        print(f"[DEBUG] 도움말 반환코드: {help_result.returncode}", flush=True)
-        if help_result.stdout:
-            print(f"[DEBUG] 도움말 stdout:\n{help_result.stdout}", flush=True)
-        if help_result.stderr:
-            print(f"[DEBUG] 도움말 stderr:\n{help_result.stderr}", flush=True)
-        
+        # 공식 문서 방식: screener --regions {YourRegion}
         cmd = [
             'python3',
             screener_path,
-            '--crossAccounts', temp_json_path
+            '--regions', regions_str
         ]
-        print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
+        print(f"[DEBUG] 단일 계정 Service Screener 실행: {' '.join(cmd)}", flush=True)
         print(f"[DEBUG] 작업 디렉터리: /root/service-screener-v2", flush=True)
         print(f"[DEBUG] 환경변수 AWS_ACCESS_KEY_ID: {env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
         
@@ -220,12 +182,7 @@ def run_service_screener(account_id, credentials=None):
                 print(f"[DEBUG] Well-Architected 통합 보고서 생성 시작", flush=True)
                 wa_report_url = generate_wa_summary_report(account_id, account_result_dir, timestamp)
                 
-                # 임시 파일 정리
-                try:
-                    os.remove(temp_json_path)
-                    print(f"[DEBUG] 임시 파일 삭제: {temp_json_path}", flush=True)
-                except:
-                    pass
+                # 단일 계정 스캔에서는 임시 파일이 없음
                 
                 return {
                     "success": True,
