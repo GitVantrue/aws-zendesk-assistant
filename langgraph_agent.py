@@ -465,12 +465,7 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
             end_date_str = end_date.strftime('%Y-%m-%d')
             
             # 진행 상황 업데이트
-            await send_websocket_result(
-                websocket=state["websocket"],
-                client_id=state["client_id"],
-                message="📊 월간 보고서를 생성하고 있습니다...",
-                message_type="progress"
-            )
+            await send_websocket_progress(state, "📊 월간 보고서를 생성하고 있습니다...")
             
             # 월간 보고서 생성
             report_result = generate_security_report(
