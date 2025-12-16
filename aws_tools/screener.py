@@ -45,36 +45,9 @@ def run_service_screener(account_id, credentials=None):
         
         print(f"[DEBUG] 자격증명 확인: ACCESS_KEY={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}..., SESSION_TOKEN={'있음' if env_vars.get('AWS_SESSION_TOKEN') else '없음'}", flush=True)
         
-        # crossAccounts.json 설정 파일 생성 (Reference 코드와 동일)
-        import tempfile
-        import json
-        
-        # 기본 리전 설정
-        default_regions = ['ap-northeast-2', 'us-east-1']
-        
-        cross_accounts_config = {
-            "general": {
-                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
-                "Regions": default_regions  # 스캔할 리전 목록
-            }
-        }
-        
-        # 임시 JSON 파일 생성
-        temp_json_fd, temp_json_path = tempfile.mkstemp(suffix='.json', prefix='crossAccounts_')
-        
-        with os.fdopen(temp_json_fd, 'w') as f:
-            json.dump(cross_accounts_config, f, indent=2)
-        
-        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
-        print(f"[DEBUG] 스캔 대상 리전: {', '.join(default_regions)}", flush=True)
-        
-        # Service Screener 실행 (Reference 코드와 동일)
-        cmd = [
-            'python3',
-            '/root/service-screener-v2/Screener.py',
-            '--crossAccounts', temp_json_path
-        ]
-        print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
+        # Service Screener 직접 실행 (Reference 코드와 완전히 동일)
+        cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
+        print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
         
         # 로그 파일 생성
         log_file = f'/tmp/screener_{account_id}.log'
@@ -215,12 +188,6 @@ def run_service_screener(account_id, credentials=None):
             }
         
         # 임시 파일 정리
-        try:
-            os.remove(temp_json_path)
-            print(f"[DEBUG] 임시 JSON 파일 삭제: {temp_json_path}", flush=True)
-        except:
-            pass
-        
         try:
             os.remove(log_file)
             print(f"[DEBUG] 임시 로그 파일 삭제: {log_file}", flush=True)
