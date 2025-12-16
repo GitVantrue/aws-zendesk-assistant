@@ -1,6 +1,6 @@
 """
 AWS 월간 보고서 생성 모듈
-Reference 코드의 collect_raw_security_data와 generate_html_report 기능을 재사용
+Reference 코드의 완전한 데이터 수집 로직을 WebSocket 환경에 맞게 적용
 """
 
 import os
@@ -42,7 +42,7 @@ def convert_datetime_to_json_serializable(obj):
 def collect_raw_security_data(account_id, start_date_str, end_date_str, region='ap-northeast-2', credentials=None):
     """
     boto3를 사용하여 AWS raw 보안 데이터를 수집 (Q CLI 분석용)
-    Reference 코드의 collect_raw_security_data 함수를 재사용
+    Reference 코드의 완전한 collect_raw_security_data 함수
     
     Args:
         account_id (str): AWS 계정 ID
@@ -175,262 +175,432 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
                 print(f"[DEBUG] 버킷 {bucket_name} 상세 정보 수집 실패: {e}", flush=True)
                 buckets_raw.append(bucket_data)  # 기본 정보라도 저장
         
-        # S3 요약 정보 계산
-        total_buckets = len(buckets_raw)
-        encrypted_buckets = sum(1 for b in buckets_raw if b.get('Encryption'))
+        # 요약 정보 계산
+        encrypted_count = sum(1 for b in buckets_raw if b.get('Encryption') is not None)
+        public_count = sum(1 for b in buckets_raw if b.get('PublicAccessBlock') is None)
         
         report_data['resources']['s3'] = {
             "summary": {
-                "total": total_buckets,
-                "encrypted": encrypted_buckets
+                "total": len(buckets_raw),
+                "encrypted": encrypted_count,
+                "public": public_count
             },
-            "buckets": buckets_raw
+            "buckets": buckets_raw  # Raw 데이터 (모든 버킷, 모든 필드)
         }
-        print(f"[DEBUG] ✅ S3 수집 완료: {total_buckets}개 (암호화: {encrypted_buckets}개)", flush=True)
+        print(f"[DEBUG] ✅ S3 수집 완료: {len(buckets_raw)}개 (암호화: {encrypted_count}, 퍼블릭: {public_count})", flush=True)
     except Exception as e:
         print(f"[ERROR] ❌ S3 수집 실패: {e}", flush=True)
-        report_data['resources']['s3'] = {"summary": {"total": 0, "encrypted": 0}, "buckets": []}
+        report_data['resources']['s3'] = {"summary": {"total": 0, "encrypted": 0, "public": 0}, "buckets": []}
     
-    # 3. RDS 인스턴스 수집
-    print(f"[DEBUG] 📦 RDS 인스턴스 수집 중...", flush=True)
-    try:
-        rds = session.client('rds', region_name=region)
-        rds_response = rds.describe_db_instances()
-        
-        rds_instances = rds_response.get('DBInstances', [])
-        
-        report_data['resources']['rds'] = {
-            "summary": {
-                "total": len(rds_instances)
-            },
-            "instances": rds_instances
-        }
-        print(f"[DEBUG] ✅ RDS 수집 완료: {len(rds_instances)}개", flush=True)
-    except Exception as e:
-        print(f"[ERROR] ❌ RDS 수집 실패: {e}", flush=True)
-        report_data['resources']['rds'] = {"summary": {"total": 0}, "instances": []}
-    
-    # 4. Lambda 함수 수집
+    # 3. Lambda 함수 수집 (Raw 데이터 저장)
     print(f"[DEBUG] 📦 Lambda 함수 수집 중...", flush=True)
     try:
         lambda_client = session.client('lambda', region_name=region)
         lambda_response = lambda_client.list_functions()
-        
-        lambda_functions = lambda_response.get('Functions', [])
+        functions_raw = lambda_response.get('Functions', [])
         
         report_data['resources']['lambda'] = {
             "summary": {
-                "total": len(lambda_functions)
+                "total": len(functions_raw)
             },
-            "functions": lambda_functions
+            "functions": functions_raw  # Raw 데이터 (모든 필드 포함)
         }
-        print(f"[DEBUG] ✅ Lambda 수집 완료: {len(lambda_functions)}개", flush=True)
+        print(f"[DEBUG] ✅ Lambda 수집 완료: {len(functions_raw)}개", flush=True)
     except Exception as e:
         print(f"[ERROR] ❌ Lambda 수집 실패: {e}", flush=True)
         report_data['resources']['lambda'] = {"summary": {"total": 0}, "functions": []}
     
+    # 4. RDS 인스턴스 수집 (Raw 데이터 저장 - Multi-AZ, 엔진, 백업 등 모든 정보 포함)
+    print(f"[DEBUG] 📦 RDS 인스턴스 수집 중...", flush=True)
+    try:
+        rds_client = session.client('rds', region_name=region)
+        rds_response = rds_client.describe_db_instances()
+        db_instances_raw = rds_response.get('DBInstances', [])
+        
+        report_data['resources']['rds'] = {
+            "summary": {
+                "total": len(db_instances_raw)
+            },
+            "instances": db_instances_raw  # Raw 데이터 (Multi-AZ, Engine, BackupRetentionPeriod 등 모두 포함)
+        }
+        print(f"[DEBUG] ✅ RDS 수집 완료: {len(db_instances_raw)}개", flush=True)
+    except Exception as e:
+        print(f"[ERROR] ❌ RDS 수집 실패: {e}", flush=True)
+        report_data['resources']['rds'] = {"summary": {"total": 0}, "instances": []}
+    
     # 5. IAM 사용자 수집
     print(f"[DEBUG] 📦 IAM 사용자 수집 중...", flush=True)
     try:
-        iam_users_response = iam.list_users()
-        users_raw = iam_users_response.get('Users', [])
+        iam_response = iam.list_users()
+        users = []
+        issues = []
         
-        # MFA 활성화 상태 확인
-        users_with_mfa = []
-        for user in users_raw:
+        for user in iam_response['Users']:
             username = user['UserName']
-            try:
-                mfa_devices = iam.list_mfa_devices(UserName=username)
-                user['MFADevices'] = mfa_devices.get('MFADevices', [])
-                user['MFAEnabled'] = len(mfa_devices.get('MFADevices', [])) > 0
-                users_with_mfa.append(user)
-            except Exception as e:
-                print(f"[DEBUG] 사용자 {username} MFA 확인 실패: {e}", flush=True)
-                user['MFADevices'] = []
-                user['MFAEnabled'] = False
-                users_with_mfa.append(user)
+            
+            # MFA 확인
+            mfa_devices = iam.list_mfa_devices(UserName=username)
+            has_mfa = len(mfa_devices['MFADevices']) > 0
+            
+            # 액세스 키 확인
+            access_keys = iam.list_access_keys(UserName=username)
+            
+            users.append({
+                "username": username,
+                "mfa": has_mfa,
+                "access_keys": access_keys['AccessKeyMetadata'],
+                "policies": [],
+                "groups": []
+            })
+            
+            # MFA 미설정 이슈
+            if not has_mfa:
+                issues.append({
+                    "severity": "critical",
+                    "type": "no_mfa",
+                    "user": username,
+                    "description": "MFA 미설정"
+                })
         
-        mfa_enabled_count = sum(1 for u in users_with_mfa if u.get('MFAEnabled', False))
-        
-        report_data['iam_security']['users'] = {
-            "total": len(users_with_mfa),
-            "mfa_enabled": mfa_enabled_count,
-            "details": users_with_mfa
+        report_data['iam_security'] = {
+            "users": {
+                "total": len(users),
+                "mfa_enabled": sum(1 for u in users if u['mfa']),
+                "details": users
+            },
+            "issues": issues
         }
-        print(f"[DEBUG] ✅ IAM 사용자 수집 완료: {len(users_with_mfa)}개 (MFA: {mfa_enabled_count}개)", flush=True)
+        print(f"[DEBUG] ✅ IAM 수집 완료: {len(users)}명 (MFA 활성화: {sum(1 for u in users if u['mfa'])}명)", flush=True)
     except Exception as e:
-        print(f"[ERROR] ❌ IAM 사용자 수집 실패: {e}", flush=True)
-        report_data['iam_security']['users'] = {"total": 0, "mfa_enabled": 0, "details": []}
+        print(f"[ERROR] ❌ IAM 수집 실패: {e}", flush=True)
+        report_data['iam_security'] = {"users": {"total": 0, "mfa_enabled": 0, "details": []}, "issues": []}
     
     # 6. 보안 그룹 수집
     print(f"[DEBUG] 📦 보안 그룹 수집 중...", flush=True)
     try:
         sg_response = ec2.describe_security_groups()
-        security_groups = sg_response.get('SecurityGroups', [])
-        
-        # 위험한 보안 그룹 필터링 (0.0.0.0/0 허용)
         risky_sgs = []
-        for sg in security_groups:
+        total_risky_rules = 0
+        
+        for sg in sg_response['SecurityGroups']:
+            risky_rules = []
             for rule in sg.get('IpPermissions', []):
                 for ip_range in rule.get('IpRanges', []):
                     if ip_range.get('CidrIp') == '0.0.0.0/0':
-                        risky_sgs.append(sg)
-                        break
-                if sg in risky_sgs:
-                    break
+                        port = rule.get('FromPort', 'all')
+                        risky_rules.append({
+                            "port": port,
+                            "protocol": rule.get('IpProtocol', 'all'),
+                            "source": "0.0.0.0/0",
+                            "risk_level": "high" if port in [22, 3389, 3306, 5432] else "medium",
+                            "description": f"포트 {port} 전체 오픈"
+                        })
+            
+            if risky_rules:
+                risky_sgs.append({
+                    "id": sg['GroupId'],
+                    "name": sg['GroupName'],
+                    "vpc": sg.get('VpcId', 'N/A'),
+                    "risky_rules": risky_rules
+                })
+                total_risky_rules += len(risky_rules)
         
         report_data['security_groups'] = {
-            "total": len(security_groups),
-            "risky": len(risky_sgs),
-            "details": risky_sgs
+            "total": len(sg_response['SecurityGroups']),
+            "risky": total_risky_rules,
+            "details": risky_sgs[:5]  # 처음 5개만 표시
         }
-        print(f"[DEBUG] ✅ 보안 그룹 수집 완료: {len(security_groups)}개 (위험: {len(risky_sgs)}개)", flush=True)
+        print(f"[DEBUG] ✅ 보안 그룹 수집 완료: {len(sg_response['SecurityGroups'])}개 (위험 규칙: {total_risky_rules}개)", flush=True)
     except Exception as e:
         print(f"[ERROR] ❌ 보안 그룹 수집 실패: {e}", flush=True)
         report_data['security_groups'] = {"total": 0, "risky": 0, "details": []}
     
-    # 7. EBS 볼륨 암호화 상태 수집
-    print(f"[DEBUG] 📦 EBS 볼륨 수집 중...", flush=True)
+    # 7. 암호화 상태 수집
+    print(f"[DEBUG] 📦 암호화 상태 수집 중...", flush=True)
     try:
-        ebs_response = ec2.describe_volumes()
-        volumes = ebs_response.get('Volumes', [])
+        volumes_response = ec2.describe_volumes()
+        volumes = volumes_response['Volumes']
+        encrypted_volumes = [v for v in volumes if v.get('Encrypted', False)]
+        unencrypted_volumes = [v['VolumeId'] for v in volumes if not v.get('Encrypted', False)]
         
-        encrypted_volumes = sum(1 for v in volumes if v.get('Encrypted', False))
+        # S3, RDS 요약 정보 가져오기 (새 구조 반영)
+        s3_total = report_data['resources']['s3']['summary']['total']
+        s3_encrypted = report_data['resources']['s3']['summary']['encrypted']
+        rds_total = report_data['resources']['rds']['summary']['total']
         
-        report_data['encryption']['ebs'] = {
-            "total": len(volumes),
-            "encrypted": encrypted_volumes,
-            "details": volumes
+        # RDS 암호화 상태 계산
+        rds_instances = report_data['resources']['rds'].get('instances', [])
+        rds_encrypted = sum(1 for instance in rds_instances if instance.get('StorageEncrypted', False))
+        rds_encrypted_rate = rds_encrypted / rds_total if rds_total > 0 else 0.0
+        
+        report_data['encryption'] = {
+            "ebs": {
+                "total": len(volumes),
+                "encrypted": len(encrypted_volumes),
+                "unencrypted_volumes": unencrypted_volumes[:16]  # 처음 16개만
+            },
+            "s3": {
+                "total": s3_total,
+                "encrypted": s3_encrypted,
+                "encrypted_rate": s3_encrypted / s3_total if s3_total > 0 else 0.0
+            },
+            "rds": {
+                "total": rds_total,
+                "encrypted": rds_encrypted,
+                "encrypted_rate": rds_encrypted_rate
+            }
         }
-        print(f"[DEBUG] ✅ EBS 볼륨 수집 완료: {len(volumes)}개 (암호화: {encrypted_volumes}개)", flush=True)
+        print(f"[DEBUG] ✅ 암호화 수집 완료: EBS {len(encrypted_volumes)}/{len(volumes)} 암호화됨", flush=True)
     except Exception as e:
-        print(f"[ERROR] ❌ EBS 볼륨 수집 실패: {e}", flush=True)
-        report_data['encryption']['ebs'] = {"total": 0, "encrypted": 0, "details": []}
+        print(f"[ERROR] ❌ 암호화 상태 수집 실패: {e}", flush=True)
+        report_data['encryption'] = {"ebs": {"total": 0, "encrypted": 0, "unencrypted_volumes": []}, "s3": {"total": 0, "encrypted": 0, "encrypted_rate": 0.0}, "rds": {"total": 0, "encrypted": 0, "encrypted_rate": 0.0}}
     
-    # 8. Trusted Advisor 수집 (Business/Enterprise 플랜 필요)
-    print(f"[DEBUG] 📦 Trusted Advisor 수집 중...", flush=True)
+    # 8. Trusted Advisor 수집 (가장 중요!)
+    print(f"[DEBUG] 🔍 Trusted Advisor 수집 중... (이게 핵심!)", flush=True)
     try:
-        # Trusted Advisor 체크 목록 가져오기
-        checks_response = support.describe_trusted_advisor_checks(language='en')
-        checks = checks_response.get('checks', [])
+        # TA 체크 목록 가져오기
+        ta_checks_response = support.describe_trusted_advisor_checks(language='en')
+        checks = ta_checks_response['checks']
+        print(f"[DEBUG] TA 전체 체크 개수: {len(checks)}개", flush=True)
         
-        # 보안 관련 체크만 필터링
-        security_checks = [c for c in checks if 'security' in c.get('category', '').lower()]
-        
-        # 각 체크의 결과 가져오기
-        check_results = []
-        for check in security_checks[:5]:  # 처음 5개만 (API 제한 고려)
+        ta_results = []
+        for check in checks:
+            check_id = check['id']
+            check_name = check['name']
+            check_category = check['category']
+            
             try:
-                result = support.describe_trusted_advisor_check_result(
-                    checkId=check['id'],
-                    language='en'
-                )
-                check_results.append({
-                    'check': check,
-                    'result': result.get('result', {})
-                })
+                # 각 체크 결과 가져오기
+                result_response = support.describe_trusted_advisor_check_result(checkId=check_id, language='en')
+                result = result_response['result']
+                
+                status = result['status']
+                flagged_resources = len(result.get('flaggedResources', []))
+                
+                # 문제가 있는 체크만 포함
+                if status in ['warning', 'error'] and flagged_resources > 0:
+                    # 한글 번역
+                    category_kr = {
+                        'security': '보안',
+                        'cost_optimizing': '비용 최적화',
+                        'performance': '성능',
+                        'fault_tolerance': '내결함성',
+                        'service_limits': '서비스 한도'
+                    }.get(check_category, check_category)
+                    
+                    ta_results.append({
+                        "category": category_kr,
+                        "name": check_name,  # 영문 그대로 (한글 번역은 템플릿에서)
+                        "status": status,
+                        "flagged_resources": flagged_resources,
+                        "details": []  # 상세 정보는 생략 (개수만 표시)
+                    })
+                    print(f"[DEBUG] TA 이슈 발견: [{category_kr}] {check_name} - {flagged_resources}개", flush=True)
             except Exception as e:
-                print(f"[DEBUG] Trusted Advisor 체크 {check['name']} 실패: {e}", flush=True)
+                print(f"[DEBUG] TA 체크 {check_name} 결과 수집 실패: {e}", flush=True)
         
         report_data['trusted_advisor'] = {
             "available": True,
-            "security_checks": len(security_checks),
-            "results": check_results
+            "checks": ta_results
         }
-        print(f"[DEBUG] ✅ Trusted Advisor 수집 완료: {len(security_checks)}개 체크", flush=True)
+        print(f"[DEBUG] ✅ Trusted Advisor 수집 완료: {len(ta_results)}개 이슈 발견!", flush=True)
     except Exception as e:
-        print(f"[DEBUG] ⚠️ Trusted Advisor 수집 실패 (Business/Enterprise 플랜 필요): {e}", flush=True)
-        report_data['trusted_advisor'] = {
-            "available": False,
-            "error": str(e),
-            "security_checks": 0,
-            "results": []
-        }
+        print(f"[ERROR] ❌ Trusted Advisor 수집 실패: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        report_data['trusted_advisor'] = {"available": False, "checks": []}
     
-    # 9. CloudTrail 이벤트 수집 (최근 7일)
-    print(f"[DEBUG] 📦 CloudTrail 이벤트 수집 중...", flush=True)
+    # 9. CloudTrail 이벤트 수집 (정확한 기간, UTC+9)
+    print(f"[DEBUG] 📦 CloudTrail 이벤트 수집 중 ({start_date_str} ~ {end_date_str})...", flush=True)
     try:
-        # UTC+9를 UTC로 변환
-        from datetime import timezone
+        from datetime import datetime as dt, timezone
         
-        # 시작/종료 날짜를 datetime으로 변환 (UTC+9 기준)
-        start_dt = datetime.strptime(start_date_str, '%Y-%m-%d').replace(tzinfo=timezone(timedelta(hours=9)))
-        end_dt = datetime.strptime(end_date_str, '%Y-%m-%d').replace(tzinfo=timezone(timedelta(hours=9)))
+        # UTC+9 (한국 시간) 적용
+        kst = timezone(timedelta(hours=9))
         
-        # UTC로 변환
-        start_utc = start_dt.astimezone(timezone.utc)
-        end_utc = end_dt.astimezone(timezone.utc)
+        # 시작일 00:00:00 KST → UTC 변환
+        start_time_kst = dt.strptime(start_date_str, "%Y-%m-%d").replace(hour=0, minute=0, second=0, tzinfo=kst)
+        start_time_utc = start_time_kst.astimezone(timezone.utc)
         
-        # CloudTrail 이벤트 조회 (중요 이벤트만)
-        critical_events = [
-            'DeleteBucket', 'TerminateInstances', 'DeleteUser', 'CreateAccessKey',
-            'DeleteAccessKey', 'AttachUserPolicy', 'DetachUserPolicy'
-        ]
+        # 종료일 23:59:59 KST → UTC 변환
+        end_time_kst = dt.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=kst)
+        end_time_utc = end_time_kst.astimezone(timezone.utc)
         
-        all_events = []
-        for event_name in critical_events:
+        print(f"[DEBUG] CloudTrail 조회 기간 (UTC): {start_time_utc} ~ {end_time_utc}", flush=True)
+        
+        # 보안 관점에서 중요한 이벤트 목록 (우선순위 순)
+        critical_events = {
+            # 🔴 Critical - 데이터 손실 및 서비스 중단
+            'DeleteBucket': {'severity': 'critical', 'category': 'data_loss', 'description': 'S3 버킷 삭제'},
+            'DeleteDBInstance': {'severity': 'critical', 'category': 'data_loss', 'description': 'RDS 인스턴스 삭제'},
+            'TerminateInstances': {'severity': 'critical', 'category': 'service_disruption', 'description': 'EC2 인스턴스 종료'},
+            'DeleteUser': {'severity': 'critical', 'category': 'account_security', 'description': 'IAM 사용자 삭제'},
+            'DeleteAccessKey': {'severity': 'critical', 'category': 'account_security', 'description': 'IAM 액세스 키 삭제'},
+            
+            # 🟡 High - 보안 설정 변경
+            'PutBucketPolicy': {'severity': 'high', 'category': 'permission_change', 'description': 'S3 버킷 정책 변경'},
+            'AuthorizeSecurityGroupIngress': {'severity': 'high', 'category': 'network_security', 'description': '보안 그룹 인바운드 규칙 추가'},
+            'CreateAccessKey': {'severity': 'high', 'category': 'account_security', 'description': '새 액세스 키 생성'},
+            'PutUserPolicy': {'severity': 'high', 'category': 'permission_change', 'description': 'IAM 사용자 정책 변경'},
+            'AttachUserPolicy': {'severity': 'high', 'category': 'permission_change', 'description': 'IAM 사용자 정책 연결'},
+        }
+        
+        # 각 중요 이벤트별로 수집
+        critical_events_data = {}
+        total_collected = 0
+        
+        for event_name, event_info in critical_events.items():
+            print(f"[DEBUG] 🔍 {event_name} 이벤트 조회 중...", flush=True)
+            
             try:
+                # 해당 이벤트만 조회 (최대 50개)
                 events_response = cloudtrail.lookup_events(
+                    StartTime=start_time_utc,
+                    EndTime=end_time_utc,
                     LookupAttributes=[
-                        {
-                            'AttributeKey': 'EventName',
-                            'AttributeValue': event_name
-                        }
+                        {'AttributeKey': 'EventName', 'AttributeValue': event_name}
                     ],
-                    StartTime=start_utc,
-                    EndTime=end_utc,
-                    MaxItems=50  # 이벤트당 최대 50개
+                    MaxResults=50
                 )
                 
                 events = events_response.get('Events', [])
-                all_events.extend(events)
-                print(f"[DEBUG] {event_name}: {len(events)}개 이벤트", flush=True)
+                
+                if events:
+                    critical_events_data[event_name] = {
+                        'severity': event_info['severity'],
+                        'category': event_info['category'],
+                        'description': event_info['description'],
+                        'count': len(events),
+                        'events': events  # Raw 이벤트 데이터
+                    }
+                    total_collected += len(events)
+                    print(f"[DEBUG] ✅ {event_name}: {len(events)}개 발견", flush=True)
+                else:
+                    # 이벤트가 없어도 기록 (0건)
+                    critical_events_data[event_name] = {
+                        'severity': event_info['severity'],
+                        'category': event_info['category'],
+                        'description': event_info['description'],
+                        'count': 0,
+                        'events': []
+                    }
+                    
             except Exception as e:
-                print(f"[DEBUG] CloudTrail 이벤트 {event_name} 조회 실패: {e}", flush=True)
+                print(f"[DEBUG] ⚠️ {event_name} 조회 실패: {e}", flush=True)
+                critical_events_data[event_name] = {
+                    'severity': event_info['severity'],
+                    'category': event_info['category'],
+                    'description': event_info['description'],
+                    'count': 0,
+                    'events': [],
+                    'error': str(e)
+                }
+        
+        period_days = (end_time_kst - start_time_kst).days + 1
         
         report_data['cloudtrail_events'] = {
-            "period_start": start_date_str,
-            "period_end": end_date_str,
-            "total_events": len(all_events),
-            "events": all_events
+            "summary": {
+                "period_days": period_days,
+                "total_critical_events": total_collected,
+                "monitored_event_types": len(critical_events)
+            },
+            "critical_events": critical_events_data  # 이벤트 타입별로 구조화된 데이터
         }
-        print(f"[DEBUG] ✅ CloudTrail 이벤트 수집 완료: {len(all_events)}개", flush=True)
+        print(f"[DEBUG] ✅ CloudTrail 중요 이벤트 수집 완료: {total_collected}개 ({period_days}일간)", flush=True)
     except Exception as e:
-        print(f"[ERROR] ❌ CloudTrail 이벤트 수집 실패: {e}", flush=True)
-        report_data['cloudtrail_events'] = {
-            "period_start": start_date_str,
-            "period_end": end_date_str,
-            "total_events": 0,
-            "events": []
-        }
+        print(f"[ERROR] ❌ CloudTrail 수집 실패: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        report_data['cloudtrail_events'] = {"summary": {"period_days": 30, "total_critical_events": 0, "monitored_event_types": 0}, "critical_events": {}}
     
-    # 10. CloudWatch 알람 수집
+    # 10. CloudWatch 알람 수집 (Raw 데이터 저장)
     print(f"[DEBUG] 📦 CloudWatch 알람 수집 중...", flush=True)
     try:
         alarms_response = cloudwatch.describe_alarms()
-        alarms = alarms_response.get('MetricAlarms', [])
+        alarms_raw = alarms_response['MetricAlarms']
         
-        # 알람 상태별 분류
-        alarm_states = {}
-        for alarm in alarms:
-            state = alarm.get('StateValue', 'UNKNOWN')
-            alarm_states[state] = alarm_states.get(state, 0) + 1
+        # 요약 정보 계산
+        total = len(alarms_raw)
+        in_alarm = sum(1 for a in alarms_raw if a['StateValue'] == 'ALARM')
+        ok = sum(1 for a in alarms_raw if a['StateValue'] == 'OK')
+        insufficient_data = sum(1 for a in alarms_raw if a['StateValue'] == 'INSUFFICIENT_DATA')
         
         report_data['cloudwatch'] = {
-            "total_alarms": len(alarms),
-            "states": alarm_states,
-            "alarms": alarms
+            "summary": {
+                "total": total,
+                "in_alarm": in_alarm,
+                "ok": ok,
+                "insufficient_data": insufficient_data
+            },
+            "alarms": alarms_raw  # Raw 데이터 (AlarmName, StateValue, MetricName, Threshold 등 모든 필드)
         }
-        print(f"[DEBUG] ✅ CloudWatch 알람 수집 완료: {len(alarms)}개", flush=True)
+        print(f"[DEBUG] ✅ CloudWatch 수집 완료: {total}개 알람 (ALARM: {in_alarm}, OK: {ok})", flush=True)
     except Exception as e:
-        print(f"[ERROR] ❌ CloudWatch 알람 수집 실패: {e}", flush=True)
-        report_data['cloudwatch'] = {"total_alarms": 0, "states": {}, "alarms": []}
+        print(f"[ERROR] ❌ CloudWatch 수집 실패: {e}", flush=True)
+        report_data['cloudwatch'] = {"summary": {"total": 0, "in_alarm": 0, "ok": 0, "insufficient_data": 0}, "alarms": []}
+    
+    # 11. 권장사항 생성
+    print(f"[DEBUG] 📝 권장사항 생성 중...", flush=True)
+    recommendations = []
+    
+    # MFA 권장사항
+    if report_data['iam_security']['users']['mfa_enabled'] < report_data['iam_security']['users']['total']:
+        recommendations.append({
+            "priority": "critical",
+            "category": "security",
+            "title": "모든 IAM 사용자에 MFA 설정 필요",
+            "description": f"{report_data['iam_security']['users']['total'] - report_data['iam_security']['users']['mfa_enabled']}명의 IAM 사용자가 MFA를 설정하지 않았습니다.",
+            "affected_resources": [u['username'] for u in report_data['iam_security']['users']['details'] if not u['mfa']],
+            "action": "모든 IAM 사용자에 대해 MFA를 활성화하고 정기적으로 검토하세요."
+        })
+    
+    # 보안 그룹 권장사항
+    if report_data['security_groups']['risky'] > 0:
+        recommendations.append({
+            "priority": "critical",
+            "category": "security",
+            "title": "보안 그룹 규칙 강화 필요",
+            "description": f"{report_data['security_groups']['risky']}개의 위험한 보안 그룹 규칙이 발견되었습니다.",
+            "affected_resources": [sg['id'] for sg in report_data['security_groups']['details']],
+            "action": "보안 그룹 규칙을 검토하고 필요한 IP 범위로만 제한하세요."
+        })
+    
+    # EBS 암호화 권장사항
+    if report_data['encryption']['ebs']['total'] > 0 and report_data['encryption']['ebs']['encrypted'] < report_data['encryption']['ebs']['total']:
+        recommendations.append({
+            "priority": "high",
+            "category": "security",
+            "title": "EBS 볼륨 암호화 활성화",
+            "description": f"{report_data['encryption']['ebs']['total'] - report_data['encryption']['ebs']['encrypted']}개의 EBS 볼륨이 암호화되지 않았습니다.",
+            "affected_resources": report_data['encryption']['ebs']['unencrypted_volumes'][:5],
+            "action": "새로운 EBS 볼륨에 대해 기본 암호화를 활성화하고 기존 볼륨을 암호화된 볼륨으로 마이그레이션하세요."
+        })
+    
+    # S3 암호화 권장사항 (새 구조 반영)
+    s3_total = report_data['resources']['s3']['summary']['total']
+    s3_encrypted = report_data['resources']['s3']['summary']['encrypted']
+    if s3_total > 0 and s3_encrypted < s3_total:
+        # 암호화되지 않은 버킷 찾기
+        unencrypted_buckets = [b['Name'] for b in report_data['resources']['s3']['buckets'] if b.get('Encryption') is None]
+        recommendations.append({
+            "priority": "high",
+            "category": "security",
+            "title": "S3 버킷 암호화 설정",
+            "description": f"{s3_total - s3_encrypted}개의 S3 버킷이 암호화되지 않았습니다.",
+            "affected_resources": unencrypted_buckets[:5],
+            "action": "모든 S3 버킷에 대해 서버 측 암호화(SSE)를 활성화하세요."
+        })
+    
+    report_data['recommendations'] = recommendations
+    print(f"[DEBUG] ✅ 권장사항 생성 완료: {len(recommendations)}개", flush=True)
+    
+    print(f"[DEBUG] 🎉 boto3 데이터 수집 완료! 정확한 데이터를 수집했습니다.", flush=True)
     
     # datetime 객체를 JSON 직렬화 가능한 형식으로 변환
     print(f"[DEBUG] 📝 datetime 객체 변환 중...", flush=True)
     report_data = convert_datetime_to_json_serializable(report_data)
+    print(f"[DEBUG] ✅ datetime 변환 완료", flush=True)
     
-    print(f"[DEBUG] ✅ 전체 데이터 수집 완료", flush=True)
     return report_data
 
 def generate_html_report(json_file_path):
@@ -560,11 +730,14 @@ def generate_html_report(json_file_path):
         ta_summary = process_trusted_advisor_data(ta_data)
         template_vars.update(ta_summary)
         
-        # CloudTrail 데이터 처리
+        # CloudTrail 데이터 처리 (Reference 구조 사용)
         ct_data = data.get('cloudtrail_events', {})
+        ct_summary = ct_data.get('summary', {})
+        ct_critical_events = ct_data.get('critical_events', {})
+        
         template_vars.update({
-            'cloudtrail_days': 30,
-            'cloudtrail_critical_rows': generate_cloudtrail_rows(ct_data.get('events', [])),
+            'cloudtrail_days': ct_summary.get('period_days', 30),
+            'cloudtrail_critical_rows': generate_cloudtrail_rows(ct_critical_events),
         })
         
         # CloudWatch 데이터 처리
@@ -657,7 +830,7 @@ def generate_critical_issues_section(issues):
     return content
 
 def process_trusted_advisor_data(ta_data):
-    """Trusted Advisor 데이터 처리"""
+    """Trusted Advisor 데이터 처리 (Reference 구조 사용)"""
     if not ta_data.get('available', False):
         return {
             'ta_security_error': 0,
@@ -668,8 +841,8 @@ def process_trusted_advisor_data(ta_data):
             'ta_performance_warning': 0,
         }
     
-    # 실제 TA 데이터가 있으면 처리
-    results = ta_data.get('results', [])
+    # Reference 구조: checks 배열에서 직접 처리
+    checks = ta_data.get('checks', [])
     summary = {
         'ta_security_error': 0,
         'ta_security_warning': 0,
@@ -679,25 +852,23 @@ def process_trusted_advisor_data(ta_data):
         'ta_performance_warning': 0,
     }
     
-    for result in results:
-        check = result.get('check', {})
-        check_result = result.get('result', {})
+    for check in checks:
         category = check.get('category', '').lower()
-        status = check_result.get('status', '').lower()
+        status = check.get('status', '').lower()
         
-        if 'security' in category:
+        if '보안' in category or 'security' in category:
             if status == 'error':
                 summary['ta_security_error'] += 1
             elif status == 'warning':
                 summary['ta_security_warning'] += 1
-        elif 'fault' in category:
+        elif '내결함성' in category or 'fault' in category:
             if status == 'error':
                 summary['ta_fault_tolerance_error'] += 1
             elif status == 'warning':
                 summary['ta_fault_tolerance_warning'] += 1
-        elif 'cost' in category and status == 'warning':
+        elif '비용' in category or 'cost' in category and status == 'warning':
             summary['ta_cost_warning'] += 1
-        elif 'performance' in category and status == 'warning':
+        elif '성능' in category or 'performance' in category and status == 'warning':
             summary['ta_performance_warning'] += 1
     
     return summary
@@ -741,73 +912,71 @@ def generate_s3_security_issues_section(buckets):
     '''
 
 def generate_ta_error_rows(ta_data):
-    """Trusted Advisor 에러 행 생성"""
+    """Trusted Advisor 에러 행 생성 (Reference 구조 사용)"""
     if not ta_data.get('available', False):
-        return '<tr><td colspan="4" class="text-center text-muted">Trusted Advisor 데이터를 사용할 수 없습니다. (Business/Enterprise 플랜 필요)</td></tr>'
+        return '<tr><td colspan="4" class="no-data">Trusted Advisor 데이터를 사용할 수 없습니다. (Business/Enterprise 플랜 필요)</td></tr>'
     
-    results = ta_data.get('results', [])
-    error_results = [r for r in results if r.get('result', {}).get('status', '').lower() == 'error']
+    checks = ta_data.get('checks', [])
+    error_checks = [c for c in checks if c.get('status', '').lower() == 'error']
     
-    if not error_results:
+    if not error_checks:
         return '<tr><td colspan="4" class="text-center text-success">Error 상태의 항목이 없습니다.</td></tr>'
     
     rows = []
-    for result in error_results[:10]:  # 최대 10개
-        check = result.get('check', {})
-        check_result = result.get('result', {})
+    for check in error_checks[:10]:  # 최대 10개
+        category = check.get('category', 'N/A')
+        name = check.get('name', 'N/A')
+        flagged_resources = check.get('flagged_resources', 0)
         
-        rows.append(f'''
+        rows.append(f"""
         <tr>
-            <td>{check.get('category', 'N/A')}</td>
-            <td>{check.get('name', 'N/A')}</td>
-            <td><span class="badge badge-critical">ERROR</span></td>
-            <td>{len(check_result.get('flaggedResources', []))}</td>
+            <td>{category}</td>
+            <td>{name}</td>
+            <td><span class="badge badge-error">ERROR</span></td>
+            <td>{flagged_resources}</td>
         </tr>
-        ''')
+        """)
     
     return ''.join(rows)
 
-def generate_cloudtrail_rows(events):
-    """CloudTrail 이벤트 행 생성"""
-    if not events:
-        return '<tr><td colspan="5" class="text-center text-muted">분석 기간 중 중요 이벤트가 없습니다.</td></tr>'
-    
-    # 이벤트 타입별 분류
-    event_summary = {}
-    for event in events:
-        event_name = event.get('EventName', 'Unknown')
-        if event_name not in event_summary:
-            event_summary[event_name] = {
-                'count': 0,
-                'severity': get_event_severity(event_name),
-                'category': get_event_category(event_name)
-            }
-        event_summary[event_name]['count'] += 1
+def generate_cloudtrail_rows(critical_events_data):
+    """CloudTrail 중요 이벤트 행 생성 (Reference 구조 사용)"""
+    if not critical_events_data:
+        return '<tr><td colspan="5" class="no-data">분석 기간 중 중요 이벤트가 없습니다</td></tr>'
     
     rows = []
-    for event_name, info in event_summary.items():
-        severity_class = {
-            'HIGH': 'critical',
-            'MEDIUM': 'warning',
-            'LOW': 'info'
-        }.get(info['severity'], 'info')
-        
-        rows.append(f'''
-        <tr>
-            <td>{event_name}</td>
-            <td><span class="badge badge-{severity_class}">{info['severity']}</span></td>
-            <td>{info['category']}</td>
-            <td>{info['count']}</td>
-            <td>{get_event_description(event_name)}</td>
-        </tr>
-        ''')
+    for event_name, event_data in critical_events_data.items():
+        count = event_data.get('count', 0)
+        if count > 0:  # 이벤트가 있는 것만 표시
+            severity = event_data.get('severity', 'medium')
+            category = event_data.get('category', 'other')
+            description = event_data.get('description', event_name)
+            
+            severity_class = {
+                'critical': 'error',
+                'high': 'warning',
+                'medium': 'info'
+            }.get(severity, 'info')
+            
+            rows.append(f"""
+            <tr>
+                <td><strong>{event_name}</strong></td>
+                <td><span class="badge badge-{severity_class}">{severity.upper()}</span></td>
+                <td>{category}</td>
+                <td>{count}</td>
+                <td>{description}</td>
+            </tr>
+            """)
+    
+    if not rows:
+        return '<tr><td colspan="5" class="no-data">분석 기간 중 중요 이벤트가 없습니다</td></tr>'
     
     return ''.join(rows[:10])  # 최대 10개
 
 def generate_cloudwatch_rows(alarms):
     """CloudWatch 알람 행 생성"""
     if not alarms:
-        return '<tr><td colspan="4" class="text-center text-muted">CloudWatch 알람이 없습니다.</td></tr>'
+        return '<tr><td colspan="4" class="no-data">CloudWatch 알람이 없습니다</td></tr>'
     
     rows = []
     for alarm in alarms[:10]:  # 최대 10개
@@ -817,19 +986,19 @@ def generate_cloudwatch_rows(alarms):
         threshold = alarm.get('Threshold', 'N/A')
         
         state_class = {
-            'OK': 'success',
-            'ALARM': 'critical',
+            'OK': 'ok',
+            'ALARM': 'error',
             'INSUFFICIENT_DATA': 'warning'
-        }.get(state, 'secondary')
+        }.get(state, 'info')
         
-        rows.append(f'''
+        rows.append(f"""
         <tr>
-            <td>{name}</td>
+            <td><strong>{name}</strong></td>
             <td><span class="badge badge-{state_class}">{state}</span></td>
             <td>{metric}</td>
             <td>{threshold}</td>
         </tr>
-        ''')
+        """)
     
     return ''.join(rows)
 
@@ -869,35 +1038,50 @@ def get_event_description(event_name):
     }
     return descriptions.get(event_name, '기타 이벤트')
 
-# HTML 생성 헬퍼 함수들
+# HTML 생성 헬퍼 함수들 (Reference 코드에서 완전히 복사)
 def generate_ec2_rows(instances):
     """EC2 인스턴스 테이블 행 생성"""
     if not instances:
-        return "<tr><td colspan='5' class='text-center text-muted'>EC2 인스턴스가 없습니다.</td></tr>"
+        return '<tr><td colspan="8" class="no-data">EC2 인스턴스가 없습니다</td></tr>'
     
     rows = []
-    for instance in instances[:10]:  # 최대 10개만 표시
+    for instance in instances:
+        name = next((tag['Value'] for tag in instance.get('Tags', []) if tag['Key'] == 'Name'), instance.get('InstanceId', 'N/A'))
         instance_id = instance.get('InstanceId', 'N/A')
         instance_type = instance.get('InstanceType', 'N/A')
         state = instance.get('State', {}).get('Name', 'N/A')
+        public_ip = instance.get('PublicIpAddress', '없음')
         
-        # 태그에서 Name 찾기
-        name = 'N/A'
-        for tag in instance.get('Tags', []):
-            if tag.get('Key') == 'Name':
-                name = tag.get('Value', 'N/A')
+        # IMDSv2 설정
+        metadata_options = instance.get('MetadataOptions', {})
+        imdsv2 = metadata_options.get('HttpTokens', 'optional')
+        imdsv2_class = 'ok' if imdsv2 == 'required' else 'warning'
+        
+        # 상세 모니터링
+        monitoring = instance.get('Monitoring', {}).get('State', 'disabled')
+        monitoring_class = 'ok' if monitoring == 'enabled' else 'warning'
+        
+        # EBS 삭제 방지
+        delete_protection = 'N/A'
+        for bdm in instance.get('BlockDeviceMappings', []):
+            if bdm.get('Ebs', {}).get('DeleteOnTermination') == False:
+                delete_protection = '설정됨'
                 break
+        else:
+            delete_protection = '미설정'
         
-        # 상태에 따른 색상
-        state_class = 'success' if state == 'running' else 'secondary'
+        delete_class = 'ok' if delete_protection == '설정됨' else 'warning'
         
         rows.append(f"""
         <tr>
+            <td><strong>{name}</strong></td>
             <td>{instance_id}</td>
-            <td>{name}</td>
             <td>{instance_type}</td>
-            <td><span class="badge badge-{state_class}">{state}</span></td>
-            <td>{instance.get('LaunchTime', 'N/A')}</td>
+            <td><span class="badge badge-{'ok' if state == 'running' else 'warning'}">{state}</span></td>
+            <td class="{'warning' if public_ip != '없음' else 'ok'}">{public_ip}</td>
+            <td class="{imdsv2_class}">{imdsv2}</td>
+            <td class="{monitoring_class}">{monitoring}</td>
+            <td class="{delete_class}">{delete_protection}</td>
         </tr>
         """)
     
@@ -906,82 +1090,165 @@ def generate_ec2_rows(instances):
 def generate_s3_rows(buckets):
     """S3 버킷 테이블 행 생성"""
     if not buckets:
-        return "<tr><td colspan='4' class='text-center text-muted'>S3 버킷이 없습니다.</td></tr>"
+        return '<tr><td colspan="6" class="no-data">S3 버킷이 없습니다</td></tr>'
     
     rows = []
-    for bucket in buckets[:10]:  # 최대 10개만 표시
+    for bucket in buckets:
         name = bucket.get('Name', 'N/A')
-        location = bucket.get('Location', 'us-east-1')
-        encrypted = '✅' if bucket.get('Encryption') else '❌'
-        versioning = '✅' if bucket.get('Versioning', {}).get('Status') == 'Enabled' else '❌'
+        location = bucket.get('Location', 'N/A')
+        
+        # 암호화 설정
+        encryption = bucket.get('Encryption', {})
+        if encryption.get('Rules'):
+            encryption_status = '설정됨'
+            encryption_class = 'ok'
+        else:
+            encryption_status = '미설정'
+            encryption_class = 'error'
+        
+        # 버저닝 설정
+        versioning = bucket.get('Versioning', {})
+        versioning_status = versioning.get('Status', '미설정')
+        versioning_class = 'ok' if versioning_status == 'Enabled' else 'warning'
+        
+        # 퍼블릭 액세스 차단
+        public_access = bucket.get('PublicAccessBlock')
+        if public_access and all([
+            public_access.get('BlockPublicAcls', False),
+            public_access.get('IgnorePublicAcls', False),
+            public_access.get('BlockPublicPolicy', False),
+            public_access.get('RestrictPublicBuckets', False)
+        ]):
+            public_status = '차단됨'
+            public_class = 'ok'
+        else:
+            public_status = '미차단'
+            public_class = 'error'
+        
+        creation_date = bucket.get('CreationDate', 'N/A')
+        if creation_date != 'N/A':
+            creation_date = creation_date.split('T')[0]
         
         rows.append(f"""
         <tr>
-            <td>{name}</td>
+            <td><strong>{name}</strong></td>
             <td>{location}</td>
-            <td class="text-center">{encrypted}</td>
-            <td class="text-center">{versioning}</td>
+            <td class="{encryption_class}">{encryption_status}</td>
+            <td class="{versioning_class}">{versioning_status}</td>
+            <td class="{public_class}">{public_status}</td>
+            <td>{creation_date}</td>
         </tr>
         """)
     
     return ''.join(rows)
 
 def generate_rds_content(instances):
-    """RDS 인스턴스 내용 생성"""
+    """RDS 인스턴스 콘텐츠 생성"""
     if not instances:
-        return "<p class='text-muted'>RDS 인스턴스가 없습니다.</p>"
+        return '<div class="no-data">RDS 인스턴스가 없습니다</div>'
     
-    content = []
-    for instance in instances[:5]:  # 최대 5개만 표시
+    rows = []
+    for instance in instances:
         db_id = instance.get('DBInstanceIdentifier', 'N/A')
         engine = instance.get('Engine', 'N/A')
-        multi_az = '✅' if instance.get('MultiAZ', False) else '❌'
-        encrypted = '✅' if instance.get('StorageEncrypted', False) else '❌'
+        db_class = instance.get('DBInstanceClass', 'N/A')
+        multi_az = instance.get('MultiAZ', False)
+        encrypted = instance.get('StorageEncrypted', False)
+        backup_retention = instance.get('BackupRetentionPeriod', 0)
+        deletion_protection = instance.get('DeletionProtection', False)
+        public_access = instance.get('PubliclyAccessible', False)
+        status = instance.get('DBInstanceStatus', 'N/A')
         
-        content.append(f"""
-        <div class="mb-2">
-            <strong>{db_id}</strong> ({engine}) - Multi-AZ: {multi_az}, 암호화: {encrypted}
-        </div>
+        rows.append(f"""
+        <tr>
+            <td><strong>{db_id}</strong></td>
+            <td>{engine}</td>
+            <td>{db_class}</td>
+            <td class="{'ok' if multi_az else 'error'}">{'예' if multi_az else '아니오'}</td>
+            <td class="{'ok' if encrypted else 'error'}">{'예' if encrypted else '아니오'}</td>
+            <td class="{'ok' if backup_retention >= 30 else 'warning' if backup_retention >= 7 else 'error'}">{backup_retention}일</td>
+            <td class="{'ok' if deletion_protection else 'warning'}">{'예' if deletion_protection else '아니오'}</td>
+            <td class="{'error' if public_access else 'ok'}">{'예' if public_access else '아니오'}</td>
+            <td><span class="badge badge-{'ok' if status == 'available' else 'warning'}">{status}</span></td>
+        </tr>
         """)
     
-    return ''.join(content)
+    table = f"""
+    <table>
+        <thead>
+            <tr>
+                <th>DB 식별자</th>
+                <th>엔진</th>
+                <th>타입</th>
+                <th>Multi-AZ</th>
+                <th>암호화</th>
+                <th>백업 보관</th>
+                <th>삭제 방지</th>
+                <th>퍼블릭 액세스</th>
+                <th>상태</th>
+            </tr>
+        </thead>
+        <tbody>
+            {''.join(rows)}
+        </tbody>
+    </table>
+    """
+    
+    return table
 
 def generate_lambda_content(functions):
-    """Lambda 함수 내용 생성"""
+    """Lambda 함수 콘텐츠 생성"""
     if not functions:
-        return "<p class='text-muted'>Lambda 함수가 없습니다.</p>"
+        return '<div class="no-data">Lambda 함수가 없습니다</div>'
     
-    content = []
-    for func in functions[:5]:  # 최대 5개만 표시
-        name = func.get('FunctionName', 'N/A')
-        runtime = func.get('Runtime', 'N/A')
-        
-        content.append(f"""
-        <div class="mb-2">
-            <strong>{name}</strong> ({runtime})
-        </div>
-        """)
-    
-    return ''.join(content)
+    return '<div class="no-data">Lambda 함수가 없습니다</div>'
 
 def generate_iam_users_rows(users):
     """IAM 사용자 테이블 행 생성"""
     if not users:
-        return "<tr><td colspan='4' class='text-center text-muted'>IAM 사용자가 없습니다.</td></tr>"
+        return '<tr><td colspan="5" class="no-data">IAM 사용자가 없습니다</td></tr>'
     
     rows = []
-    for user in users[:10]:  # 최대 10개만 표시
-        username = user.get('UserName', 'N/A')
-        created = user.get('CreateDate', 'N/A')
-        mfa = '✅' if user.get('MFAEnabled', False) else '❌'
-        last_used = user.get('PasswordLastUsed', 'N/A')
+    for user in users:
+        username = user.get('username', 'N/A')
+        mfa = user.get('mfa', False)
+        access_keys = user.get('access_keys', [])
+        
+        key_count = len(access_keys)
+        key_date = 'N/A'
+        key_age_class = 'ok'
+        
+        if access_keys:
+            oldest_key = min(access_keys, key=lambda k: k.get('CreateDate', ''))
+            key_date = oldest_key.get('CreateDate', 'N/A')
+            if key_date != 'N/A':
+                key_date = key_date.split('T')[0]
+                from datetime import datetime, timedelta
+                try:
+                    create_date = datetime.strptime(key_date, '%Y-%m-%d')
+                    if datetime.now() - create_date > timedelta(days=90):
+                        key_age_class = 'warning'
+                except:
+                    pass
+        
+        security_issues = []
+        if not mfa:
+            security_issues.append('MFA 미설정')
+        if key_count > 1:
+            security_issues.append('다중 액세스 키')
+        if key_age_class == 'warning':
+            security_issues.append('오래된 키')
+        
+        security_status = ', '.join(security_issues) if security_issues else '양호'
+        security_class = 'error' if security_issues else 'ok'
         
         rows.append(f"""
         <tr>
-            <td>{username}</td>
-            <td>{created}</td>
-            <td class="text-center">{mfa}</td>
-            <td>{last_used}</td>
+            <td><strong>{username}</strong></td>
+            <td class="{'ok' if mfa else 'error'}">{'활성화' if mfa else '미설정'}</td>
+            <td>{key_count}개</td>
+            <td class="{key_age_class}">{key_date}</td>
+            <td class="{security_class}">{security_status}</td>
         </tr>
         """)
     
@@ -990,30 +1257,30 @@ def generate_iam_users_rows(users):
 def generate_sg_risky_rows(security_groups):
     """위험한 보안 그룹 테이블 행 생성"""
     if not security_groups:
-        return "<tr><td colspan='4' class='text-center text-success'>위험한 보안 그룹이 없습니다.</td></tr>"
+        return '<tr><td colspan="4" class="no-data">위험한 보안 그룹이 없습니다</td></tr>'
     
     rows = []
-    for sg in security_groups[:10]:  # 최대 10개만 표시
-        sg_id = sg.get('GroupId', 'N/A')
-        sg_name = sg.get('GroupName', 'N/A')
-        description = sg.get('Description', 'N/A')
+    for sg in security_groups:
+        sg_id = sg.get('id', 'N/A')
+        sg_name = sg.get('name', 'N/A')
+        vpc = sg.get('vpc', 'N/A')
+        risky_rules = sg.get('risky_rules', [])
         
-        # 위험한 규칙 찾기
-        risky_rules = []
-        for rule in sg.get('IpPermissions', []):
-            for ip_range in rule.get('IpRanges', []):
-                if ip_range.get('CidrIp') == '0.0.0.0/0':
-                    port = rule.get('FromPort', 'All')
-                    risky_rules.append(f"Port {port}")
+        rules_text = []
+        for rule in risky_rules:
+            port = rule.get('port', 'all')
+            protocol = rule.get('protocol', 'all')
+            risk_level = rule.get('risk_level', 'medium')
+            rules_text.append(f"{protocol}:{port} ({risk_level})")
         
-        rules_text = ', '.join(risky_rules) if risky_rules else 'N/A'
+        rules_display = ', '.join(rules_text) if rules_text else 'N/A'
         
         rows.append(f"""
         <tr>
-            <td>{sg_id}</td>
+            <td><strong>{sg_id}</strong></td>
             <td>{sg_name}</td>
-            <td>{description}</td>
-            <td class="text-danger">{rules_text}</td>
+            <td>{vpc}</td>
+            <td class="error">{rules_display}</td>
         </tr>
         """)
     
