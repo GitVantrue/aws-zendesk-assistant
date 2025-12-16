@@ -496,36 +496,25 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
         # 실제 AWS 작업 실행
         if question_type == "screener" and account_id and credentials:
             # Service Screener 실행
-            from aws_tools.screener import run_service_screener
+            from aws_tools.screener import run_service_screener_async
             
             try:
                 # 진행 상황 업데이트
                 await send_websocket_progress(state, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...")
                 await send_websocket_progress(state, "📍 스캔 리전: ap-northeast-2, us-east-1")
-                await send_websocket_progress(state, "⏱️ 약 2-5분 소요될 수 있습니다...")
+                await send_websocket_progress(state, "⏱️ 약 5-10분 소요될 수 있습니다...")
                 
-                # Service Screener 실행
-                screener_result = run_service_screener(account_id, credentials)
+                # Service Screener 비동기 실행 (즉시 반환)
+                screener_result = run_service_screener_async(
+                    account_id=account_id, 
+                    credentials=credentials,
+                    websocket=state.get("websocket"),
+                    session_id=state.get("session_id")
+                )
                 
                 if screener_result["success"]:
-                    # 성공 - 결과 메시지 구성
-                    answer_parts = [f"✅ Service Screener 스캔 완료!\n"]
-                    
-                    # 요약 정보 추가
-                    if screener_result["summary"]:
-                        answer_parts.append(screener_result["summary"])
-                    
-                    # 보고서 URL 추가
-                    if screener_result["report_url"]:
-                        answer_parts.append(f"\n📊 **Service Screener 상세 보고서 (영문)**:")
-                        answer_parts.append(f"[Service Screener 보고서 보기]({screener_result['report_url']})")
-                    
-                    # WA Summary URL 추가
-                    if screener_result["wa_report_url"]:
-                        answer_parts.append(f"\n📋 **Well-Architected 통합 분석 보고서 (영문)**:")
-                        answer_parts.append(f"[WA 통합 보고서 보기]({screener_result['wa_report_url']})")
-                    
-                    answer = "\n".join(answer_parts)
+                    # 비동기 시작 성공 - 즉시 응답
+                    answer = screener_result["message"]
                     
                     result = {
                         "question": state["question"],

@@ -1,32 +1,79 @@
 """
 AWS Service Screener 실행 모듈
 Reference 코드의 Service Screener 로직을 WebSocket 환경에 맞게 적용
+비동기 처리로 긴 작업 수행
 """
 
 import os
 import json
 import subprocess
 import shutil
+import threading
 from datetime import datetime
 import traceback
 
-def run_service_screener(account_id, credentials=None):
+def run_service_screener_async(account_id, credentials=None, websocket=None, session_id=None):
     """
-    AWS Service Screener 실행
-    Reference 코드의 완전한 Service Screener 실행 로직
+    AWS Service Screener 비동기 실행 (Reference 코드 방식)
     
     Args:
         account_id (str): AWS 계정 ID
-        credentials (dict): AWS 자격증명 (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)
+        credentials (dict): AWS 자격증명
+        websocket: WebSocket 연결 (진행 상황 전송용)
+        session_id (str): 세션 ID
+    """
+    def screener_worker():
+        """백그라운드에서 실행되는 Service Screener 작업"""
+        try:
+            # 실제 Service Screener 실행
+            result = run_service_screener_sync(account_id, credentials, websocket, session_id)
+            
+            if result["success"]:
+                # 성공 시 결과 전송
+                if websocket and session_id:
+                    success_message = f"✅ Service Screener 스캔 완료!\n\n{result['summary']}"
+                    send_websocket_message(websocket, session_id, success_message)
+                    
+                    if result["report_url"]:
+                        report_message = f"📊 Service Screener 상세 보고서:\n{result['report_url']}"
+                        send_websocket_message(websocket, session_id, report_message)
+                    
+                    # WA Summary를 별도 스레드에서 실행
+                    if result.get("screener_result_dir") and result.get("timestamp"):
+                        wa_thread = threading.Thread(
+                            target=generate_wa_summary_async,
+                            args=(account_id, result["screener_result_dir"], result["timestamp"], websocket, session_id)
+                        )
+                        wa_thread.daemon = True
+                        wa_thread.start()
+            else:
+                # 실패 시 오류 전송
+                if websocket and session_id:
+                    error_message = f"❌ Service Screener 실행 실패:\n{result['error']}"
+                    send_websocket_message(websocket, session_id, error_message)
+                    
+        except Exception as e:
+            print(f"[ERROR] Service Screener 비동기 실행 중 오류: {str(e)}", flush=True)
+            traceback.print_exc()
+            if websocket and session_id:
+                error_message = f"❌ Service Screener 실행 중 오류가 발생했습니다: {str(e)}"
+                send_websocket_message(websocket, session_id, error_message)
     
-    Returns:
-        dict: {
-            "success": bool,
-            "summary": str,
-            "report_url": str,
-            "wa_report_url": str,
-            "error": str
-        }
+    # 백그라운드 스레드에서 실행
+    thread = threading.Thread(target=screener_worker)
+    thread.daemon = True
+    thread.start()
+    
+    # 즉시 반환 (비동기)
+    return {
+        "success": True,
+        "message": "Service Screener 스캔을 시작했습니다. 완료되면 결과를 전송해드리겠습니다.",
+        "async": True
+    }
+
+def run_service_screener_sync(account_id, credentials=None, websocket=None, session_id=None):
+    """
+    AWS Service Screener 동기 실행 (실제 작업)
     """
     print(f"[DEBUG] ✅ Service Screener 실행 시작: 계정 {account_id}", flush=True)
     
@@ -51,124 +98,38 @@ def run_service_screener(account_id, credentials=None):
             print(f"[DEBUG] 기존 결과 삭제: {old_result_dir}", flush=True)
             shutil.rmtree(old_result_dir)
         
-        # Reference 코드와 완전히 동일한 방식으로 되돌리기
-        temp_json_path = f'/tmp/crossAccounts_{account_id}.json'
-        
         # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
         scan_regions = ['ap-northeast-2', 'us-east-1']
         
-        cross_accounts_config = {
-            "general": {
-                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
-                "Regions": scan_regions  # 스캔할 리전 목록
-            }
-        }
-
-        with open(temp_json_path, 'w') as f:
-            json.dump(cross_accounts_config, f, indent=2)
+        # Reference 코드 방식: main.py 직접 실행 (긴 시간 소요)
+        screener_path = '/root/service-screener-v2/main.py'
+        cmd = ['python3', screener_path, '--regions', ','.join(scan_regions)]
         
-        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
-        print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
-
-        # 여러 실행 방식 시도
-        # Reference 코드와 완전히 동일한 방식만 사용
-        screener_attempts = [
-            # Reference 코드 방식: main.py + regions (CloudFormation 오류 무시)
-            {
-                'path': '/root/service-screener-v2/main.py',
-                'cmd': ['python3', '/root/service-screener-v2/main.py', '--regions', ','.join(scan_regions)],
-                'name': 'Reference 방식 (main.py + regions)',
-                'ignore_errors': True  # CloudFormation 오류 무시하고 부분 결과 수집
-            }
-        ]
+        print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
         
-        successful_result = None
+        # 진행 상황 업데이트
+        if websocket and session_id:
+            send_websocket_message(websocket, session_id, "⚙️ AWS 리소스 스캔을 진행하고 있습니다...")
         
-        for attempt in screener_attempts:
-            if not os.path.exists(attempt['path']):
-                print(f"[DEBUG] {attempt['name']} - 파일 없음: {attempt['path']}", flush=True)
-                continue
-                
-            print(f"[DEBUG] {attempt['name']} 시도: {' '.join(attempt['cmd'])}", flush=True)
-            
-            try:
-                # main.py + regions 방식은 더 긴 타임아웃 사용
-                timeout = 600 if 'main.py + regions' in attempt['name'] else 120
-                
-                result = subprocess.run(
-                    attempt['cmd'],
-                    capture_output=True,
-                    text=True,
-                    env=env_vars,
-                    timeout=timeout,
-                    cwd='/root/service-screener-v2'
-                )
-                
-                print(f"[DEBUG] {attempt['name']} 완료 - 반환코드: {result.returncode}", flush=True)
-                print(f"[DEBUG] stdout 길이: {len(result.stdout)}, stderr 길이: {len(result.stderr)}", flush=True)
-                
-                if result.stdout:
-                    print(f"[DEBUG] stdout (처음 500자):\n{result.stdout[:500]}", flush=True)
-                if result.stderr:
-                    print(f"[DEBUG] stderr (처음 500자):\n{result.stderr[:500]}", flush=True)
-                
-                # 결과 디렉터리 확인
-                account_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
-                
-                # CloudFormation 오류를 무시하고 부분 결과라도 확인
-                ignore_errors = attempt.get('ignore_errors', False)
-                
-                if os.path.exists(account_result_dir):
-                    print(f"[DEBUG] {attempt['name']} 성공! 결과 디렉터리 생성됨: {account_result_dir}", flush=True)
-                    successful_result = result
-                    break
-                elif ignore_errors and result.returncode != 0:
-                    # CloudFormation 오류가 있어도 스캔이 진행되었는지 확인
-                    if "Processing the following account id" in result.stdout:
-                        print(f"[DEBUG] {attempt['name']} - CloudFormation 오류 있지만 스캔 진행됨, 결과 대기 중...", flush=True)
-                        
-                        # CloudFormation 오류 무시하고 더 긴 대기 (Reference 코드 방식)
-                        print(f"[DEBUG] {attempt['name']} - CloudFormation 오류 무시하고 스캔 완료 대기 중...", flush=True)
-                        import time
-                        
-                        # 30초 동안 2초마다 확인 (Reference 코드처럼 충분한 대기)
-                        for wait_count in range(15):  # 30초 = 15 * 2초
-                            time.sleep(2)
-                            if os.path.exists(account_result_dir):
-                                print(f"[DEBUG] {attempt['name']} 지연 성공! 결과 디렉터리 생성됨: {account_result_dir} (대기시간: {(wait_count+1)*2}초)", flush=True)
-                                successful_result = result
-                                break
-                            else:
-                                print(f"[DEBUG] {attempt['name']} - {(wait_count+1)*2}초 대기 중... 결과 디렉터리 확인 중", flush=True)
-                        
-                        if successful_result:
-                            break
-                        else:
-                            print(f"[DEBUG] {attempt['name']} - 30초 대기 후에도 결과 디렉터리 없음", flush=True)
-                else:
-                    print(f"[DEBUG] {attempt['name']} - 결과 디렉터리 없음", flush=True)
-                    
-            except subprocess.TimeoutExpired:
-                print(f"[DEBUG] {attempt['name']} - 타임아웃 (2분)", flush=True)
-            except Exception as e:
-                print(f"[DEBUG] {attempt['name']} - 오류: {e}", flush=True)
+        # Service Screener 실행 (긴 시간 소요 - 5~10분)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env_vars,
+            timeout=900,  # 15분 타임아웃
+            cwd='/root/service-screener-v2'
+        )
         
-        if not successful_result:
-            print(f"[ERROR] 모든 Service Screener 실행 방식 실패", flush=True)
-            return {
-                "success": False,
-                "summary": None,
-                "report_url": None,
-                "wa_report_url": None,
-                "error": "Service Screener 실행 실패 - 모든 방식 시도했으나 결과 없음"
-            }
+        print(f"[DEBUG] Service Screener 완료 - 반환코드: {result.returncode}", flush=True)
+        print(f"[DEBUG] stdout 길이: {len(result.stdout)}, stderr 길이: {len(result.stderr)}", flush=True)
         
-        # 성공한 경우 계속 진행
-        result = successful_result
-        # 여기서 result는 이미 successful_result로 설정됨
+        if result.stdout:
+            print(f"[DEBUG] stdout (처음 500자):\n{result.stdout[:500]}", flush=True)
+        if result.stderr:
+            print(f"[DEBUG] stderr (처음 500자):\n{result.stderr[:500]}", flush=True)
         
-        # Reference 코드와 동일: 반환코드 무시하고 결과 디렉터리 확인
-        # (CloudFormation 오류가 있어도 결과가 생성될 수 있음)
+        # Reference 코드와 동일: CloudFormation 오류 무시하고 결과 디렉터리 확인
         screener_dir = '/root/service-screener-v2'
         account_result_dir = os.path.join(screener_dir, 'adminlte', 'aws', account_id)
         
@@ -234,22 +195,12 @@ def run_service_screener(account_id, credentials=None):
                 report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/screener_{account_id}_{timestamp}/index.html"
                 print(f"[DEBUG] Service Screener 보고서 URL 생성: {report_url}", flush=True)
                 
-                # Well-Architected 통합 보고서 생성
-                print(f"[DEBUG] Well-Architected 통합 보고서 생성 시작", flush=True)
-                wa_report_url = generate_wa_summary_report(account_id, account_result_dir, timestamp)
-                
-                # 임시 파일 정리
-                try:
-                    os.remove(temp_json_path)
-                    print(f"[DEBUG] 임시 파일 삭제: {temp_json_path}", flush=True)
-                except:
-                    pass
-                
                 return {
                     "success": True,
                     "summary": summary,
                     "report_url": report_url,
-                    "wa_report_url": wa_report_url,
+                    "screener_result_dir": account_result_dir,
+                    "timestamp": timestamp,
                     "error": None
                 }
             else:
@@ -258,17 +209,35 @@ def run_service_screener(account_id, credentials=None):
                     "success": True,
                     "summary": f"📊 계정 {account_id} 스캔이 완료되었으나 index.html을 찾을 수 없습니다.",
                     "report_url": None,
-                    "wa_report_url": None,
                     "error": None
                 }
         else:
             print(f"[DEBUG] 계정 디렉터리 없음: {account_result_dir}", flush=True)
+            
+            # CloudFormation 오류가 있어도 스캔이 진행되었는지 확인
+            if "Processing the following account id" in result.stdout:
+                print(f"[DEBUG] CloudFormation 오류 있지만 스캔 진행됨, 추가 대기 중...", flush=True)
+                
+                # 추가 대기 (스캔이 완료될 때까지)
+                import time
+                for wait_count in range(30):  # 60초 = 30 * 2초
+                    time.sleep(2)
+                    if os.path.exists(account_result_dir):
+                        print(f"[DEBUG] 지연 성공! 결과 디렉터리 생성됨: {account_result_dir} (대기시간: {(wait_count+1)*2}초)", flush=True)
+                        # 재귀 호출로 결과 처리
+                        return run_service_screener_sync(account_id, credentials, websocket, session_id)
+                    
+                    # 진행 상황 업데이트 (10초마다)
+                    if websocket and session_id and (wait_count + 1) % 5 == 0:
+                        send_websocket_message(websocket, session_id, f"⏳ 스캔 진행 중... ({(wait_count+1)*2}초 경과)")
+                
+                print(f"[DEBUG] 60초 대기 후에도 결과 디렉터리 없음", flush=True)
+            
             return {
-                "success": True,
-                "summary": f"📊 계정 {account_id} 스캔이 완료되었습니다.\n⚠️ 출력 디렉터리를 찾을 수 없습니다.",
+                "success": False,
+                "summary": None,
                 "report_url": None,
-                "wa_report_url": None,
-                "error": None
+                "error": f"스캔이 완료되었지만 결과 디렉터리를 찾을 수 없습니다: {account_result_dir}"
             }
     
     except subprocess.TimeoutExpired:
@@ -277,8 +246,7 @@ def run_service_screener(account_id, credentials=None):
             "success": False,
             "summary": None,
             "report_url": None,
-            "wa_report_url": None,
-            "error": "스캔 시간이 초과되었습니다. (10분)"
+            "error": "스캔 시간이 초과되었습니다. (15분)"
         }
     except Exception as e:
         print(f"[ERROR] Service Screener 실행 중 오류: {str(e)}", flush=True)
@@ -287,21 +255,78 @@ def run_service_screener(account_id, credentials=None):
             "success": False,
             "summary": None,
             "report_url": None,
-            "wa_report_url": None,
             "error": f"스캔 실행 중 오류: {str(e)}"
         }
+
+def generate_wa_summary_async(account_id, screener_result_dir, timestamp, websocket=None, session_id=None):
+    """
+    Well-Architected Summary 비동기 생성
+    """
+    try:
+        print(f"[DEBUG] Well-Architected 통합 보고서 생성 시작", flush=True)
+        
+        if websocket and session_id:
+            send_websocket_message(websocket, session_id, "📋 Well-Architected 통합 분석 보고서를 생성하고 있습니다...")
+        
+        wa_report_url = generate_wa_summary_report(account_id, screener_result_dir, timestamp)
+        
+        if wa_report_url:
+            if websocket and session_id:
+                wa_message = f"📋 Well-Architected 통합 분석 보고서 완성!\n{wa_report_url}"
+                send_websocket_message(websocket, session_id, wa_message)
+            print(f"[DEBUG] WA 보고서 URL 전송 완료: {wa_report_url}", flush=True)
+        else:
+            if websocket and session_id:
+                send_websocket_message(websocket, session_id, "⚠️ Well-Architected 보고서 생성에 실패했습니다.")
+            print(f"[DEBUG] WA 보고서 생성 실패", flush=True)
+            
+    except Exception as e:
+        print(f"[ERROR] WA 보고서 비동기 생성 중 오류: {str(e)}", flush=True)
+        if websocket and session_id:
+            send_websocket_message(websocket, session_id, f"❌ Well-Architected 보고서 생성 중 오류: {str(e)}")
+
+def send_websocket_message(websocket, session_id, message):
+    """
+    WebSocket으로 메시지 전송
+    """
+    try:
+        import asyncio
+        import json
+        
+        if websocket and session_id:
+            # WebSocket 메시지 형식
+            ws_message = {
+                "type": "message",
+                "session_id": session_id,
+                "message": message,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # 비동기 전송을 위한 코루틴 생성 및 실행
+            def send_async():
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(websocket.send(json.dumps(ws_message)))
+                    loop.close()
+                except Exception as e:
+                    print(f"[ERROR] WebSocket 전송 실패: {e}", flush=True)
+            
+            # 별도 스레드에서 실행 (블로킹 방지)
+            import threading
+            thread = threading.Thread(target=send_async)
+            thread.daemon = True
+            thread.start()
+            
+            print(f"[DEBUG] WebSocket 메시지 전송: {session_id} - {message[:100]}...", flush=True)
+        
+    except Exception as e:
+        print(f"[ERROR] WebSocket 메시지 전송 실패: {e}", flush=True)
 
 def parse_screener_results(output_dir, account_id):
     """
     Service Screener 결과 파싱하여 요약 생성
     Reference 코드의 완전한 parse_screener_results 함수
-    
-    Args:
-        output_dir (str): 출력 디렉터리 경로
-        account_id (str): AWS 계정 ID
-    
-    Returns:
-        str: 요약 메시지
     """
     try:
         # JSON 결과 파일 찾기
@@ -364,14 +389,6 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
     """
     Well-Architected 통합 분석 보고서 생성
     Reference 코드의 완전한 generate_wa_summary_report 함수
-    
-    Args:
-        account_id (str): AWS 계정 ID
-        screener_result_dir (str): Service Screener 결과 디렉터리
-        timestamp (str): 타임스탬프
-    
-    Returns:
-        str: 보고서 URL 또는 None
     """
     try:
         # wa-ss-summarizer 경로 확인
