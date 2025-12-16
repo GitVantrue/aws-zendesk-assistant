@@ -180,8 +180,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         if websocket and session_id:
             send_websocket_message(websocket, session_id, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...\n📍 스캔 리전: ap-northeast-2, us-east-1\n⏱️ 약 2-5분 소요될 수 있습니다.")
         
-        # Service Screener 직접 실행 (Reference 코드와 동일)
-        cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
+        # Service Screener 직접 실행 (CloudFormation 없이)
+        cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1', '--mode', 'api-raw']
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_ACCESS_KEY_ID={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
@@ -432,7 +432,7 @@ def send_websocket_message(websocket, session_id, message):
                 try:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
-                    loop.run_until_complete(websocket.send(json.dumps(ws_message)))
+                    loop.run_until_complete(websocket.send_str(json.dumps(ws_message)))
                     loop.close()
                 except Exception as e:
                     print(f"[ERROR] WebSocket 전송 실패: {e}", flush=True)
