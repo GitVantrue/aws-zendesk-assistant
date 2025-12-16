@@ -51,65 +51,107 @@ def run_service_screener(account_id, credentials=None):
             print(f"[DEBUG] 기존 결과 삭제: {old_result_dir}", flush=True)
             shutil.rmtree(old_result_dir)
         
-        # 단일 계정 스캔 방식 (공식 문서 기준)
+        # Reference 코드와 완전히 동일한 방식으로 되돌리기
+        temp_json_path = f'/tmp/crossAccounts_{account_id}.json'
+        
         # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
         scan_regions = ['ap-northeast-2', 'us-east-1']
-        regions_str = ','.join(scan_regions)
         
-        print(f"[DEBUG] 단일 계정 스캔 모드 - 스캔 대상 리전: {regions_str}", flush=True)
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
+                "Regions": scan_regions  # 스캔할 리전 목록
+            }
+        }
 
-        # Service Screener 실행 - 공식 문서 방식: screener --regions {YourRegion}
-        screener_path = '/root/service-screener-v2/Screener.py'
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
         
-        # 파일 존재 확인
-        print(f"[DEBUG] Screener.py 파일 존재 확인: {os.path.exists(screener_path)}", flush=True)
-        if not os.path.exists(screener_path):
-            print(f"[ERROR] Screener.py 파일이 존재하지 않음: {screener_path}", flush=True)
-            # 대체 경로 확인
-            alt_paths = [
-                '/root/service-screener-v2/main.py',
-                '/root/service-screener-v2/screener.py',
-                '/root/service-screener-v2/ServiceScreener.py'
-            ]
-            for alt_path in alt_paths:
-                if os.path.exists(alt_path):
-                    print(f"[DEBUG] 대체 파일 발견: {alt_path}", flush=True)
-                    screener_path = alt_path
-                    break
-        
-        # 공식 문서 방식: screener --regions {YourRegion}
-        cmd = [
-            'python3',
-            screener_path,
-            '--regions', regions_str
+        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
+
+        # 여러 실행 방식 시도
+        screener_attempts = [
+            # 1. Reference 코드 방식
+            {
+                'path': '/root/service-screener-v2/Screener.py',
+                'cmd': ['python3', '/root/service-screener-v2/Screener.py', '--crossAccounts', temp_json_path],
+                'name': 'Reference 방식 (Screener.py + crossAccounts)'
+            },
+            # 2. main.py 방식
+            {
+                'path': '/root/service-screener-v2/main.py',
+                'cmd': ['python3', '/root/service-screener-v2/main.py', '--crossAccounts', temp_json_path],
+                'name': 'main.py + crossAccounts'
+            },
+            # 3. 단일 계정 방식 (Screener.py)
+            {
+                'path': '/root/service-screener-v2/Screener.py',
+                'cmd': ['python3', '/root/service-screener-v2/Screener.py', '--regions', ','.join(scan_regions)],
+                'name': '단일 계정 방식 (Screener.py + regions)'
+            },
+            # 4. 단일 계정 방식 (main.py)
+            {
+                'path': '/root/service-screener-v2/main.py',
+                'cmd': ['python3', '/root/service-screener-v2/main.py', '--regions', ','.join(scan_regions)],
+                'name': '단일 계정 방식 (main.py + regions)'
+            }
         ]
-        print(f"[DEBUG] 단일 계정 Service Screener 실행: {' '.join(cmd)}", flush=True)
-        print(f"[DEBUG] 작업 디렉터리: /root/service-screener-v2", flush=True)
-        print(f"[DEBUG] 환경변수 AWS_ACCESS_KEY_ID: {env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
         
-        # Service Screener 실행
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            env=env_vars,
-            timeout=600,  # 10분 타임아웃
-            cwd='/root/service-screener-v2'
-        )
+        successful_result = None
         
-        print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
-        print(f"[DEBUG] stdout 길이: {len(result.stdout)}, stderr 길이: {len(result.stderr)}", flush=True)
-        if result.stdout:
-            print(f"[DEBUG] stdout (전체):\n{result.stdout}", flush=True)
-        if result.stderr:
-            print(f"[DEBUG] stderr (전체):\n{result.stderr}", flush=True)
+        for attempt in screener_attempts:
+            if not os.path.exists(attempt['path']):
+                print(f"[DEBUG] {attempt['name']} - 파일 없음: {attempt['path']}", flush=True)
+                continue
+                
+            print(f"[DEBUG] {attempt['name']} 시도: {' '.join(attempt['cmd'])}", flush=True)
+            
+            try:
+                result = subprocess.run(
+                    attempt['cmd'],
+                    capture_output=True,
+                    text=True,
+                    env=env_vars,
+                    timeout=120,  # 2분 타임아웃으로 단축
+                    cwd='/root/service-screener-v2'
+                )
+                
+                print(f"[DEBUG] {attempt['name']} 완료 - 반환코드: {result.returncode}", flush=True)
+                print(f"[DEBUG] stdout 길이: {len(result.stdout)}, stderr 길이: {len(result.stderr)}", flush=True)
+                
+                if result.stdout:
+                    print(f"[DEBUG] stdout (처음 500자):\n{result.stdout[:500]}", flush=True)
+                if result.stderr:
+                    print(f"[DEBUG] stderr (처음 500자):\n{result.stderr[:500]}", flush=True)
+                
+                # 결과 디렉터리 확인
+                account_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
+                if os.path.exists(account_result_dir):
+                    print(f"[DEBUG] {attempt['name']} 성공! 결과 디렉터리 생성됨: {account_result_dir}", flush=True)
+                    successful_result = result
+                    break
+                else:
+                    print(f"[DEBUG] {attempt['name']} - 결과 디렉터리 없음", flush=True)
+                    
+            except subprocess.TimeoutExpired:
+                print(f"[DEBUG] {attempt['name']} - 타임아웃 (2분)", flush=True)
+            except Exception as e:
+                print(f"[DEBUG] {attempt['name']} - 오류: {e}", flush=True)
         
-        # 작업 디렉터리 내용 확인
-        try:
-            cwd_contents = os.listdir('/root/service-screener-v2')
-            print(f"[DEBUG] 작업 디렉터리 내용: {cwd_contents}", flush=True)
-        except Exception as e:
-            print(f"[ERROR] 작업 디렉터리 확인 실패: {e}", flush=True)
+        if not successful_result:
+            print(f"[ERROR] 모든 Service Screener 실행 방식 실패", flush=True)
+            return {
+                "success": False,
+                "summary": None,
+                "report_url": None,
+                "wa_report_url": None,
+                "error": "Service Screener 실행 실패 - 모든 방식 시도했으나 결과 없음"
+            }
+        
+        # 성공한 경우 계속 진행
+        result = successful_result
+        # 여기서 result는 이미 successful_result로 설정됨
         
         # Reference 코드와 동일: 반환코드 무시하고 결과 디렉터리 확인
         # (CloudFormation 오류가 있어도 결과가 생성될 수 있음)
@@ -182,7 +224,12 @@ def run_service_screener(account_id, credentials=None):
                 print(f"[DEBUG] Well-Architected 통합 보고서 생성 시작", flush=True)
                 wa_report_url = generate_wa_summary_report(account_id, account_result_dir, timestamp)
                 
-                # 단일 계정 스캔에서는 임시 파일이 없음
+                # 임시 파일 정리
+                try:
+                    os.remove(temp_json_path)
+                    print(f"[DEBUG] 임시 파일 삭제: {temp_json_path}", flush=True)
+                except:
+                    pass
                 
                 return {
                     "success": True,
