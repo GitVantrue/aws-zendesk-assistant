@@ -101,25 +101,14 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
         scan_regions = ['ap-northeast-2', 'us-east-1']
         
-        # crossAccounts.json 생성 (Reference 코드와 완전히 동일)
-        temp_json_path = f'/tmp/crossAccounts_{account_id}.json'
-        cross_accounts_config = {
-            "general": {
-                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
-                "Regions": scan_regions  # 스캔할 리전 목록
-            }
-        }
+        # Reference 코드 방식: crossAccounts.json 불필요 (main.py 직접 실행)
+        print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
         
-        with open(temp_json_path, 'w') as f:
-            json.dump(cross_accounts_config, f, indent=2)
+        # Reference 코드 방식: main.py --regions (직접 실행)
+        regions_str = ','.join(scan_regions)
+        cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', regions_str]
         
-        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
-        
-        # Reference 코드 방식: Screener.py --crossAccounts (긴 시간 소요)
-        screener_path = '/root/service-screener-v2/Screener.py'
-        cmd = ['python3', screener_path, '--crossAccounts', temp_json_path]
-        
-        print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
+        print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
         
         # 진행 상황 업데이트
         if websocket and session_id:
@@ -145,12 +134,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         if result.stderr:
             print(f"[DEBUG] stderr (처음 500자):\n{result.stderr[:500]}", flush=True)
         
-        # 임시 파일 정리
-        try:
-            os.remove(temp_json_path)
-            print(f"[DEBUG] 임시 파일 삭제: {temp_json_path}", flush=True)
-        except:
-            pass
+        # Reference 코드 방식: 임시 파일 없음 (main.py 직접 실행)
         
         # Reference 코드와 동일: 반환코드 무시하고 결과 디렉터리만 확인
         # CloudFormation 오류가 있어도 부분적인 스캔 결과가 생성될 수 있음
