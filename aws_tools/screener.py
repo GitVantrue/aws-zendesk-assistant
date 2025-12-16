@@ -61,20 +61,20 @@ def run_service_screener(account_id, credentials=None):
         
         # 임시 JSON 파일 생성
         temp_json_fd, temp_json_path = tempfile.mkstemp(suffix='.json', prefix='crossAccounts_')
-        try:
-            with os.fdopen(temp_json_fd, 'w') as f:
-                json.dump(cross_accounts_config, f, indent=2)
-            
-            print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
-            print(f"[DEBUG] 스캔 대상 리전: {', '.join(default_regions)}", flush=True)
-            
-            # Service Screener 실행 (Reference 코드와 동일)
-            cmd = [
-                'python3',
-                '/root/service-screener-v2/Screener.py',
-                '--crossAccounts', temp_json_path
-            ]
-            print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
+        
+        with os.fdopen(temp_json_fd, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        print(f"[DEBUG] 스캔 대상 리전: {', '.join(default_regions)}", flush=True)
+        
+        # Service Screener 실행 (Reference 코드와 동일)
+        cmd = [
+            'python3',
+            '/root/service-screener-v2/Screener.py',
+            '--crossAccounts', temp_json_path
+        ]
+        print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
         
         # 로그 파일 생성
         log_file = f'/tmp/screener_{account_id}.log'
@@ -215,18 +215,17 @@ def run_service_screener(account_id, credentials=None):
             }
         
         # 임시 파일 정리
-        finally:
-            try:
-                os.remove(temp_json_path)
-                print(f"[DEBUG] 임시 JSON 파일 삭제: {temp_json_path}", flush=True)
-            except:
-                pass
-            
-            try:
-                os.remove(log_file)
-                print(f"[DEBUG] 임시 로그 파일 삭제: {log_file}", flush=True)
-            except:
-                pass
+        try:
+            os.remove(temp_json_path)
+            print(f"[DEBUG] 임시 JSON 파일 삭제: {temp_json_path}", flush=True)
+        except:
+            pass
+        
+        try:
+            os.remove(log_file)
+            print(f"[DEBUG] 임시 로그 파일 삭제: {log_file}", flush=True)
+        except:
+            pass
     
     except subprocess.TimeoutExpired:
         print(f"[ERROR] Service Screener 타임아웃", flush=True)
