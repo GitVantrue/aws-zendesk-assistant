@@ -433,13 +433,441 @@ def collect_raw_security_data(account_id, start_date_str, end_date_str, region='
     print(f"[DEBUG] ✅ 전체 데이터 수집 완료", flush=True)
     return report_data
 
-# 기존 reference 코드에서 가져온 함수들을 그대로 import
-import sys
-import os
-sys.path.append('/root/aws-zendesk-assistant')
+def generate_html_report(json_file_path):
+    """
+    JSON 데이터를 월간 보안 점검 HTML 보고서로 변환
+    Reference 코드에서 복사한 함수 (Flask 의존성 제거)
+    """
+    try:
+        with open(json_file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
 
-# Reference 코드의 generate_html_report 함수를 직접 import
-from reference_slack_bot import generate_html_report
+        # HTML 템플릿 읽기
+        template_path = os.path.join(os.path.dirname(__file__), '..', 'reference_templates', 'json_report_template.html')
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template = f.read()
+
+        # 기본 메타데이터
+        metadata = data.get('metadata', {})
+        
+        # 템플릿 변수 생성
+        template_vars = {
+            'account_id': metadata.get('account_id', 'Unknown'),
+            'region': metadata.get('region', 'ap-northeast-2'),
+            'report_date': metadata.get('report_date', ''),
+            'period_start': metadata.get('period_start', ''),
+            'period_end': metadata.get('period_end', ''),
+        }
+        
+        # EC2 데이터 처리
+        ec2_data = data.get('resources', {}).get('ec2', {})
+        template_vars.update({
+            'ec2_total': ec2_data.get('summary', {}).get('total', 0),
+            'ec2_running': ec2_data.get('summary', {}).get('running', 0),
+            'ec2_stopped': ec2_data.get('summary', {}).get('stopped', 0),
+            'ec2_rows': generate_ec2_rows(ec2_data.get('instances', [])),
+        })
+        
+        # S3 데이터 처리
+        s3_data = data.get('resources', {}).get('s3', {})
+        s3_total = s3_data.get('summary', {}).get('total', 0)
+        s3_encrypted = s3_data.get('summary', {}).get('encrypted', 0)
+        s3_encrypted_rate = round((s3_encrypted / max(s3_total, 1)) * 100, 1) if s3_total > 0 else 0
+        
+        template_vars.update({
+            's3_total': s3_total,
+            's3_encrypted': s3_encrypted,
+            's3_encrypted_rate': s3_encrypted_rate,
+            's3_rows': generate_s3_rows(s3_data.get('buckets', [])),
+        })
+        
+        # RDS 데이터 처리
+        rds_data = data.get('resources', {}).get('rds', {})
+        rds_instances = rds_data.get('instances', [])
+        rds_multi_az = sum(1 for instance in rds_instances if instance.get('MultiAZ', False))
+        template_vars.update({
+            'rds_total': rds_data.get('summary', {}).get('total', 0),
+            'rds_multi_az': rds_multi_az,
+            'rds_content': generate_rds_content(rds_instances),
+        })
+        
+        # Lambda 데이터 처리
+        lambda_data = data.get('resources', {}).get('lambda', {})
+        template_vars.update({
+            'lambda_total': lambda_data.get('summary', {}).get('total', 0),
+            'lambda_content': generate_lambda_content(lambda_data.get('functions', [])),
+        })
+        
+        # IAM 데이터 처리
+        iam_data = data.get('iam_security', {})
+        iam_users = iam_data.get('users', {})
+        iam_total = iam_users.get('total', 0)
+        iam_mfa_enabled = iam_users.get('mfa_enabled', 0)
+        iam_mfa_rate = round((iam_mfa_enabled / max(iam_total, 1)) * 100, 1) if iam_total > 0 else 0
+        
+        template_vars.update({
+            'iam_users_total': iam_total,
+            'iam_mfa_enabled': iam_mfa_enabled,
+            'iam_mfa_rate': iam_mfa_rate,
+            'iam_users_rows': generate_iam_users_rows(iam_users.get('details', [])),
+        })
+        
+        # 보안 그룹 데이터 처리
+        sg_data = data.get('security_groups', {})
+        template_vars.update({
+            'sg_total': sg_data.get('total', 0),
+            'sg_risky': sg_data.get('risky', 0),
+            'sg_risky_rows': generate_sg_risky_rows(sg_data.get('details', [])),
+        })
+        
+        # 암호화 데이터 처리
+        encryption_data = data.get('encryption', {})
+        ebs_data = encryption_data.get('ebs', {})
+        rds_encryption = encryption_data.get('rds', {})
+        
+        ebs_total = ebs_data.get('total', 0)
+        ebs_encrypted = ebs_data.get('encrypted', 0)
+        ebs_rate = round((ebs_encrypted / max(ebs_total, 1)) * 100, 1) if ebs_total > 0 else 0
+        
+        # RDS 암호화 계산
+        rds_encrypted_count = sum(1 for instance in rds_instances if instance.get('StorageEncrypted', False))
+        rds_encrypted_rate = round((rds_encrypted_count / max(len(rds_instances), 1)) * 100, 1) if rds_instances else 0
+        
+        template_vars.update({
+            'ebs_total': ebs_total,
+            'ebs_encrypted': ebs_encrypted,
+            'ebs_rate': ebs_rate,
+            'rds_encrypted': rds_encrypted_count,
+            'rds_encrypted_rate': rds_encrypted_rate,
+        })
+        
+        # 준수율 클래스 설정
+        template_vars.update({
+            'ebs_compliance_class': get_compliance_class(ebs_rate),
+            's3_compliance_class': get_compliance_class(s3_encrypted_rate),
+            'rds_compliance_class': get_compliance_class(rds_encrypted_rate),
+        })
+        
+        # Critical 이슈 계산
+        critical_issues = calculate_critical_issues(data)
+        template_vars.update({
+            'critical_issues_count': len(critical_issues),
+            'critical_issues_section': generate_critical_issues_section(critical_issues),
+        })
+        
+        # Trusted Advisor 데이터 처리
+        ta_data = data.get('trusted_advisor', {})
+        ta_summary = process_trusted_advisor_data(ta_data)
+        template_vars.update(ta_summary)
+        
+        # CloudTrail 데이터 처리
+        ct_data = data.get('cloudtrail_events', {})
+        template_vars.update({
+            'cloudtrail_days': 30,
+            'cloudtrail_critical_rows': generate_cloudtrail_rows(ct_data.get('events', [])),
+        })
+        
+        # CloudWatch 데이터 처리
+        cw_data = data.get('cloudwatch', {})
+        cw_alarms = cw_data.get('alarms', [])
+        cw_states = cw_data.get('states', {})
+        
+        template_vars.update({
+            'cloudwatch_alarms_total': cw_data.get('total_alarms', 0),
+            'cloudwatch_alarms_in_alarm': cw_states.get('ALARM', 0),
+            'cloudwatch_alarms_ok': cw_states.get('OK', 0),
+            'cloudwatch_alarms_insufficient': cw_states.get('INSUFFICIENT_DATA', 0),
+            'cloudwatch_alarm_rows': generate_cloudwatch_rows(cw_alarms),
+        })
+        
+        # 기타 섹션들
+        template_vars.update({
+            'ebs_unencrypted_section': generate_ebs_unencrypted_section(ebs_data),
+            's3_security_issues_section': generate_s3_security_issues_section(s3_data.get('buckets', [])),
+            'ta_error_rows': generate_ta_error_rows(ta_data),
+        })
+        
+        # 템플릿에 변수 적용
+        html_content = template.format(**template_vars)
+        
+        # HTML 파일 저장
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        html_filename = f"security_report_{metadata.get('account_id', 'unknown')}_{timestamp}.html"
+        html_file_path = os.path.join('/tmp/reports', html_filename)
+        
+        os.makedirs('/tmp/reports', exist_ok=True)
+        with open(html_file_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        print(f"[DEBUG] ✅ HTML 보고서 생성 완료: {html_file_path}", flush=True)
+        return html_file_path
+        
+    except Exception as e:
+        print(f"[ERROR] ❌ HTML 보고서 생성 실패: {str(e)}", flush=True)
+        traceback.print_exc()
+        return None
+
+# 헬퍼 함수들 (Reference 코드에서 복사)
+def get_compliance_class(rate):
+    """준수율에 따른 CSS 클래스 반환"""
+    if rate < 50:
+        return 'critical'
+    elif rate < 80:
+        return 'warning'
+    else:
+        return ''
+
+def calculate_critical_issues(data):
+    """Critical 이슈 계산"""
+    issues = []
+    
+    # 보안 그룹 위험 규칙
+    sg_risky = data.get('security_groups', {}).get('risky', 0)
+    if sg_risky > 0:
+        issues.append(f"위험한 보안 그룹 규칙 {sg_risky}개")
+    
+    # MFA 미설정 사용자
+    iam_users = data.get('iam_security', {}).get('users', {})
+    iam_total = iam_users.get('total', 0)
+    iam_mfa = iam_users.get('mfa_enabled', 0)
+    if iam_total > 0 and iam_mfa < iam_total:
+        issues.append(f"MFA 미설정 사용자 {iam_total - iam_mfa}명")
+    
+    # 암호화 미설정 리소스
+    ebs_data = data.get('encryption', {}).get('ebs', {})
+    ebs_unencrypted = ebs_data.get('total', 0) - ebs_data.get('encrypted', 0)
+    if ebs_unencrypted > 0:
+        issues.append(f"암호화 미설정 EBS 볼륨 {ebs_unencrypted}개")
+    
+    return issues
+
+def generate_critical_issues_section(issues):
+    """Critical 이슈 섹션 생성"""
+    if not issues:
+        return ''
+    
+    content = '<div class="alert-box critical">'
+    content += '<h4>⚠️ 즉시 조치 필요 항목</h4>'
+    content += '<ul>'
+    for issue in issues:
+        content += f'<li>{issue}</li>'
+    content += '</ul>'
+    content += '</div>'
+    
+    return content
+
+def process_trusted_advisor_data(ta_data):
+    """Trusted Advisor 데이터 처리"""
+    if not ta_data.get('available', False):
+        return {
+            'ta_security_error': 0,
+            'ta_security_warning': 0,
+            'ta_fault_tolerance_error': 0,
+            'ta_fault_tolerance_warning': 0,
+            'ta_cost_warning': 0,
+            'ta_performance_warning': 0,
+        }
+    
+    # 실제 TA 데이터가 있으면 처리
+    results = ta_data.get('results', [])
+    summary = {
+        'ta_security_error': 0,
+        'ta_security_warning': 0,
+        'ta_fault_tolerance_error': 0,
+        'ta_fault_tolerance_warning': 0,
+        'ta_cost_warning': 0,
+        'ta_performance_warning': 0,
+    }
+    
+    for result in results:
+        check = result.get('check', {})
+        check_result = result.get('result', {})
+        category = check.get('category', '').lower()
+        status = check_result.get('status', '').lower()
+        
+        if 'security' in category:
+            if status == 'error':
+                summary['ta_security_error'] += 1
+            elif status == 'warning':
+                summary['ta_security_warning'] += 1
+        elif 'fault' in category:
+            if status == 'error':
+                summary['ta_fault_tolerance_error'] += 1
+            elif status == 'warning':
+                summary['ta_fault_tolerance_warning'] += 1
+        elif 'cost' in category and status == 'warning':
+            summary['ta_cost_warning'] += 1
+        elif 'performance' in category and status == 'warning':
+            summary['ta_performance_warning'] += 1
+    
+    return summary
+
+def generate_ebs_unencrypted_section(ebs_data):
+    """EBS 미암호화 섹션 생성"""
+    unencrypted = ebs_data.get('total', 0) - ebs_data.get('encrypted', 0)
+    if unencrypted == 0:
+        return ''
+    
+    return f'''
+    <div class="section">
+        <h2>⚠️ EBS 볼륨 (암호화 미설정) ({unencrypted}개)</h2>
+        <div class="alert-box">
+            <h4>보안 권장사항</h4>
+            <p>암호화되지 않은 EBS 볼륨 {unencrypted}개가 발견되었습니다. 데이터 보호를 위해 암호화를 활성화하세요.</p>
+        </div>
+    </div>
+    '''
+
+def generate_s3_security_issues_section(buckets):
+    """S3 보안 이슈 섹션 생성"""
+    public_buckets = []
+    for bucket in buckets:
+        if not bucket.get('PublicAccessBlock'):
+            public_buckets.append(bucket.get('Name', 'Unknown'))
+    
+    if not public_buckets:
+        return ''
+    
+    return f'''
+    <div class="section">
+        <h2>⚠️ S3 버킷 (보안 이슈) ({len(public_buckets)}개)</h2>
+        <div class="alert-box">
+            <h4>퍼블릭 액세스 가능 버킷</h4>
+            <ul>
+                {"".join([f"<li>{bucket}</li>" for bucket in public_buckets[:5]])}
+            </ul>
+        </div>
+    </div>
+    '''
+
+def generate_ta_error_rows(ta_data):
+    """Trusted Advisor 에러 행 생성"""
+    if not ta_data.get('available', False):
+        return '<tr><td colspan="4" class="text-center text-muted">Trusted Advisor 데이터를 사용할 수 없습니다. (Business/Enterprise 플랜 필요)</td></tr>'
+    
+    results = ta_data.get('results', [])
+    error_results = [r for r in results if r.get('result', {}).get('status', '').lower() == 'error']
+    
+    if not error_results:
+        return '<tr><td colspan="4" class="text-center text-success">Error 상태의 항목이 없습니다.</td></tr>'
+    
+    rows = []
+    for result in error_results[:10]:  # 최대 10개
+        check = result.get('check', {})
+        check_result = result.get('result', {})
+        
+        rows.append(f'''
+        <tr>
+            <td>{check.get('category', 'N/A')}</td>
+            <td>{check.get('name', 'N/A')}</td>
+            <td><span class="badge badge-critical">ERROR</span></td>
+            <td>{len(check_result.get('flaggedResources', []))}</td>
+        </tr>
+        ''')
+    
+    return ''.join(rows)
+
+def generate_cloudtrail_rows(events):
+    """CloudTrail 이벤트 행 생성"""
+    if not events:
+        return '<tr><td colspan="5" class="text-center text-muted">분석 기간 중 중요 이벤트가 없습니다.</td></tr>'
+    
+    # 이벤트 타입별 분류
+    event_summary = {}
+    for event in events:
+        event_name = event.get('EventName', 'Unknown')
+        if event_name not in event_summary:
+            event_summary[event_name] = {
+                'count': 0,
+                'severity': get_event_severity(event_name),
+                'category': get_event_category(event_name)
+            }
+        event_summary[event_name]['count'] += 1
+    
+    rows = []
+    for event_name, info in event_summary.items():
+        severity_class = {
+            'HIGH': 'critical',
+            'MEDIUM': 'warning',
+            'LOW': 'info'
+        }.get(info['severity'], 'info')
+        
+        rows.append(f'''
+        <tr>
+            <td>{event_name}</td>
+            <td><span class="badge badge-{severity_class}">{info['severity']}</span></td>
+            <td>{info['category']}</td>
+            <td>{info['count']}</td>
+            <td>{get_event_description(event_name)}</td>
+        </tr>
+        ''')
+    
+    return ''.join(rows[:10])  # 최대 10개
+
+def generate_cloudwatch_rows(alarms):
+    """CloudWatch 알람 행 생성"""
+    if not alarms:
+        return '<tr><td colspan="4" class="text-center text-muted">CloudWatch 알람이 없습니다.</td></tr>'
+    
+    rows = []
+    for alarm in alarms[:10]:  # 최대 10개
+        name = alarm.get('AlarmName', 'N/A')
+        state = alarm.get('StateValue', 'N/A')
+        metric = alarm.get('MetricName', 'N/A')
+        threshold = alarm.get('Threshold', 'N/A')
+        
+        state_class = {
+            'OK': 'success',
+            'ALARM': 'critical',
+            'INSUFFICIENT_DATA': 'warning'
+        }.get(state, 'secondary')
+        
+        rows.append(f'''
+        <tr>
+            <td>{name}</td>
+            <td><span class="badge badge-{state_class}">{state}</span></td>
+            <td>{metric}</td>
+            <td>{threshold}</td>
+        </tr>
+        ''')
+    
+    return ''.join(rows)
+
+def get_event_severity(event_name):
+    """이벤트 심각도 반환"""
+    high_severity = ['DeleteBucket', 'TerminateInstances', 'DeleteUser', 'DeleteAccessKey']
+    medium_severity = ['CreateAccessKey', 'AttachUserPolicy', 'DetachUserPolicy']
+    
+    if event_name in high_severity:
+        return 'HIGH'
+    elif event_name in medium_severity:
+        return 'MEDIUM'
+    else:
+        return 'LOW'
+
+def get_event_category(event_name):
+    """이벤트 카테고리 반환"""
+    if 'User' in event_name or 'Policy' in event_name or 'AccessKey' in event_name:
+        return 'IAM'
+    elif 'Bucket' in event_name:
+        return 'S3'
+    elif 'Instance' in event_name:
+        return 'EC2'
+    else:
+        return 'Other'
+
+def get_event_description(event_name):
+    """이벤트 설명 반환"""
+    descriptions = {
+        'DeleteBucket': 'S3 버킷 삭제',
+        'TerminateInstances': 'EC2 인스턴스 종료',
+        'DeleteUser': 'IAM 사용자 삭제',
+        'CreateAccessKey': 'IAM 액세스 키 생성',
+        'DeleteAccessKey': 'IAM 액세스 키 삭제',
+        'AttachUserPolicy': 'IAM 정책 연결',
+        'DetachUserPolicy': 'IAM 정책 분리'
+    }
+    return descriptions.get(event_name, '기타 이벤트')
 
 # HTML 생성 헬퍼 함수들
 def generate_ec2_rows(instances):
