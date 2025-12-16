@@ -70,7 +70,7 @@ def get_crossaccount_session(account_id: str) -> dict:
             log_debug(f"Assume role: {role_arn}")
             assumed_role = sts_client.assume_role(
                 RoleArn=role_arn,
-                RoleSessionName=f"WebSocketBot-{account_id}"
+                RoleSessionName=f"SlackBot-{account_id}"
             )
             credentials = assumed_role['Credentials']
             log_debug("Cross-account 세션 생성 성공")
@@ -93,7 +93,7 @@ def get_crossaccount_session(account_id: str) -> dict:
             sts_client = boto3.client('sts')
             crossaccount_role = sts_client.assume_role(
                 RoleArn="arn:aws:iam::370662402529:role/crossaccount",
-                RoleSessionName="WebSocketBot-CrossAccount",
+                RoleSessionName="SlackBot-CrossAccount",
                 ExternalId="saltwarec0rp"
             )
 
@@ -110,7 +110,7 @@ def get_crossaccount_session(account_id: str) -> dict:
             log_debug(f"Role 방식 Assume role: {role_arn} (with ExternalId)")
             assumed_role = crossaccount_sts.assume_role(
                 RoleArn=role_arn,
-                RoleSessionName=f"WebSocketBot-{account_id}",
+                RoleSessionName=f"SlackBot-{account_id}",
                 ExternalId="saltwarec0rp"
             )
             credentials = assumed_role['Credentials']
