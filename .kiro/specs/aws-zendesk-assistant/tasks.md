@@ -96,7 +96,8 @@
     - **Validates: Requirements 7.2**
 
 - [ ] 5. Implement Service Screener integration
-  - [ ] 5.1 Create Service Screener execution wrapper
+  - [ ] 5.1 Fix Service Screener execution errors
+    - Debug current errors in aws_tools/screener.py
     - Reuse run_service_screener() logic from reference implementation
     - Execute /root/service-screener-v2/Screener.py with crossAccounts.json
     - _Requirements: 2.2, 6.1_
@@ -122,7 +123,7 @@
 - [ ] 6. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Build security report generation system
+- [x] 7. Build security report generation system (Monthly Report - Completed)
   - [x] 7.1 Implement raw data collection wrapper
 
 
@@ -130,32 +131,27 @@
     - Collect EC2, S3, RDS, Lambda, IAM, Security Groups, CloudTrail, CloudWatch, Trusted Advisor data
     - _Requirements: 3.1, 3.2, 6.1_
 
-  - [ ]* 7.2 Write property test for data collection completeness
+  - [x] 7.2 Write property test for data collection completeness
     - **Property 6: Security data collection completeness**
     - **Validates: Requirements 3.2**
 
 
 
-  - [ ] 7.3 Implement Q_CLI analysis integration
+  - [x] 7.3 Implement Q_CLI analysis integration
     - Process collected JSON data through Q_CLI with proper context
-
-
     - Generate structured security insights
     - _Requirements: 3.3_
 
-  - [ ] 7.4 Create HTML report generation wrapper
+  - [x] 7.4 Create HTML report generation wrapper
     - Reuse generate_html_report() with templates/json_report_template.html
     - Ensure identical HTML structure and CSS styling
     - _Requirements: 3.4, 6.3_
 
-
-
-
-  - [ ]* 7.5 Write property test for report generation consistency
+  - [x] 7.5 Write property test for report generation consistency
     - **Property 7: HTML report generation consistency**
     - **Validates: Requirements 3.4, 6.3**
 
-  - [ ] 7.6 Handle Trusted Advisor availability gracefully
+  - [x] 7.6 Handle Trusted Advisor availability gracefully
     - Implement Business/Enterprise plan requirement handling
     - Continue processing with unavailable status
     - _Requirements: 3.5_

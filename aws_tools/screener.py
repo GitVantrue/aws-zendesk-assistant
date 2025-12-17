@@ -147,16 +147,30 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             send_websocket_message(websocket, session_id, 
                 f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...\n📍 스캔 리전: ap-northeast-2, us-east-1\n⏱️ 약 2-5분 소요될 수 있습니다.")
         
-        # /root/service-screener-v2/adminlte/aws 디렉터리 생성 (main.py가 필요로 함)
+        # /root/service-screener-v2/adminlte/aws 디렉터리 생성
         os.makedirs('/root/service-screener-v2/adminlte/aws', exist_ok=True)
         print(f"[DEBUG] /root/service-screener-v2/adminlte/aws 디렉터리 생성 완료", flush=True)
         
-        # Service Screener 실행 (main.py --regions)
+        # crossAccounts.json 생성 (Reference 코드 방식)
+        temp_json_path = f'/tmp/crossAccounts_{account_id}_{timestamp}.json'
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,
+                "Regions": ['ap-northeast-2', 'us-east-1']
+            }
+        }
+        
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        
+        # Service Screener 실행 (Screener.py --crossAccounts)
+        # Reference 코드와 동일한 방식 사용
         cmd = [
             'python3',
-            '/root/service-screener-v2/slack_bot_screener_main.py',
-            '--regions', 'ap-northeast-2,us-east-1',
-            '--ztestmode', 'true'
+            '/root/service-screener-v2/Screener.py',
+            '--crossAccounts', temp_json_path
         ]
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
