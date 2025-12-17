@@ -147,9 +147,9 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             send_websocket_message(websocket, session_id, 
                 f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...\n📍 스캔 리전: ap-northeast-2, us-east-1\n⏱️ 약 2-5분 소요될 수 있습니다.")
         
-        # /tmp/adminlte/aws 디렉터리 생성 (main.py가 필요로 함)
-        os.makedirs('/tmp/adminlte/aws', exist_ok=True)
-        print(f"[DEBUG] /tmp/adminlte/aws 디렉터리 생성 완료", flush=True)
+        # /root/service-screener-v2/adminlte/aws 디렉터리 생성 (main.py가 필요로 함)
+        os.makedirs('/root/service-screener-v2/adminlte/aws', exist_ok=True)
+        print(f"[DEBUG] /root/service-screener-v2/adminlte/aws 디렉터리 생성 완료", flush=True)
         
         # Service Screener 실행 (main.py --regions)
         cmd = [
