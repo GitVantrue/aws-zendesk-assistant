@@ -89,32 +89,35 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] 임시 세션 디렉터리 생성: {temp_dir}", flush=True)
         
         # ========================================
-        # 환경 변수 설정 (cross-account 자격증명 사용)
+        # 환경 변수 설정 (Reference 코드 방식)
         # ========================================
-        # 깨끗한 환경에서 시작 (Q CLI PATH 제거)
         env_vars = {}
         
-        # 기본 시스템 PATH만 설정 (Q CLI 경로 제외)
+        # 기본 시스템 PATH 설정
         env_vars['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin'
         env_vars['HOME'] = '/root'
         
-        # AWS 기본 설정
-        env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
+        # AWS 설정 파일 경로 격리 (Reference 코드와 동일)
+        env_vars['AWS_CONFIG_FILE'] = os.path.join(temp_dir, 'config')
+        env_vars['AWS_SHARED_CREDENTIALS_FILE'] = os.path.join(temp_dir, 'credentials')
         
-        # Cross-account 자격증명 설정 (Service Screener 실행용)
+        # AWS 자격증명 직접 설정
         if credentials:
             env_vars['AWS_ACCESS_KEY_ID'] = credentials.get('AWS_ACCESS_KEY_ID', '')
             env_vars['AWS_SECRET_ACCESS_KEY'] = credentials.get('AWS_SECRET_ACCESS_KEY', '')
             env_vars['AWS_SESSION_TOKEN'] = credentials.get('AWS_SESSION_TOKEN', '')
             print(f"[DEBUG] Cross-account 자격증명 설정: {account_id}", flush=True)
         
-        # 캐싱 비활성화
+        env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
+        
+        # 캐싱 및 메타데이터 비활성화
+        env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
         env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
         
-        # EC2 메타데이터 비활성화 (환경 변수 자격증명 우선 사용)
-        env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
-        
-        print(f"[DEBUG] 환경 변수 설정 완료", flush=True)
+        print(f"[DEBUG] 세션 격리 환경 설정 완료:", flush=True)
+        print(f"[DEBUG] - AWS_CONFIG_FILE: {env_vars['AWS_CONFIG_FILE']}", flush=True)
+        print(f"[DEBUG] - AWS_ACCESS_KEY_ID: {env_vars['AWS_ACCESS_KEY_ID'][:20]}...", flush=True)
+        print(f"[DEBUG] - AWS_SESSION_TOKEN: {'설정됨' if env_vars.get('AWS_SESSION_TOKEN') else '없음'}", flush=True)
         
         # ========================================
         # 계정 검증 (cross-account 자격증명 사용)
