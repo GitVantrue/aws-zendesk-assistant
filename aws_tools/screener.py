@@ -140,6 +140,21 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 "error": f"계정 검증 실패: {verify_result.stderr[:200]}"
             }
         
+        # Q CLI 캐시 삭제 (슬랙봇 방식)
+        q_cache_dirs = [
+            os.path.expanduser('~/.cache/q'),
+            os.path.expanduser('~/.q'),
+            '/tmp/q-cache'
+        ]
+        
+        for cache_dir in q_cache_dirs:
+            if os.path.exists(cache_dir):
+                try:
+                    shutil.rmtree(cache_dir)
+                    print(f"[DEBUG] Q CLI 캐시 삭제: {cache_dir}", flush=True)
+                except Exception as e:
+                    print(f"[DEBUG] 캐시 삭제 실패 (무시): {cache_dir} - {e}", flush=True)
+        
         # 기존 결과 삭제
         old_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
         if os.path.exists(old_result_dir):
@@ -169,19 +184,27 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
         print(f"[DEBUG] 작업 디렉터리: /root/service-screener-v2", flush=True)
         
-        # Service Screener 실행 (Reference 코드 방식)
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            env=env_vars,
-            timeout=600,
-            cwd='/root/service-screener-v2'
-        )
+        # Service Screener 실행 (슬랙봇 방식 - 파일에 직접 쓰기)
+        log_file = f'/tmp/screener_{account_id}.log'
+        with open(log_file, 'w') as f:
+            result = subprocess.run(
+                cmd,
+                stdout=f,
+                stderr=subprocess.STDOUT,
+                env=env_vars,
+                timeout=600,
+                cwd='/root/service-screener-v2'
+            )
         
         print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
-        print(f"[DEBUG] stdout (처음 1000자): {result.stdout[:1000]}", flush=True)
-        print(f"[DEBUG] stderr (처음 1000자): {result.stderr[:1000]}", flush=True)
+        
+        # 로그 파일 내용 읽기
+        try:
+            with open(log_file, 'r') as f:
+                log_content = f.read()
+            print(f"[DEBUG] Service Screener 로그 (마지막 1000자):\n{log_content[-1000:]}", flush=True)
+        except Exception as e:
+            print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
         
         # 결과 디렉터리 확인
         screener_dir = '/root/service-screener-v2'
