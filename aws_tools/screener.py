@@ -89,7 +89,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] 임시 세션 디렉터리 생성: {temp_dir}", flush=True)
         
         # ========================================
-        # 환경 변수 설정 (EC2 역할 사용)
+        # 환경 변수 설정 (cross-account 자격증명 사용)
         # ========================================
         # 깨끗한 환경에서 시작 (Q CLI PATH 제거)
         env_vars = {}
@@ -101,13 +101,15 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         # AWS 기본 설정
         env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
         
-        # EC2 메타데이터 활성화 (EC2 역할 사용)
-        # 주의: AWS_EC2_METADATA_DISABLED를 설정하지 않음 (기본값 false)
+        # Cross-account 자격증명 설정 (Service Screener 실행용)
+        if credentials:
+            env_vars['AWS_ACCESS_KEY_ID'] = credentials.get('AWS_ACCESS_KEY_ID', '')
+            env_vars['AWS_SECRET_ACCESS_KEY'] = credentials.get('AWS_SECRET_ACCESS_KEY', '')
+            env_vars['AWS_SESSION_TOKEN'] = credentials.get('AWS_SESSION_TOKEN', '')
+            print(f"[DEBUG] Cross-account 자격증명 설정: {account_id}", flush=True)
         
         # 캐싱 비활성화
         env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
-        
-        print(f"[DEBUG] EC2 역할 사용 (cross-account 자격증명 무시)", flush=True)
         
 
         
