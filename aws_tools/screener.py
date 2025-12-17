@@ -111,7 +111,10 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         # 캐싱 비활성화
         env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
         
-
+        # EC2 메타데이터 비활성화 (환경 변수 자격증명 우선 사용)
+        env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
+        
+        print(f"[DEBUG] 환경 변수 설정 완료", flush=True)
         
         # ========================================
         # 계정 검증 (cross-account 자격증명 사용)
