@@ -158,31 +158,15 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         os.makedirs('/root/service-screener-v2/adminlte/aws', exist_ok=True)
         print(f"[DEBUG] /root/service-screener-v2/adminlte/aws 디렉터리 생성 완료", flush=True)
         
-        # crossAccounts.json 생성 (Reference 코드 방식)
-        temp_json_path = f'/tmp/crossAccounts_{account_id}_{timestamp}.json'
-        cross_accounts_config = {
-            "general": {
-                "IncludeThisAccount": True,
-                "Regions": ['ap-northeast-2', 'us-east-1']
-            }
-        }
-        
-        with open(temp_json_path, 'w') as f:
-            json.dump(cross_accounts_config, f, indent=2)
-        
-        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
-        
-        # Service Screener 실행 (main.py - Reference 코드 방식)
-        # Reference 코드는 main.py를 호출하므로 우리도 main.py를 호출해야 함
+        # Service Screener 실행 (main.py - 슬랙봇 방식)
+        # 슬랙봇과 동일하게 --regions만 사용
         cmd = [
             'python3',
             '/root/service-screener-v2/main.py',
-            '--regions', 'ap-northeast-2,us-east-1',
-            '--services', 'all',
-            '--crossAccounts', temp_json_path
+            '--regions', 'ap-northeast-2,us-east-1'
         ]
         
-        print(f"[DEBUG] Service Screener 실행 (main.py): {' '.join(cmd)}", flush=True)
+        print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
         print(f"[DEBUG] 작업 디렉터리: /root/service-screener-v2", flush=True)
         
         # Service Screener 실행 (Reference 코드 방식)
