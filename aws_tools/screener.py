@@ -84,24 +84,24 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         temp_dir = tempfile.mkdtemp(prefix=f'q_session_{account_id}_screener_')
         print(f"[DEBUG] 임시 세션 디렉터리 생성: {temp_dir}", flush=True)
         
-        # 환경 변수 설정 (참고 코드 방식)
+        # 환경 변수 설정 (슬랙봇 방식)
         env_vars = os.environ.copy()
         
-        # EC2 IAM 역할 비활성화 (크로스어카운트 자격증명 우선)
-        env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
-        env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
+        # AWS 설정 파일 경로 격리 (임시 디렉터리 사용)
+        env_vars['AWS_CONFIG_FILE'] = os.path.join(temp_dir, 'config')
+        env_vars['AWS_SHARED_CREDENTIALS_FILE'] = os.path.join(temp_dir, 'credentials')
         
-        # 기존 AWS 자격증명 제거 (크로스어카운트 자격증명만 사용)
-        env_vars.pop('AWS_PROFILE', None)
-        env_vars.pop('AWS_ROLE_ARN', None)
-        env_vars.pop('AWS_WEB_IDENTITY_TOKEN_FILE', None)
-        
+        # AWS 자격증명 직접 설정
         if credentials:
             env_vars['AWS_ACCESS_KEY_ID'] = credentials.get('AWS_ACCESS_KEY_ID', '')
             env_vars['AWS_SECRET_ACCESS_KEY'] = credentials.get('AWS_SECRET_ACCESS_KEY', '')
             env_vars['AWS_SESSION_TOKEN'] = credentials.get('AWS_SESSION_TOKEN', '')
         
         env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
+        
+        # 캐싱 및 메타데이터 비활성화
+        env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
+        env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
         
         print(f"[DEBUG] 환경 변수 설정 - AWS_ACCESS_KEY_ID: {env_vars.get('AWS_ACCESS_KEY_ID', 'N/A')[:20]}...", flush=True)
         print(f"[DEBUG] 환경 변수 설정 - AWS_SESSION_TOKEN: {'설정됨' if env_vars.get('AWS_SESSION_TOKEN') else '없음'}", flush=True)
