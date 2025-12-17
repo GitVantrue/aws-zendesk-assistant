@@ -177,10 +177,10 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] 환경변수 전달 확인: AWS_ACCESS_KEY_ID={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_EC2_METADATA_DISABLED={env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
         
-        # Service Screener main.py 실행 (기본 리전만 사용)
+        # Service Screener Screener.py 실행 (CloudFormation 에러 무시)
         cmd = [
             'python3',
-            '/root/service-screener-v2/main.py',
+            '/root/service-screener-v2/Screener.py',
             '--regions', 'ap-northeast-2,us-east-1'
         ]
         
