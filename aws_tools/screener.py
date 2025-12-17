@@ -538,10 +538,9 @@ def generate_wa_summary_async(account_id, screener_result_dir, timestamp, websoc
 
 def send_websocket_message(websocket, session_id, message):
     """
-    WebSocket으로 메시지 전송
+    WebSocket으로 메시지 전송 (스레드 안전)
     """
     try:
-        import asyncio
         import json
         
         if websocket and session_id:
@@ -556,10 +555,19 @@ def send_websocket_message(websocket, session_id, message):
             # 비동기 전송을 위한 코루틴 생성 및 실행
             def send_async():
                 try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                    import asyncio
+                    # 현재 이벤트 루프 가져오기 (없으면 새로 생성)
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_closed():
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    
+                    # 코루틴 생성 및 실행
                     loop.run_until_complete(websocket.send_str(json.dumps(ws_message)))
-                    loop.close()
                 except Exception as e:
                     print(f"[ERROR] WebSocket 전송 실패: {e}", flush=True)
             
