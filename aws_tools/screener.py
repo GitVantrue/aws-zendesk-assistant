@@ -192,56 +192,84 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] Screener.generateScreenerOutput() 호출 시작", flush=True)
         
         try:
-            # sys.path에 service-screener-v2 추가
-            import sys
-            screener_path = '/root/service-screener-v2'
-            if screener_path not in sys.path:
-                sys.path.insert(0, screener_path)
+            # Python 스크립트로 generateScreenerOutput() 호출
+            # (임포트 경로 문제를 피하기 위해 subprocess 사용)
+            generate_output_script = """
+import sys
+import json
+import os
+
+sys.path.insert(0, '/root/service-screener-v2')
+
+from Screener import Screener
+from utils.Config import Config
+
+# Config 초기화
+Config.init()
+
+# __fork 디렉터리에서 contexts 파싱
+fork_dir = '/root/service-screener-v2/__fork'
+contexts = {}
+
+if os.path.exists(fork_dir):
+    for file in os.listdir(fork_dir):
+        if file[0] == '.' or file in ['tail.txt', 'error.txt', 'empty.txt', 'all.csv']:
+            continue
+        
+        f = file.split('.')
+        if len(f) == 2:
+            # results JSON 파일
+            if f[0] not in contexts:
+                contexts[f[0]] = {}
+            try:
+                with open(os.path.join(fork_dir, file), 'r') as fp:
+                    contexts[f[0]]['results'] = json.load(fp)
+            except Exception as e:
+                print(f"[DEBUG] JSON 파싱 실패 {file}: {e}", flush=True)
+        elif len(f) >= 2 and f[1] == "charts":
+            # charts JSON 파일
+            if f[0] not in contexts:
+                contexts[f[0]] = {}
+            try:
+                with open(os.path.join(fork_dir, file), 'r') as fp:
+                    contexts[f[0]]['charts'] = json.load(fp)
+            except Exception as e:
+                print(f"[DEBUG] Charts 파싱 실패 {file}: {e}", flush=True)
+
+print(f"[DEBUG] 파싱된 contexts 서비스 수: {len(contexts)}", flush=True)
+
+# Screener.generateScreenerOutput() 호출
+hasGlobal = False
+regions = ['ap-northeast-2', 'us-east-1']
+uploadToS3 = False
+
+Screener.generateScreenerOutput(contexts, hasGlobal, regions, uploadToS3)
+print(f"[DEBUG] Screener.generateScreenerOutput() 완료", flush=True)
+"""
             
-            # Screener 모듈 임포트
-            from Screener import Screener
-            from utils.Config import Config
+            # 임시 스크립트 파일 생성
+            script_file = '/tmp/generate_screener_output.py'
+            with open(script_file, 'w') as f:
+                f.write(generate_output_script)
             
-            # Config 초기화 (Screener.generateScreenerOutput()이 필요로 함)
-            Config.init()
+            # subprocess로 실행
+            result = subprocess.run(
+                ['python3', script_file],
+                capture_output=True,
+                text=True,
+                cwd='/root/service-screener-v2',
+                timeout=60
+            )
             
-            # __fork 디렉터리에서 contexts 파싱 (Slack bot main.py 참고)
-            contexts = {}
-            if os.path.exists(fork_dir):
-                for file in os.listdir(fork_dir):
-                    if file[0] == '.' or file in ['tail.txt', 'error.txt', 'empty.txt', 'all.csv']:
-                        continue
-                    
-                    f = file.split('.')
-                    if len(f) == 2:
-                        # results JSON 파일
-                        if f[0] not in contexts:
-                            contexts[f[0]] = {}
-                        try:
-                            with open(os.path.join(fork_dir, file), 'r') as fp:
-                                contexts[f[0]]['results'] = json.load(fp)
-                        except Exception as e:
-                            print(f"[DEBUG] JSON 파싱 실패 {file}: {e}", flush=True)
-                    elif len(f) >= 2 and f[1] == "charts":
-                        # charts JSON 파일
-                        if f[0] not in contexts:
-                            contexts[f[0]] = {}
-                        try:
-                            with open(os.path.join(fork_dir, file), 'r') as fp:
-                                contexts[f[0]]['charts'] = json.load(fp)
-                        except Exception as e:
-                            print(f"[DEBUG] Charts 파싱 실패 {file}: {e}", flush=True)
+            print(f"[DEBUG] generateScreenerOutput 실행 결과: {result.returncode}", flush=True)
+            if result.stdout:
+                print(f"[DEBUG] stdout: {result.stdout[-500:]}", flush=True)
+            if result.stderr:
+                print(f"[DEBUG] stderr: {result.stderr[-500:]}", flush=True)
             
-            print(f"[DEBUG] 파싱된 contexts 서비스 수: {len(contexts)}", flush=True)
-            
-            # Screener.generateScreenerOutput() 호출
-            # 파라미터: contexts, hasGlobal, regions, uploadToS3
-            hasGlobal = False  # 간단히 False로 설정
-            regions = ['ap-northeast-2', 'us-east-1']
-            uploadToS3 = False
-            
-            Screener.generateScreenerOutput(contexts, hasGlobal, regions, uploadToS3)
-            print(f"[DEBUG] Screener.generateScreenerOutput() 완료", flush=True)
+            # 임시 스크립트 삭제
+            if os.path.exists(script_file):
+                os.remove(script_file)
             
         except Exception as e:
             print(f"[DEBUG] Screener.generateScreenerOutput() 호출 실패: {e}", flush=True)
