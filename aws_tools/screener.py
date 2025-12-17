@@ -214,7 +214,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 stderr=subprocess.STDOUT,
                 env=env_vars,
                 timeout=600,  # 10분 타임아웃
-                cwd='/root/service-screener-v2'
+                cwd='/tmp'  # /tmp에서 실행하여 output.zip이 /tmp/service-screener-v2/output.zip에 생성되도록
             )
         
         print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
