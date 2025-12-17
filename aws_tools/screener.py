@@ -89,7 +89,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] 임시 세션 디렉터리 생성: {temp_dir}", flush=True)
         
         # ========================================
-        # 환경 변수 설정 (Slack 봇과 동일한 방식)
+        # 환경 변수 설정 (EC2 역할 사용)
         # ========================================
         # 깨끗한 환경에서 시작 (Q CLI PATH 제거)
         env_vars = {}
@@ -98,24 +98,18 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         env_vars['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin'
         env_vars['HOME'] = '/root'
         
-        # AWS 설정 파일 경로 격리 (Reference 코드와 동일)
-        env_vars['AWS_CONFIG_FILE'] = os.path.join(temp_dir, 'config')
-        env_vars['AWS_SHARED_CREDENTIALS_FILE'] = os.path.join(temp_dir, 'credentials')
-        
-        # 자격증명 설정 (파라미터 우선, 없으면 환경 변수)
-        if credentials:
-            env_vars['AWS_ACCESS_KEY_ID'] = credentials.get('AWS_ACCESS_KEY_ID', '')
-            env_vars['AWS_SECRET_ACCESS_KEY'] = credentials.get('AWS_SECRET_ACCESS_KEY', '')
-            env_vars['AWS_SESSION_TOKEN'] = credentials.get('AWS_SESSION_TOKEN', '')
-        
         # AWS 기본 설정
         env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
         
-        # 캐싱 및 메타데이터 비활성화 (Reference 코드와 동일)
-        env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
+        # EC2 메타데이터 활성화 (EC2 역할 사용)
+        # 주의: AWS_EC2_METADATA_DISABLED를 설정하지 않음 (기본값 false)
+        
+        # 캐싱 비활성화
         env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
         
-        print(f"[DEBUG] 자격증명 확인: ACCESS_KEY={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}..., SESSION_TOKEN={'있음' if env_vars.get('AWS_SESSION_TOKEN') else '없음'}", flush=True)
+        print(f"[DEBUG] EC2 역할 사용 (cross-account 자격증명 무시)", flush=True)
+        
+
         
         # ========================================
         # 계정 검증 (Reference 코드와 동일)
