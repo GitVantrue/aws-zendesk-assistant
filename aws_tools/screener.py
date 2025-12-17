@@ -174,13 +174,16 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] /root/service-screener-v2/adminlte/aws 디렉터리 생성 완료", flush=True)
         
         # Service Screener 실행 (Screener.py + crossAccounts.json - 실제 작동하는 방식)
-        # crossAccounts.json 생성
+        # crossAccounts.json 생성 (기본 리전만 사용)
         temp_json_path = f'/tmp/crossAccounts_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        
+        # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
+        scan_regions = ['ap-northeast-2', 'us-east-1']
         
         cross_accounts_config = {
             "general": {
                 "IncludeThisAccount": True,
-                "Regions": ['ap-northeast-2', 'us-east-1']
+                "Regions": scan_regions
             }
         }
         
@@ -188,6 +191,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             json.dump(cross_accounts_config, f, indent=2)
         
         print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
         
         cmd = [
             'python3',
