@@ -213,28 +213,40 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         except Exception as e:
             print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
         
-        # Reference 코드와 동일: Service Screener가 생성한 실제 결과 디렉터리 찾기
+        # Reference 코드와 동일: Service Screener가 output.zip을 생성
+        # output.zip을 추출하여 결과 디렉터리 찾기
         screener_dir = '/root/service-screener-v2'
-        
-        # Service Screener 결과 디렉터리 패턴 확인
-        # 1. aws/{account_id} (원본 생성 경로)
-        # 2. adminlte/aws/{account_id} (복사된 경로 - 계정 격리용)
-        possible_dirs = [
-            os.path.join(screener_dir, 'aws', account_id),
-            os.path.join(screener_dir, 'adminlte', 'aws', account_id)
-        ]
+        output_zip = os.path.join(screener_dir, 'output.zip')
         
         account_result_dir = None
-        for dir_path in possible_dirs:
-            if os.path.exists(dir_path):
-                account_result_dir = dir_path
-                print(f"[DEBUG] 결과 디렉터리 발견: {account_result_dir}", flush=True)
-                break
         
-        if not account_result_dir:
-            print(f"[DEBUG] 결과 디렉터리를 찾을 수 없음. 확인된 경로들:", flush=True)
-            for dir_path in possible_dirs:
-                print(f"[DEBUG]   - {dir_path}: 존재={os.path.exists(dir_path)}", flush=True)
+        # output.zip이 있으면 추출
+        if os.path.exists(output_zip):
+            print(f"[DEBUG] output.zip 발견: {output_zip}", flush=True)
+            
+            # 임시 디렉터리에 추출
+            import tempfile
+            extract_dir = tempfile.mkdtemp(prefix=f'screener_extract_{account_id}_')
+            print(f"[DEBUG] output.zip 추출: {extract_dir}", flush=True)
+            
+            try:
+                import zipfile
+                with zipfile.ZipFile(output_zip, 'r') as zip_ref:
+                    zip_ref.extractall(extract_dir)
+                
+                # 추출된 디렉터리에서 계정 디렉터리 찾기
+                account_result_dir = os.path.join(extract_dir, 'aws', account_id)
+                
+                if os.path.exists(account_result_dir):
+                    print(f"[DEBUG] 추출된 결과 디렉터리 발견: {account_result_dir}", flush=True)
+                else:
+                    print(f"[DEBUG] 추출된 디렉터리에서 계정 디렉터리를 찾을 수 없음: {account_result_dir}", flush=True)
+                    account_result_dir = None
+            except Exception as e:
+                print(f"[ERROR] output.zip 추출 실패: {e}", flush=True)
+                account_result_dir = None
+        else:
+            print(f"[DEBUG] output.zip을 찾을 수 없음: {output_zip}", flush=True)
         
         # 결과 처리
         if account_result_dir and os.path.exists(account_result_dir):
