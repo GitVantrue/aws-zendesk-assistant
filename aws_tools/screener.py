@@ -183,6 +183,12 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         if websocket and session_id:
             send_websocket_message(websocket, session_id, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...\n📍 스캔 리전: ap-northeast-2, us-east-1\n⏱️ 약 2-5분 소요될 수 있습니다.")
         
+        # 기존 Service Screener 결과 삭제 (Reference 코드 방식)
+        old_result_dir = f'/root/service-screener-v2/adminlte/aws/{account_id}'
+        if os.path.exists(old_result_dir):
+            print(f"[DEBUG] 기존 결과 삭제: {old_result_dir}", flush=True)
+            shutil.rmtree(old_result_dir)
+        
         # 기본 리전: 서울(ap-northeast-2), 버지니아(us-east-1)
         default_regions = ['ap-northeast-2', 'us-east-1']
         
