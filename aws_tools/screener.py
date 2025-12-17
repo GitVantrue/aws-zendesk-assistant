@@ -87,13 +87,25 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         # 환경 변수 설정 (참고 코드 방식)
         env_vars = os.environ.copy()
         
+        # EC2 IAM 역할 비활성화 (크로스어카운트 자격증명 우선)
+        env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
+        env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
+        
+        # 기존 AWS 자격증명 제거 (크로스어카운트 자격증명만 사용)
+        env_vars.pop('AWS_PROFILE', None)
+        env_vars.pop('AWS_ROLE_ARN', None)
+        env_vars.pop('AWS_WEB_IDENTITY_TOKEN_FILE', None)
+        
         if credentials:
             env_vars['AWS_ACCESS_KEY_ID'] = credentials.get('AWS_ACCESS_KEY_ID', '')
             env_vars['AWS_SECRET_ACCESS_KEY'] = credentials.get('AWS_SECRET_ACCESS_KEY', '')
             env_vars['AWS_SESSION_TOKEN'] = credentials.get('AWS_SESSION_TOKEN', '')
         
         env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
-        env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
+        
+        print(f"[DEBUG] 환경 변수 설정 - AWS_ACCESS_KEY_ID: {env_vars.get('AWS_ACCESS_KEY_ID', 'N/A')[:20]}...", flush=True)
+        print(f"[DEBUG] 환경 변수 설정 - AWS_SESSION_TOKEN: {'설정됨' if env_vars.get('AWS_SESSION_TOKEN') else '없음'}", flush=True)
+        print(f"[DEBUG] 환경 변수 설정 - AWS_EC2_METADATA_DISABLED: {env_vars.get('AWS_EC2_METADATA_DISABLED')}", flush=True)
         
         print(f"[DEBUG] 세션 격리 환경 설정 완료", flush=True)
         
