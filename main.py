@@ -29,7 +29,7 @@ async def main():
     
     try:
         # 서버 시작
-        await server.start_server()
+        await server.start()
     except Exception as e:
         log_error(f"서버 실행 중 오류: {e}")
         sys.exit(1)
