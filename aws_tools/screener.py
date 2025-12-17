@@ -332,28 +332,71 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 }
         else:
             # 결과 디렉터리가 없음 = 권한 에러 (CloudFormation 권한 부족)
-            # Slack 봇과 동일: 권한 에러 메시지 전송 후 종료
+            # Slack 봇과 동일: 권한 에러 메시지 전송하되, Q CLI로 분석 시도
             print(f"[DEBUG] 결과 디렉터리 없음: {account_result_dir}", flush=True)
             print(f"[DEBUG] Service Screener 실행 실패 - CloudFormation 권한 부족", flush=True)
             
-            # 실패 메시지 전송
+            # 권한 에러 메시지 전송
             if websocket and session_id:
                 send_websocket_message(websocket, session_id, 
-                    f"❌ Service Screener 스캔 실패\n\n"
-                    f"현재 IAM 역할에 CloudFormation 권한이 없어서 스캔을 완료할 수 없습니다.\n\n"
+                    f"⚠️ Service Screener 스캔 권한 부족\n\n"
+                    f"현재 IAM 역할에 CloudFormation 권한이 없습니다.\n\n"
                     f"필요한 권한:\n"
                     f"- cloudformation:CreateStack\n"
                     f"- cloudformation:DescribeStacks\n"
                     f"- cloudformation:DeleteStack\n\n"
                     f"AWS 관리자에게 문의하여 권한을 추가해주세요.")
             
+            # 권한 에러에도 불구하고 Q CLI로 분석 시도 (Slack 봇과 동일)
+            print(f"[DEBUG] Q CLI로 권한 에러 분석 시도", flush=True)
+            
+            if websocket and session_id:
+                send_websocket_message(websocket, session_id, 
+                    f"📋 CloudFormation 권한 에러 분석을 진행하고 있습니다...")
+            
+            # Q CLI로 권한 에러 분석
+            error_analysis_prompt = f"""다음은 AWS Service Screener 실행 중 발생한 CloudFormation 권한 에러입니다:
+
+계정: {account_id}
+에러: CloudFormation 권한 부족 (cloudformation:CreateStack 불가)
+
+이 에러의 의미와 해결 방법을 한국어로 상세히 설명해주세요:
+
+1. 에러의 의미
+2. 필요한 권한
+3. 권한 추가 방법
+4. 임시 해결 방법 (권한이 없을 때)
+
+간단하고 명확하게 작성해주세요."""
+            
+            try:
+                q_result = subprocess.run(
+                    ['/root/.local/bin/q', 'chat', '--no-interactive', '--trust-all-tools', error_analysis_prompt],
+                    capture_output=True,
+                    text=True,
+                    env=env_vars,
+                    timeout=60
+                )
+                
+                if q_result.returncode == 0 and q_result.stdout.strip():
+                    analysis = q_result.stdout.strip()
+                    if websocket and session_id:
+                        send_websocket_message(websocket, session_id, 
+                            f"📊 CloudFormation 권한 에러 분석:\n\n{analysis}")
+                    print(f"[DEBUG] Q CLI 분석 완료", flush=True)
+                else:
+                    print(f"[DEBUG] Q CLI 분석 실패: {q_result.stderr[:200]}", flush=True)
+                    
+            except Exception as e:
+                print(f"[DEBUG] Q CLI 분석 중 오류: {str(e)}", flush=True)
+            
             return {
                 "success": False,
-                "summary": None,
+                "summary": "CloudFormation 권한 부족으로 스캔 실패",
                 "report_url": None,
                 "screener_result_dir": None,
                 "timestamp": timestamp,
-                "error": "CloudFormation 권한 부족으로 스캔 실패"
+                "error": "CloudFormation 권한 부족"
             }
             
             # 이하 코드는 실행되지 않음 (output.zip 추출 로직 제거)
