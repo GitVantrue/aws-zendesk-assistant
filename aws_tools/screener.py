@@ -331,7 +331,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 "success": False,
                 "summary": None,
                 "report_url": None,
-                "error": f"Service Screener 실행 후 결과 디렉터리를 찾을 수 없습니다. 확인된 경로: {', '.join(possible_dirs)}"
+                "error": "Service Screener 실행 후 결과 디렉터리를 찾을 수 없습니다."
             }
     
     except subprocess.TimeoutExpired:
