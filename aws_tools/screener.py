@@ -222,12 +222,9 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         screener_dir = '/root/service-screener-v2'
         
         # Service Screener 결과 디렉터리 패턴 확인
-        # Q CLI가 __fork 디렉터리에 JSON 파일들을 생성함
-        # 1. __fork (Q CLI 생성 경로)
-        # 2. aws/{account_id} (원본 생성 경로)
-        # 3. adminlte/aws/{account_id} (복사된 경로 - 계정 격리용)
+        # 1. aws/{account_id} (원본 생성 경로)
+        # 2. adminlte/aws/{account_id} (복사된 경로 - 계정 격리용)
         possible_dirs = [
-            os.path.join(screener_dir, '__fork'),
             os.path.join(screener_dir, 'aws', account_id),
             os.path.join(screener_dir, 'adminlte', 'aws', account_id)
         ]
