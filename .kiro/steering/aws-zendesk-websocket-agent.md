@@ -73,18 +73,28 @@ Zendesk App ←→ WebSocket ←→ LangGraph Agent ←→ AWS Tools (Q CLI)
 
 ## 배포 워크플로우
 
-### Git 작업 범위
-```bash
-# 집에서 작업 시 (WSL 사용)
-wsl bash -c "cd /mnt/c/Users/kimhs/Desktop/Work/Kiro/aws-zendesk-assistant && git add . && git commit -m '메시지' && git push origin main"
+### 작업 환경 분리 (매우 중요)
 
+**로컬: Kiro IDE (코드 수정만)**
+- 파일 수정, 생성, 삭제
+- Git add/commit/push 실행
+- 코드 리뷰 및 테스트 계획
+
+**EC2: 실제 실행 환경 (별도)**
+- Git pull로 코드 받기
+- 실제 테스트 실행
+- 서비스 재시작
+- 로그 확인
+
+### Git 작업 범위 (Kiro가 실행)
+```bash
 # 회사에서 작업 시 (일반 PowerShell)
 git add .
 git commit -m "메시지"
 git push origin main
 ```
 
-### EC2 배포 명령어 (항상 제공)
+### EC2 배포 명령어 (사용자가 실행)
 **Git push 완료 후 반드시 다음 명령어를 사용자에게 제공:**
 ```bash
 cd /root/aws-zendesk-assistant
@@ -95,9 +105,10 @@ tail -f /tmp/websocket_server.log
 ```
 
 **중요**: 
-- Kiro는 git push까지만 실행
-- EC2 명령어는 사용자에게 제공만 함
-- **매번 git push 후 위 EC2 명령어를 반드시 제공할 것**
+- **Kiro는 git push까지만 실행** (로컬에서)
+- **EC2 명령어는 사용자가 직접 실행** (EC2에서)
+- 로컬에서 EC2 명령어를 실행하면 안 됨
+- **매번 git push 후 위 EC2 명령어를 반드시 사용자에게 제공할 것**
 
 ## 현재 상태
 
