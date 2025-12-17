@@ -175,33 +175,40 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] 환경변수 전달 확인: AWS_EC2_METADATA_DISABLED={env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
         
         # Service Screener main.py 실행 (기본 리전만 사용)
+        # ztestmode=1로 CloudFormation 스택 생성 스킵
         cmd = [
             'python3',
             '/root/service-screener-v2/main.py',
-            '--regions', 'ap-northeast-2,us-east-1'
+            '--regions', 'ap-northeast-2,us-east-1',
+            '--ztestmode', '1'
         ]
         
         print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
         print(f"[DEBUG] Service Screener 시작 시간: {datetime.now()}", flush=True)
         
         # Service Screener 실행 (타임아웃 10분)
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            env=env_vars,
-            timeout=600,  # 10분 타임아웃
-            cwd='/root/service-screener-v2'
-        )
+        # Slack bot과 동일한 방식: 파일로 리다이렉트
+        log_file = f'/tmp/screener_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+        with open(log_file, 'w') as f:
+            result = subprocess.run(
+                cmd,
+                stdout=f,
+                stderr=subprocess.STDOUT,
+                env=env_vars,
+                timeout=600,  # 10분 타임아웃
+                cwd='/root/service-screener-v2'
+            )
+        
+        # 로그 파일 내용 읽기
+        try:
+            with open(log_file, 'r') as f:
+                log_content = f.read()
+            print(f"[DEBUG] Service Screener 로그 (마지막 1000자):\n{log_content[-1000:]}", flush=True)
+        except Exception as e:
+            print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
         
         print(f"[DEBUG] Service Screener 종료 시간: {datetime.now()}", flush=True)
         print(f"[DEBUG] Service Screener 완료 - 반환코드: {result.returncode}", flush=True)
-        
-        # Service Screener 출력 로깅
-        if result.stdout:
-            print(f"[DEBUG] Service Screener stdout (마지막 1000자):\n{result.stdout[-1000:]}", flush=True)
-        if result.stderr:
-            print(f"[DEBUG] Service Screener stderr (마지막 500자):\n{result.stderr[-500:]}", flush=True)
         
         # Service Screener 실행 결과 확인
         if result.returncode != 0:
