@@ -173,17 +173,32 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         os.makedirs('/root/service-screener-v2/adminlte/aws', exist_ok=True)
         print(f"[DEBUG] /root/service-screener-v2/adminlte/aws 디렉터리 생성 완료", flush=True)
         
-        # Service Screener 실행 (main.py - 실제 작동하는 방식)
+        # Service Screener 실행 (Screener.py + crossAccounts.json - 실제 작동하는 방식)
+        # crossAccounts.json 생성
+        temp_json_path = f'/tmp/crossAccounts_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,
+                "Regions": ['ap-northeast-2', 'us-east-1']
+            }
+        }
+        
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        
         cmd = [
             'python3',
-            '/root/service-screener-v2/main.py',
-            '--regions', 'ap-northeast-2,us-east-1'
+            '/root/service-screener-v2/Screener.py',
+            '--crossAccounts', temp_json_path
         ]
         
         print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
         print(f"[DEBUG] 작업 디렉터리: /root/service-screener-v2", flush=True)
         
-        # Service Screener 실행 (main.py - capture_output=True)
+        # Service Screener 실행 (Screener.py - capture_output=True)
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -196,6 +211,13 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
         print(f"[DEBUG] stdout (처음 1000자): {result.stdout[:1000]}", flush=True)
         print(f"[DEBUG] stderr (처음 1000자): {result.stderr[:1000]}", flush=True)
+        
+        # 임시 JSON 파일 정리
+        try:
+            os.remove(temp_json_path)
+            print(f"[DEBUG] 임시 파일 삭제: {temp_json_path}", flush=True)
+        except:
+            pass
         
         # 결과 디렉터리 확인
         screener_dir = '/root/service-screener-v2'
