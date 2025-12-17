@@ -165,14 +165,12 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
         
-        # Service Screener 실행 (main.py)
+        # Service Screener 실행 (Screener.py)
         # Reference 코드와 동일한 방식 사용
         cmd = [
             'python3',
-            '/root/service-screener-v2/main.py',
-            '--crossAccounts', temp_json_path,
-            '--regions', 'ap-northeast-2,us-east-1',
-            '--ztestmode', 'true'
+            '/root/service-screener-v2/Screener.py',
+            '--crossAccounts', temp_json_path
         ]
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
