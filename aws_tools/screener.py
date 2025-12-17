@@ -191,7 +191,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 stderr=subprocess.STDOUT,
                 env=env_vars,
                 timeout=600,
-                cwd='/root/service-screener-v2'
+                cwd='/root/service-screener-v2',
+                pass_fds=()  # 파일 디스크립터 상속 안 함
             )
         
         print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
