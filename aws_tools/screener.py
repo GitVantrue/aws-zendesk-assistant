@@ -194,6 +194,10 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         print(f"[DEBUG] 스캔 대상 리전: {', '.join(default_regions)}", flush=True)
         
+        # main.py가 필요로 하는 디렉터리 생성 (main.py 내부에서 /tmp/adminlte/aws를 찾음)
+        os.makedirs('/tmp/adminlte/aws', exist_ok=True)
+        print(f"[DEBUG] /tmp/adminlte/aws 디렉터리 생성 완료", flush=True)
+        
         # Service Screener 실행 (Reference 코드 방식: main.py --regions 호출)
         cmd = [
             'python3',
@@ -214,7 +218,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 stderr=subprocess.STDOUT,
                 env=env_vars,
                 timeout=600,  # 10분 타임아웃
-                cwd='/tmp'  # /tmp에서 실행하여 output.zip이 /tmp/service-screener-v2/output.zip에 생성되도록
+                cwd='/root/service-screener-v2'  # Slack 봇과 동일: /root/service-screener-v2에서 실행
             )
         
         print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
@@ -331,8 +335,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             print(f"[DEBUG] 결과 디렉터리 없음: {account_result_dir}", flush=True)
             print(f"[DEBUG] output.zip 확인 시도", flush=True)
             
-            # output.zip 확인 (Reference 코드 방식: /tmp/service-screener-v2/output.zip)
-            output_zip = '/tmp/service-screener-v2/output.zip'
+            # output.zip 확인 (Reference 코드 방식: /root/service-screener-v2/output.zip)
+            output_zip = '/root/service-screener-v2/output.zip'
             if os.path.exists(output_zip):
                 print(f"[DEBUG] output.zip 발견: {output_zip}", flush=True)
                 
