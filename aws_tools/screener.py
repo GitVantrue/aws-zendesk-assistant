@@ -84,12 +84,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         temp_dir = tempfile.mkdtemp(prefix=f'q_session_{account_id}_screener_')
         print(f"[DEBUG] 임시 세션 디렉터리 생성: {temp_dir}", flush=True)
         
-        # 환경 변수 설정
-        env_vars = {}
-        env_vars['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin'
-        env_vars['HOME'] = '/root'
-        env_vars['AWS_CONFIG_FILE'] = os.path.join(temp_dir, 'config')
-        env_vars['AWS_SHARED_CREDENTIALS_FILE'] = os.path.join(temp_dir, 'credentials')
+        # 환경 변수 설정 (참고 코드 방식)
+        env_vars = os.environ.copy()
         
         if credentials:
             env_vars['AWS_ACCESS_KEY_ID'] = credentials.get('AWS_ACCESS_KEY_ID', '')
@@ -98,7 +94,6 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
         env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
-        env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
         
         print(f"[DEBUG] 세션 격리 환경 설정 완료", flush=True)
         
