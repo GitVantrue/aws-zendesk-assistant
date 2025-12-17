@@ -165,11 +165,25 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         print(f"[DEBUG] 스캔 대상 리전: {', '.join(default_regions)}", flush=True)
         
-        # Service Screener 실행 (Reference 코드 방식: main.py --regions 호출)
+        # Service Screener 실행 (Reference 코드 방식: Screener.py --crossAccounts 호출)
+        temp_json_path = f'/tmp/crossAccounts_{account_id}_{session_id.replace(":", "_") if session_id else "test"}.json'
+        
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,
+                "Regions": default_regions
+            }
+        }
+        
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성: {temp_json_path}", flush=True)
+        
         cmd = [
             'python3',
-            '/root/service-screener-v2/main.py',
-            '--regions', ','.join(default_regions)
+            '/root/service-screener-v2/Screener.py',
+            '--crossAccounts', temp_json_path
         ]
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
