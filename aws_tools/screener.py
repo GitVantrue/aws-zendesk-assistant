@@ -88,8 +88,15 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         temp_dir = tempfile.mkdtemp(prefix=f'q_session_{account_id}_screener_')
         print(f"[DEBUG] 임시 세션 디렉터리 생성: {temp_dir}", flush=True)
         
-        # 환경 변수 설정 (Reference 코드와 동일)
-        env_vars = os.environ.copy()
+        # ========================================
+        # 환경 변수 설정 (Slack 봇과 동일한 방식)
+        # ========================================
+        # 깨끗한 환경에서 시작 (Q CLI PATH 제거)
+        env_vars = {}
+        
+        # 기본 시스템 PATH만 설정 (Q CLI 경로 제외)
+        env_vars['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin'
+        env_vars['HOME'] = '/root'
         
         # AWS 설정 파일 경로 격리 (Reference 코드와 동일)
         env_vars['AWS_CONFIG_FILE'] = os.path.join(temp_dir, 'config')
@@ -100,6 +107,9 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             env_vars['AWS_ACCESS_KEY_ID'] = credentials.get('AWS_ACCESS_KEY_ID', '')
             env_vars['AWS_SECRET_ACCESS_KEY'] = credentials.get('AWS_SECRET_ACCESS_KEY', '')
             env_vars['AWS_SESSION_TOKEN'] = credentials.get('AWS_SESSION_TOKEN', '')
+        
+        # AWS 기본 설정
+        env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
         
         # 캐싱 및 메타데이터 비활성화 (Reference 코드와 동일)
         env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
