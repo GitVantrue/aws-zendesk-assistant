@@ -112,14 +112,25 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
 
         
         # ========================================
-        # 계정 검증 (Reference 코드와 동일)
+        # 계정 검증 (cross-account 자격증명 사용)
         # ========================================
+        # cross-account 자격증명으로 검증
+        verify_env = {}
+        verify_env['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin'
+        verify_env['HOME'] = '/root'
+        verify_env['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
+        
+        if credentials:
+            verify_env['AWS_ACCESS_KEY_ID'] = credentials.get('AWS_ACCESS_KEY_ID', '')
+            verify_env['AWS_SECRET_ACCESS_KEY'] = credentials.get('AWS_SECRET_ACCESS_KEY', '')
+            verify_env['AWS_SESSION_TOKEN'] = credentials.get('AWS_SESSION_TOKEN', '')
+        
         verify_cmd = ['aws', 'sts', 'get-caller-identity', '--query', 'Account', '--output', 'text']
         verify_result = subprocess.run(
             verify_cmd,
             capture_output=True,
             text=True,
-            env=env_vars,
+            env=verify_env,
             timeout=10
         )
         
