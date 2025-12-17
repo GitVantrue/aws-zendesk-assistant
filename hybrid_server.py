@@ -9,7 +9,7 @@ import asyncio
 import threading
 from aiohttp import web, WSMsgType
 from datetime import datetime
-from langgraph_agent import process_question_with_agent
+from langgraph_agent import process_question_workflow
 
 
 class HybridServer:
@@ -152,10 +152,19 @@ class HybridServer:
         try:
             print(f"[DEBUG] 질문 처리 시작: {session_id} - {question}", flush=True)
             
-            # LangGraph 에이전트로 질문 처리
-            result = process_question_with_agent(question, session_id, ws)
+            # 비동기 함수를 동기 스레드에서 실행
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             
-            print(f"[DEBUG] 질문 처리 완료: {session_id}", flush=True)
+            try:
+                # LangGraph 에이전트로 질문 처리
+                result = loop.run_until_complete(
+                    process_question_workflow(question, question_key, client_id, ws)
+                )
+                
+                print(f"[DEBUG] 질문 처리 완료: {session_id}", flush=True)
+            finally:
+                loop.close()
             
         except Exception as e:
             print(f"[ERROR] 질문 처리 중 오류: {e}", flush=True)
