@@ -166,7 +166,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] 스캔 대상 리전: {', '.join(default_regions)}", flush=True)
         
         # Service Screener 실행 (Reference 코드 방식: Screener.py --crossAccounts 호출)
-        temp_json_path = f'/tmp/crossAccounts_{account_id}_{session_id.replace(":", "_") if session_id else "test"}.json'
+        # CrossAccountsValidator가 /root/service-screener-v2/crossAccounts.json을 찾으므로 그 경로에 생성
+        cross_accounts_json_path = '/root/service-screener-v2/crossAccounts.json'
         
         cross_accounts_config = {
             "general": {
@@ -175,15 +176,15 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             }
         }
         
-        with open(temp_json_path, 'w') as f:
+        with open(cross_accounts_json_path, 'w') as f:
             json.dump(cross_accounts_config, f, indent=2)
         
-        print(f"[DEBUG] crossAccounts.json 생성: {temp_json_path}", flush=True)
+        print(f"[DEBUG] crossAccounts.json 생성: {cross_accounts_json_path}", flush=True)
         
         cmd = [
             'python3',
             '/root/service-screener-v2/Screener.py',
-            '--crossAccounts', temp_json_path
+            '--crossAccounts', cross_accounts_json_path
         ]
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
