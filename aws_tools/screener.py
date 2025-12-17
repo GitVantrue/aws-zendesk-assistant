@@ -165,12 +165,11 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
         
-        # Service Screener 실행 (Screener.py)
-        # Reference 코드와 동일한 방식 사용
+        # Service Screener 실행 (main.py 직접 실행 - Reference 코드 방식)
         cmd = [
             'python3',
-            '/root/service-screener-v2/Screener.py',
-            '--crossAccounts', temp_json_path
+            '/root/service-screener-v2/main.py',
+            '--regions', 'ap-northeast-2,us-east-1'
         ]
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
@@ -197,128 +196,6 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             print(f"[DEBUG] Service Screener 로그 (마지막 1000자):\n{log_content[-1000:]}", flush=True)
         except Exception as e:
             print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
-        
-        # __fork 디렉터리에서 스캔 결과 확인 (main.py가 생성)
-        fork_dir = '/root/service-screener-v2/__fork'
-        print(f"[DEBUG] __fork 디렉터리 확인: {fork_dir}", flush=True)
-        
-        # __fork 디렉터리가 없으면 스캔 실패 (권한 에러)
-        if not os.path.exists(fork_dir):
-            print(f"[DEBUG] __fork 디렉터리 없음 - 스캔 실패", flush=True)
-            return {
-                "success": False,
-                "summary": None,
-                "report_url": None,
-                "screener_result_dir": None,
-                "timestamp": timestamp,
-                "error": "❌ Service Screener 스캔 실패\n\n현재 IAM 역할에 CloudFormation 권한이 없어서 스캔을 완료할 수 없습니다.\n\n필요한 권한:\n- cloudformation:CreateStack\n- cloudformation:DescribeStacks\n- cloudformation:DeleteStack\n\nAWS 관리자에게 문의하여 권한을 추가해주세요."
-            }
-        
-        # Screener.generateScreenerOutput() 호출 (Slack bot과 동일한 방식)
-        # 이 함수는 __fork의 JSON 파일들을 읽어서 HTML을 생성함
-        print(f"[DEBUG] Screener.generateScreenerOutput() 호출 시작", flush=True)
-        
-        try:
-            # Python 스크립트로 generateScreenerOutput() 호출
-            # (임포트 경로 문제를 피하기 위해 subprocess 사용)
-            generate_output_script = """
-import sys
-import json
-import os
-
-sys.path.insert(0, '/root/service-screener-v2')
-
-from Screener import Screener
-from utils.Config import Config
-import constants as _C
-
-# Config 초기화
-Config.init()
-
-# __fork 디렉터리에서 contexts 파싱
-fork_dir = '/root/service-screener-v2/__fork'
-contexts = {}
-serviceStat = {}
-hasGlobal = False
-
-if os.path.exists(fork_dir):
-    for file in os.listdir(fork_dir):
-        if file[0] == '.' or file == _C.SESSUID_FILENAME or file in ['tail.txt', 'error.txt', 'empty.txt', 'all.csv']:
-            continue
-        
-        f = file.split('.')
-        if len(f) == 2:
-            # results JSON 파일
-            if f[0] not in contexts:
-                contexts[f[0]] = {}
-            try:
-                with open(os.path.join(fork_dir, file), 'r') as fp:
-                    contexts[f[0]]['results'] = json.load(fp)
-            except Exception as e:
-                print(f"[DEBUG] JSON 파싱 실패 {file}: {e}", flush=True)
-        elif len(f) >= 2 and f[1] == "charts":
-            # charts JSON 파일
-            if f[0] not in contexts:
-                contexts[f[0]] = {}
-            try:
-                with open(os.path.join(fork_dir, file), 'r') as fp:
-                    contexts[f[0]]['charts'] = json.load(fp)
-            except Exception as e:
-                print(f"[DEBUG] Charts 파싱 실패 {file}: {e}", flush=True)
-        else:
-            # stat 파일
-            try:
-                with open(os.path.join(fork_dir, file), 'r') as fp:
-                    cnt, rules, exceptions, timespent = list(json.load(fp).values())
-                    serviceStat[f[0]] = cnt
-                    if f[0] in Config.GLOBAL_SERVICES:
-                        hasGlobal = True
-            except Exception as e:
-                print(f"[DEBUG] Stat 파싱 실패 {file}: {e}", flush=True)
-
-print(f"[DEBUG] 파싱된 contexts 서비스 수: {len(contexts)}", flush=True)
-print(f"[DEBUG] hasGlobal: {hasGlobal}", flush=True)
-
-# Config 설정 (Slack bot main.py 참고)
-Config.set('cli_services', serviceStat)
-Config.set('cli_regions', ['ap-northeast-2', 'us-east-1'])
-Config.set('cli_frameworks', [])
-
-# Screener.generateScreenerOutput() 호출
-regions = ['ap-northeast-2', 'us-east-1']
-uploadToS3 = False
-
-Screener.generateScreenerOutput(contexts, hasGlobal, regions, uploadToS3)
-print(f"[DEBUG] Screener.generateScreenerOutput() 완료", flush=True)
-"""
-            
-            # 임시 스크립트 파일 생성
-            script_file = '/tmp/generate_screener_output.py'
-            with open(script_file, 'w') as f:
-                f.write(generate_output_script)
-            
-            # subprocess로 실행
-            result = subprocess.run(
-                ['python3', script_file],
-                capture_output=True,
-                text=True,
-                cwd='/root/service-screener-v2',
-                timeout=60
-            )
-            
-            print(f"[DEBUG] generateScreenerOutput 실행 결과: {result.returncode}", flush=True)
-            if result.stdout:
-                print(f"[DEBUG] stdout: {result.stdout[-500:]}", flush=True)
-            if result.stderr:
-                print(f"[DEBUG] stderr: {result.stderr[-500:]}", flush=True)
-            
-            # 임시 스크립트 삭제
-            if os.path.exists(script_file):
-                os.remove(script_file)
-            
-        except Exception as e:
-            print(f"[DEBUG] Screener.generateScreenerOutput() 호출 실패: {e}", flush=True)
-            traceback.print_exc()
         
         # 결과 디렉터리 확인
         screener_dir = '/root/service-screener-v2'
