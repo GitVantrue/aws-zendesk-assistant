@@ -331,8 +331,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             print(f"[DEBUG] 결과 디렉터리 없음: {account_result_dir}", flush=True)
             print(f"[DEBUG] output.zip 확인 시도", flush=True)
             
-            # output.zip 확인
-            output_zip = os.path.join(screener_dir, 'output.zip')
+            # output.zip 확인 (Reference 코드 방식: /tmp/service-screener-v2/output.zip)
+            output_zip = '/tmp/service-screener-v2/output.zip'
             if os.path.exists(output_zip):
                 print(f"[DEBUG] output.zip 발견: {output_zip}", flush=True)
                 
