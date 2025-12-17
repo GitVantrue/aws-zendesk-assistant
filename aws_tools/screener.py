@@ -214,8 +214,11 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         print(f"[DEBUG] Service Screener 결과 디렉터리 확인: {account_result_dir}", flush=True)
         
-        # 결과 처리
-        if account_result_dir and os.path.exists(account_result_dir):
+        # Slack 봇과 동일: 반환코드 1을 무시하고 결과 디렉터리 확인
+        # (CloudFormation 권한 에러는 무시하고 계속 진행)
+        if os.path.exists(account_result_dir):
+            print(f"[DEBUG] ✅ 결과 디렉터리 발견: {account_result_dir}", flush=True)
+            
             # index.html 찾기
             index_html_path = None
             for root, dirs, files in os.walk(account_result_dir):
@@ -305,8 +308,14 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                     "error": None
                 }
         else:
-            # Reference 코드와 동일: 결과 디렉터리가 없으면 즉시 실패
-            print(f"[DEBUG] 결과 디렉터리 없음. 스캔 실패로 처리", flush=True)
+            # 결과 디렉터리가 없으면 실패
+            print(f"[DEBUG] 결과 디렉터리 없음: {account_result_dir}", flush=True)
+            print(f"[DEBUG] 상위 디렉터리 확인: {os.path.dirname(account_result_dir)}", flush=True)
+            
+            # 상위 디렉터리 내용 확인 (디버깅용)
+            parent_dir = os.path.dirname(account_result_dir)
+            if os.path.exists(parent_dir):
+                print(f"[DEBUG] {parent_dir} 내용: {os.listdir(parent_dir)}", flush=True)
             
             return {
                 "success": False,
