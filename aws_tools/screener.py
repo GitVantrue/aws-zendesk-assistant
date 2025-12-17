@@ -213,18 +213,22 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         # Service Screener 실행 결과 확인
         if result.returncode != 0:
+            # 로그 전체 내용 확인 (stdout + stderr)
+            log_content = result.stdout + result.stderr
             error_msg = result.stderr.strip() if result.stderr else "Service Screener 실행 실패"
             print(f"[ERROR] Service Screener 실행 실패: {error_msg}", flush=True)
+            
             # CloudFormation 권한 오류는 무시하고 계속 진행 (Reference 코드와 동일)
-            if "cloudformation:CreateStack" not in error_msg:
+            # WellArchitected 권한 오류도 무시 (Slack 봇과 동일)
+            if "cloudformation:CreateStack" in log_content or "wellarchitected:CreateWorkload" in log_content:
+                print(f"[DEBUG] CloudFormation/WellArchitected 권한 오류 무시하고 계속 진행", flush=True)
+            else:
                 return {
                     "success": False,
                     "summary": None,
                     "report_url": None,
                     "error": f"Service Screener 실행 실패: {error_msg[:500]}"
                 }
-            else:
-                print(f"[DEBUG] CloudFormation 권한 오류 무시하고 계속 진행", flush=True)
         
         # Reference 코드와 동일: Service Screener가 생성한 실제 결과 디렉터리 찾기
         screener_dir = '/root/service-screener-v2'
