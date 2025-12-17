@@ -182,10 +182,25 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         print(f"[DEBUG] 스캔 대상 리전: {', '.join(default_regions)}", flush=True)
         
-        # Service Screener 실행 (Reference 코드 방식: Screener.py 직접 호출)
+        # Reference 코드 방식: crossAccounts.json 생성
+        temp_json_path = f'/tmp/crossAccounts_{account_id}_{datetime.now().strftime("%s")}.json'
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,
+                "Regions": default_regions
+            }
+        }
+        
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성: {temp_json_path}", flush=True)
+        
+        # Service Screener 실행 (Reference 코드 방식: Screener.py --crossAccounts 호출)
         cmd = [
             'python3',
-            '/root/service-screener-v2/Screener.py'
+            '/root/service-screener-v2/Screener.py',
+            '--crossAccounts', temp_json_path
         ]
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
@@ -454,8 +469,17 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         }
     finally:
         # ========================================
-        # 임시 세션 디렉터리 정리 (Reference 코드와 동일)
+        # 임시 파일 정리
         # ========================================
+        # crossAccounts.json 정리
+        try:
+            if 'temp_json_path' in locals() and os.path.exists(temp_json_path):
+                os.remove(temp_json_path)
+                print(f"[DEBUG] crossAccounts.json 삭제: {temp_json_path}", flush=True)
+        except Exception as e:
+            print(f"[DEBUG] crossAccounts.json 삭제 실패 (무시): {e}", flush=True)
+        
+        # 임시 세션 디렉터리 정리 (Reference 코드와 동일)
         if temp_dir and os.path.exists(temp_dir):
             try:
                 shutil.rmtree(temp_dir)
