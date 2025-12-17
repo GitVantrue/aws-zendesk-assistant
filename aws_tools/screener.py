@@ -331,10 +331,32 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                     "error": None
                 }
         else:
-            # 결과 디렉터리가 없으면 output.zip에서 추출 시도 (Reference 코드 방식)
+            # 결과 디렉터리가 없음 = 권한 에러 (CloudFormation 권한 부족)
+            # Slack 봇과 동일: 권한 에러 메시지 전송 후 종료
             print(f"[DEBUG] 결과 디렉터리 없음: {account_result_dir}", flush=True)
-            print(f"[DEBUG] output.zip 확인 시도", flush=True)
+            print(f"[DEBUG] Service Screener 실행 실패 - CloudFormation 권한 부족", flush=True)
             
+            # 실패 메시지 전송
+            if websocket and session_id:
+                send_websocket_message(websocket, session_id, 
+                    f"❌ Service Screener 스캔 실패\n\n"
+                    f"현재 IAM 역할에 CloudFormation 권한이 없어서 스캔을 완료할 수 없습니다.\n\n"
+                    f"필요한 권한:\n"
+                    f"- cloudformation:CreateStack\n"
+                    f"- cloudformation:DescribeStacks\n"
+                    f"- cloudformation:DeleteStack\n\n"
+                    f"AWS 관리자에게 문의하여 권한을 추가해주세요.")
+            
+            return {
+                "success": False,
+                "summary": None,
+                "report_url": None,
+                "screener_result_dir": None,
+                "timestamp": timestamp,
+                "error": "CloudFormation 권한 부족으로 스캔 실패"
+            }
+            
+            # 이하 코드는 실행되지 않음 (output.zip 추출 로직 제거)
             # output.zip 확인 (Reference 코드 방식: /root/service-screener-v2/output.zip)
             output_zip = '/root/service-screener-v2/output.zip'
             if os.path.exists(output_zip):
