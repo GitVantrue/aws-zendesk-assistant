@@ -444,6 +444,13 @@ def generate_wa_summary_async(account_id, screener_result_dir, timestamp, websoc
     try:
         print(f"[DEBUG] Well-Architected 통합 보고서 생성 시작", flush=True)
         
+        # 결과 디렉터리 존재 확인
+        if not os.path.exists(screener_result_dir):
+            print(f"[DEBUG] 결과 디렉터리 없음 - WA 보고서 생성 스킵: {screener_result_dir}", flush=True)
+            if websocket and session_id:
+                send_websocket_message(websocket, session_id, "⏳ Service Screener 스캔이 아직 진행 중입니다. 결과가 준비되면 Well-Architected 보고서를 생성합니다.")
+            return
+        
         if websocket and session_id:
             send_websocket_message(websocket, session_id, "📋 Well-Architected 통합 분석 보고서를 생성하고 있습니다...")
         
