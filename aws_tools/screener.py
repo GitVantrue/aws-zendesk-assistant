@@ -154,8 +154,9 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         # Service Screener 실행 (main.py --regions)
         cmd = [
             'python3',
-            '/root/service-screener-v2/main.py',
-            '--regions', 'ap-northeast-2,us-east-1'
+            '/root/service-screener-v2/slack_bot_screener_main.py',
+            '--regions', 'ap-northeast-2,us-east-1',
+            '--ztestmode', 'false'
         ]
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
