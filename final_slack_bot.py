@@ -573,7 +573,7 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp, chann
         print(f"[DEBUG] 계정 폴더 복사: {screener_result_dir} -> {temp_account_dir}", flush=True)
 
         # res 폴더 복사 (CSS/JS 등 공통 리소스)
-        res_source = '/root/service-screener-v2/aws/res'
+        res_source = '/root/service-screener-v2/adminlte/aws/res'
         res_dest = os.path.join(temp_wa_input_dir, 'res')
         if os.path.exists(res_source):
             shutil.copytree(res_source, res_dest)
@@ -597,7 +597,6 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp, chann
             capture_output=True,
             text=True,
             timeout=900,  # 15분 타임아웃 (한국어 프롬프트 추가로 시간이 더 걸릴 수 있음)
-            cwd=wa_summarizer_dir,
             env=wa_env
         )
 

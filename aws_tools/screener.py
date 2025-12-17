@@ -101,6 +101,9 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             env_vars['AWS_SECRET_ACCESS_KEY'] = credentials.get('AWS_SECRET_ACCESS_KEY', '')
             env_vars['AWS_SESSION_TOKEN'] = credentials.get('AWS_SESSION_TOKEN', '')
         
+        # 리전 설정 (Slack 봇과 동일)
+        env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
+        
         # 캐싱 및 메타데이터 비활성화 (Reference 코드와 동일)
         env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
         env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
