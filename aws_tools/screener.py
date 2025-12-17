@@ -165,13 +165,26 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         print(f"[DEBUG] 스캔 대상 리전: {', '.join(default_regions)}", flush=True)
         
-        # Service Screener 실행 (Reference 코드 방식: main.py 호출)
-        # main.py는 이미 백그라운드에서 실행 중이므로, 직접 실행하지 않고
-        # 결과 디렉터리를 모니터링하는 방식으로 변경
+        # Service Screener 실행 (Reference 코드 방식: Screener.py 호출)
+        # crossAccounts.json을 사용하여 스캔 설정
+        temp_json_path = f'/tmp/crossAccounts_{account_id}_{session_id.replace(":", "_") if session_id else "test"}.json'
+        
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,
+                "Regions": default_regions
+            }
+        }
+        
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성: {temp_json_path}", flush=True)
+        
         cmd = [
             'python3',
-            '/root/service-screener-v2/main.py',
-            '--regions', ','.join(default_regions)
+            '/root/service-screener-v2/Screener.py',
+            '--crossAccounts', temp_json_path
         ]
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
@@ -314,41 +327,15 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                     "error": None
                 }
         else:
-            print(f"[DEBUG] 결과 디렉터리 없음. 추가 대기 중...", flush=True)
+            # Reference 코드와 동일: 결과 디렉터리가 없으면 즉시 실패
+            print(f"[DEBUG] 결과 디렉터리 없음. 스캔 실패로 처리", flush=True)
             
-            # Reference 코드와 동일: CloudFormation 오류가 있어도 추가 대기
-            # 스캔이 백그라운드에서 계속 진행될 수 있음
-            import time
-            for wait_count in range(450):  # 900초 = 450 * 2초 (15분)
-                time.sleep(2)
-                
-                # 다시 결과 디렉터리 찾기
-                for dir_path in possible_dirs:
-                    if os.path.exists(dir_path):
-                        account_result_dir = dir_path
-                        print(f"[DEBUG] 지연 성공! 결과 디렉터리 생성됨: {account_result_dir} (대기시간: {(wait_count+1)*2}초)", flush=True)
-                        break
-                
-                if account_result_dir and os.path.exists(account_result_dir):
-                    break
-                
-                # 진행 상황 업데이트 (30초마다)
-                if websocket and session_id and (wait_count + 1) % 15 == 0:
-                    elapsed_minutes = ((wait_count+1)*2) // 60
-                    send_websocket_message(websocket, session_id, f"⏳ 스캔 진행 중... ({elapsed_minutes}분 경과)")
-            
-            # 대기 후 다시 확인
-            if not account_result_dir or not os.path.exists(account_result_dir):
-                print(f"[DEBUG] 900초(15분) 대기 후에도 결과 디렉터리 없음", flush=True)
-                
-                return {
-                    "success": False,
-                    "summary": None,
-                    "report_url": None,
-                    "error": f"스캔이 15분 대기 후에도 결과 디렉터리를 찾을 수 없습니다. 확인된 경로: {', '.join(possible_dirs)}"
-                }
-            else:
-                print(f"[DEBUG] 대기 후 결과 디렉터리 발견: {account_result_dir}", flush=True)
+            return {
+                "success": False,
+                "summary": None,
+                "report_url": None,
+                "error": f"Service Screener 실행 후 결과 디렉터리를 찾을 수 없습니다. 확인된 경로: {', '.join(possible_dirs)}"
+            }
     
     except subprocess.TimeoutExpired:
         print(f"[ERROR] Service Screener 타임아웃", flush=True)
