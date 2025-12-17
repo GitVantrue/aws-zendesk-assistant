@@ -315,29 +315,126 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                     "error": None
                 }
         else:
-            # 결과 디렉터리가 없음 = 스캔 실패
+            # 결과 디렉터리가 없으면 output.zip에서 추출 시도 (Reference 코드 방식)
             print(f"[DEBUG] 결과 디렉터리 없음: {account_result_dir}", flush=True)
-            print(f"[DEBUG] Service Screener 실행 실패", flush=True)
+            print(f"[DEBUG] output.zip 확인 시도", flush=True)
             
-            # 실패 메시지 전송
-            if websocket and session_id:
-                send_websocket_message(websocket, session_id, 
-                    f"❌ Service Screener 스캔 실패\n\n"
-                    f"현재 IAM 역할에 CloudFormation 권한이 없어서 스캔을 완료할 수 없습니다.\n\n"
-                    f"필요한 권한:\n"
-                    f"- cloudformation:CreateStack\n"
-                    f"- cloudformation:DescribeStacks\n"
-                    f"- cloudformation:DeleteStack\n\n"
-                    f"AWS 관리자에게 문의하여 권한을 추가해주세요.")
-            
-            return {
-                "success": False,
-                "summary": None,
-                "report_url": None,
-                "screener_result_dir": None,
-                "timestamp": timestamp,
-                "error": "CloudFormation 권한 부족으로 스캔 실패"
-            }
+            # output.zip 확인
+            output_zip = os.path.join(screener_dir, 'output.zip')
+            if os.path.exists(output_zip):
+                print(f"[DEBUG] output.zip 발견: {output_zip}", flush=True)
+                
+                # 임시 디렉터리에 추출
+                import zipfile
+                extract_dir = os.path.join(screener_dir, 'adminlte')
+                
+                try:
+                    with zipfile.ZipFile(output_zip, 'r') as zip_ref:
+                        zip_ref.extractall(extract_dir)
+                    print(f"[DEBUG] output.zip 추출 완료: {extract_dir}", flush=True)
+                    
+                    # 추출 후 다시 확인
+                    if os.path.exists(account_result_dir):
+                        print(f"[DEBUG] ✅ 추출 후 결과 디렉터리 발견: {account_result_dir}", flush=True)
+                        
+                        # index.html 찾기
+                        index_html_path = None
+                        for root, dirs, files in os.walk(account_result_dir):
+                            for file in files:
+                                if file.lower() == 'index.html':
+                                    index_html_path = os.path.join(root, file)
+                                    print(f"[DEBUG] index.html 발견: {index_html_path}", flush=True)
+                                    break
+                            if index_html_path:
+                                break
+                        
+                        if index_html_path:
+                            # 전체 디렉토리를 /tmp/reports로 복사
+                            tmp_report_dir = f"/tmp/reports/screener_{account_id}_{timestamp}"
+                            
+                            # 기존 디렉토리가 있으면 삭제
+                            if os.path.exists(tmp_report_dir):
+                                shutil.rmtree(tmp_report_dir)
+                            
+                            # 전체 디렉토리 복사
+                            source_dir = os.path.dirname(index_html_path)
+                            shutil.copytree(source_dir, tmp_report_dir)
+                            print(f"[DEBUG] 전체 디렉터리 복사 완료: {tmp_report_dir}", flush=True)
+                            
+                            # res 디렉토리도 복사
+                            res_source = os.path.join(screener_dir, 'adminlte')
+                            res_dest = os.path.join(tmp_report_dir, 'res')
+                            
+                            if os.path.exists(res_source):
+                                if os.path.exists(res_dest):
+                                    shutil.rmtree(res_dest)
+                                shutil.copytree(res_source, res_dest)
+                                print(f"[DEBUG] res 디렉터리 복사 완료: {res_dest}", flush=True)
+                            
+                            # 요약 메시지 생성
+                            summary = parse_screener_results(account_result_dir, account_id)
+                            
+                            # Service Screener 보고서 URL 생성
+                            report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/screener_{account_id}_{timestamp}/index.html"
+                            print(f"[DEBUG] Service Screener 보고서 URL 생성: {report_url}", flush=True)
+                            
+                            return {
+                                "success": True,
+                                "summary": summary,
+                                "report_url": report_url,
+                                "screener_result_dir": account_result_dir,
+                                "timestamp": timestamp,
+                                "error": None
+                            }
+                        else:
+                            print(f"[DEBUG] 추출 후에도 index.html을 찾을 수 없음", flush=True)
+                            return {
+                                "success": True,
+                                "summary": f"📊 계정 {account_id} 스캔이 완료되었으나 index.html을 찾을 수 없습니다.",
+                                "report_url": None,
+                                "error": None
+                            }
+                    else:
+                        print(f"[DEBUG] 추출 후에도 결과 디렉터리 없음", flush=True)
+                        return {
+                            "success": False,
+                            "summary": None,
+                            "report_url": None,
+                            "error": "output.zip 추출 후에도 결과 디렉터리를 찾을 수 없습니다."
+                        }
+                        
+                except Exception as e:
+                    print(f"[ERROR] output.zip 추출 실패: {e}", flush=True)
+                    return {
+                        "success": False,
+                        "summary": None,
+                        "report_url": None,
+                        "error": f"output.zip 추출 실패: {str(e)}"
+                    }
+            else:
+                # output.zip도 없음 = 스캔 실패
+                print(f"[DEBUG] output.zip도 없음: {output_zip}", flush=True)
+                print(f"[DEBUG] Service Screener 실행 실패", flush=True)
+                
+                # 실패 메시지 전송
+                if websocket and session_id:
+                    send_websocket_message(websocket, session_id, 
+                        f"❌ Service Screener 스캔 실패\n\n"
+                        f"현재 IAM 역할에 CloudFormation 권한이 없어서 스캔을 완료할 수 없습니다.\n\n"
+                        f"필요한 권한:\n"
+                        f"- cloudformation:CreateStack\n"
+                        f"- cloudformation:DescribeStacks\n"
+                        f"- cloudformation:DeleteStack\n\n"
+                        f"AWS 관리자에게 문의하여 권한을 추가해주세요.")
+                
+                return {
+                    "success": False,
+                    "summary": None,
+                    "report_url": None,
+                    "screener_result_dir": None,
+                    "timestamp": timestamp,
+                    "error": "CloudFormation 권한 부족으로 스캔 실패"
+                }
     
     except subprocess.TimeoutExpired:
         print(f"[ERROR] Service Screener 타임아웃", flush=True)
