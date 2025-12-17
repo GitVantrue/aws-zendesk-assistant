@@ -187,6 +187,18 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         fork_dir = '/root/service-screener-v2/__fork'
         print(f"[DEBUG] __fork 디렉터리 확인: {fork_dir}", flush=True)
         
+        # __fork 디렉터리가 없으면 스캔 실패 (권한 에러)
+        if not os.path.exists(fork_dir):
+            print(f"[DEBUG] __fork 디렉터리 없음 - 스캔 실패", flush=True)
+            return {
+                "success": False,
+                "summary": None,
+                "report_url": None,
+                "screener_result_dir": None,
+                "timestamp": timestamp,
+                "error": "❌ Service Screener 스캔 실패\n\n현재 IAM 역할에 CloudFormation 권한이 없어서 스캔을 완료할 수 없습니다.\n\n필요한 권한:\n- cloudformation:CreateStack\n- cloudformation:DescribeStacks\n- cloudformation:DeleteStack\n\nAWS 관리자에게 문의하여 권한을 추가해주세요."
+            }
+        
         # Screener.generateScreenerOutput() 호출 (Slack bot과 동일한 방식)
         # 이 함수는 __fork의 JSON 파일들을 읽어서 HTML을 생성함
         print(f"[DEBUG] Screener.generateScreenerOutput() 호출 시작", flush=True)
