@@ -169,59 +169,60 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         if websocket and session_id:
             send_websocket_message(websocket, session_id, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...\n📍 스캔 리전: ap-northeast-2, us-east-1\n⏱️ 약 2-5분 소요될 수 있습니다.")
         
-        # Service Screener 직접 실행 (main.py 사용)
-        print(f"[DEBUG] Service Screener 직접 실행 시작", flush=True)
+        # Reference 코드와 동일한 Q CLI 프롬프트 구성
+        korean_prompt = f"""다음 컨텍스트를 참고하여 AWS Service Screener를 실행해주세요:
+
+{screener_context}
+
+=== 필수 요구사항 ===
+1. 반드시 계정 {account_id}에 대해서만 스캔하세요
+2. 현재 환경 변수에 설정된 AWS 자격증명을 사용하세요 (이미 계정 {account_id}의 자격증명이 설정되어 있습니다)
+3. Service Screener를 실제로 실행하세요 (기존 결과를 읽지 마세요)
+4. 스캔 완료 후 /root/service-screener-v2/aws/{account_id}/ 디렉터리에 결과가 생성되어야 합니다
+
+=== 사용자 질문 ===
+{account_id} 스캔
+
+위 요구사항을 반드시 따라 계정 {account_id}에 대해 Service Screener를 실행하고, 한국어로 상세한 보고서를 작성해주세요."""
+
+        print(f"[DEBUG] Q CLI 오케스트레이션 실행 시작", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_ACCESS_KEY_ID={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_EC2_METADATA_DISABLED={env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
         
-        # Service Screener main.py 실행 (기본 리전만 사용)
-        cmd = [
-            'python3',
-            '/root/service-screener-v2/main.py',
-            '--regions', 'ap-northeast-2,us-east-1'
-        ]
+        # Q CLI 오케스트레이션 실행 (Reference 코드와 동일)
+        cmd = ['/root/.local/bin/q', 'chat', '--no-interactive', '--trust-all-tools', korean_prompt]
         
-        print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
+        print(f"[DEBUG] Q CLI 실행: {' '.join(cmd[:4])}... (프롬프트 생략)", flush=True)
         print(f"[DEBUG] Service Screener 시작 시간: {datetime.now()}", flush=True)
         
-        # Service Screener 실행 (타임아웃 10분)
-        # Slack bot과 동일한 방식: 파일로 리다이렉트
-        log_file = f'/tmp/screener_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
-        with open(log_file, 'w') as f:
-            result = subprocess.run(
-                cmd,
-                stdout=f,
-                stderr=subprocess.STDOUT,
-                env=env_vars,
-                timeout=600,  # 10분 타임아웃
-                cwd='/root/service-screener-v2'
-            )
-        
-        # 로그 파일 내용 읽기
-        try:
-            with open(log_file, 'r') as f:
-                log_content = f.read()
-            print(f"[DEBUG] Service Screener 로그 (마지막 1000자):\n{log_content[-1000:]}", flush=True)
-        except Exception as e:
-            print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
+        # Q CLI 실행 (타임아웃 10분)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env_vars,
+            timeout=600  # 10분 타임아웃
+        )
         
         print(f"[DEBUG] Service Screener 종료 시간: {datetime.now()}", flush=True)
-        print(f"[DEBUG] Service Screener 완료 - 반환코드: {result.returncode}", flush=True)
+        print(f"[DEBUG] Q CLI 완료 - 반환코드: {result.returncode}", flush=True)
         
-        # Service Screener 실행 결과 확인
+        # Q CLI 출력 로깅
+        if result.stdout:
+            print(f"[DEBUG] Q CLI stdout (마지막 1000자):\n{result.stdout[-1000:]}", flush=True)
+        if result.stderr:
+            print(f"[DEBUG] Q CLI stderr (마지막 500자):\n{result.stderr[-500:]}", flush=True)
+        
+        # Q CLI 실행 결과 확인
         if result.returncode != 0:
-            error_msg = result.stderr.strip() if result.stderr else "Service Screener 실행 실패"
-            print(f"[ERROR] Service Screener 실행 실패: {error_msg}", flush=True)
-            # CloudFormation 권한 오류는 무시하고 계속 진행 (Reference 코드와 동일)
-            if "cloudformation:CreateStack" not in error_msg:
-                return {
-                    "success": False,
-                    "summary": None,
-                    "report_url": None,
-                    "error": f"Service Screener 실행 실패: {error_msg[:500]}"
-                }
-            else:
-                print(f"[DEBUG] CloudFormation 권한 오류 무시하고 계속 진행", flush=True)
+            error_msg = result.stderr.strip() if result.stderr else "Q CLI 실행 실패"
+            print(f"[ERROR] Q CLI 실행 실패: {error_msg}", flush=True)
+            return {
+                "success": False,
+                "summary": None,
+                "report_url": None,
+                "error": f"Service Screener 실행 실패: {error_msg[:500]}"
+            }
         
         # Reference 코드와 동일: Service Screener가 생성한 실제 결과 디렉터리 찾기
         screener_dir = '/root/service-screener-v2'
@@ -240,17 +241,6 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 account_result_dir = dir_path
                 print(f"[DEBUG] 결과 디렉터리 발견: {account_result_dir}", flush=True)
                 break
-        
-        # 요청한 계정이 없으면 aws 디렉터리에서 첫 번째 계정 찾기
-        if not account_result_dir:
-            aws_dir = os.path.join(screener_dir, 'aws')
-            if os.path.exists(aws_dir):
-                subdirs = [d for d in os.listdir(aws_dir) if os.path.isdir(os.path.join(aws_dir, d)) and d != 'res' and not d.startswith('.')]
-                if subdirs:
-                    # 첫 번째 계정 디렉터리 사용
-                    actual_account_id = subdirs[0]
-                    account_result_dir = os.path.join(aws_dir, actual_account_id)
-                    print(f"[DEBUG] 요청 계정 {account_id}를 찾을 수 없음. 실제 생성된 계정 {actual_account_id} 사용", flush=True)
         
         if not account_result_dir:
             print(f"[DEBUG] 결과 디렉터리를 찾을 수 없음. 확인된 경로들:", flush=True)
@@ -340,44 +330,13 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                     "error": None
                 }
             else:
-                print(f"[DEBUG] index.html을 찾을 수 없음 - JSON 파일들로 HTML 보고서 생성", flush=True)
-                
-                # JSON 파일들로부터 간단한 HTML 보고서 생성
-                html_report = generate_html_from_json(account_result_dir, account_id, timestamp)
-                
-                if html_report:
-                    # HTML 파일 저장
-                    tmp_report_dir = f"/tmp/reports/screener_{account_id}_{timestamp}"
-                    os.makedirs(tmp_report_dir, exist_ok=True)
-                    
-                    index_html_path = os.path.join(tmp_report_dir, 'index.html')
-                    with open(index_html_path, 'w', encoding='utf-8') as f:
-                        f.write(html_report)
-                    
-                    print(f"[DEBUG] HTML 보고서 생성 완료: {index_html_path}", flush=True)
-                    
-                    # 요약 메시지 생성
-                    summary = parse_screener_results(account_result_dir, account_id)
-                    
-                    # Service Screener 보고서 URL 생성
-                    report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/screener_{account_id}_{timestamp}/index.html"
-                    print(f"[DEBUG] Service Screener 보고서 URL 생성: {report_url}", flush=True)
-                    
-                    return {
-                        "success": True,
-                        "summary": summary,
-                        "report_url": report_url,
-                        "screener_result_dir": account_result_dir,
-                        "timestamp": timestamp,
-                        "error": None
-                    }
-                else:
-                    return {
-                        "success": True,
-                        "summary": f"📊 계정 {account_id} 스캔이 완료되었으나 HTML 보고서를 생성할 수 없습니다.",
-                        "report_url": None,
-                        "error": None
-                    }
+                print(f"[DEBUG] index.html을 찾을 수 없음", flush=True)
+                return {
+                    "success": True,
+                    "summary": f"📊 계정 {account_id} 스캔이 완료되었으나 index.html을 찾을 수 없습니다.",
+                    "report_url": None,
+                    "error": None
+                }
         else:
             print(f"[DEBUG] 결과 디렉터리 없음. 추가 대기 중...", flush=True)
             
@@ -507,209 +466,6 @@ def send_websocket_message(websocket, session_id, message):
         
     except Exception as e:
         print(f"[ERROR] WebSocket 메시지 전송 실패: {e}", flush=True)
-
-def generate_html_from_json(json_dir, account_id, timestamp):
-    """
-    JSON 파일들로부터 HTML 보고서 생성
-    """
-    try:
-        print(f"[DEBUG] JSON 파일들로부터 HTML 보고서 생성 시작", flush=True)
-        
-        # JSON 파일 목록 수집
-        service_data = {}
-        total_findings = 0
-        
-        if os.path.exists(json_dir):
-            for file in os.listdir(json_dir):
-                if file.endswith('.json') and not file.endswith('.stat.json') and not file.endswith('.charts.json') and not file.startswith('CustomPage'):
-                    service_name = file.replace('.json', '').upper()
-                    file_path = os.path.join(json_dir, file)
-                    
-                    try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                        
-                        # 이슈 개수 계산
-                        if isinstance(data, dict):
-                            for key, value in data.items():
-                                if isinstance(value, (list, dict)):
-                                    total_findings += len(value) if isinstance(value, list) else 1
-                        
-                        service_data[service_name] = {
-                            'file': file,
-                            'path': file_path,
-                            'data': data
-                        }
-                    except Exception as e:
-                        print(f"[DEBUG] JSON 파일 파싱 실패: {file} - {e}", flush=True)
-        
-        # HTML 보고서 생성
-        services_list = ', '.join(sorted(service_data.keys()))
-        
-        html_content = f"""<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AWS Service Screener Report - Account {account_id}</title>
-    <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }}
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            overflow: hidden;
-        }}
-        .header {{
-            background: linear-gradient(135deg, #232f3e 0%, #ff9900 100%);
-            color: white;
-            padding: 40px;
-            text-align: center;
-        }}
-        .header h1 {{
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }}
-        .header p {{
-            font-size: 1.1em;
-            opacity: 0.9;
-        }}
-        .content {{
-            padding: 40px;
-        }}
-        .summary {{
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-            border-left: 5px solid #ff9900;
-        }}
-        .summary h2 {{
-            color: #232f3e;
-            margin-bottom: 15px;
-        }}
-        .summary-item {{
-            display: inline-block;
-            margin-right: 30px;
-            margin-bottom: 10px;
-        }}
-        .summary-item strong {{
-            color: #232f3e;
-        }}
-        .summary-item span {{
-            color: #ff9900;
-            font-size: 1.3em;
-            font-weight: bold;
-        }}
-        .services {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }}
-        .service-card {{
-            background: white;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 20px;
-            transition: all 0.3s ease;
-        }}
-        .service-card:hover {{
-            border-color: #ff9900;
-            box-shadow: 0 5px 15px rgba(255, 153, 0, 0.2);
-        }}
-        .service-card h3 {{
-            color: #232f3e;
-            margin-bottom: 10px;
-            font-size: 1.2em;
-        }}
-        .service-card p {{
-            color: #666;
-            font-size: 0.95em;
-            line-height: 1.6;
-        }}
-        .footer {{
-            background: #f8f9fa;
-            padding: 20px;
-            text-align: center;
-            color: #666;
-            border-top: 1px solid #e0e0e0;
-        }}
-        .badge {{
-            display: inline-block;
-            background: #ff9900;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            margin-top: 10px;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🔍 AWS Service Screener Report</h1>
-            <p>Account: {account_id} | Generated: {timestamp}</p>
-        </div>
-        
-        <div class="content">
-            <div class="summary">
-                <h2>📊 Scan Summary</h2>
-                <div class="summary-item">
-                    <strong>Total Findings:</strong> <span>{total_findings}</span>
-                </div>
-                <div class="summary-item">
-                    <strong>Services Scanned:</strong> <span>{len(service_data)}</span>
-                </div>
-                <div class="summary-item">
-                    <strong>Scan Date:</strong> <span>{timestamp}</span>
-                </div>
-            </div>
-            
-            <h2 style="color: #232f3e; margin-bottom: 20px;">📋 Scanned Services</h2>
-            <div class="services">
-"""
-        
-        for service_name in sorted(service_data.keys()):
-            html_content += f"""                <div class="service-card">
-                    <h3>{service_name}</h3>
-                    <p>Service security and compliance assessment completed.</p>
-                    <span class="badge">✓ Scanned</span>
-                </div>
-"""
-        
-        html_content += """            </div>
-        </div>
-        
-        <div class="footer">
-            <p>AWS Service Screener Report | Powered by Q CLI</p>
-            <p style="font-size: 0.9em; margin-top: 10px;">For detailed findings, please review the individual service reports.</p>
-        </div>
-    </div>
-</body>
-</html>
-"""
-        
-        print(f"[DEBUG] HTML 보고서 생성 완료: {len(html_content)} bytes", flush=True)
-        return html_content
-        
-    except Exception as e:
-        print(f"[ERROR] HTML 보고서 생성 실패: {e}", flush=True)
-        traceback.print_exc()
-        return None
 
 def parse_screener_results(output_dir, account_id):
     """
@@ -1076,6 +832,15 @@ def generate_wa_summary_report(account_id, screener_result_dir, timestamp):
         temp_account_dir = os.path.join(temp_wa_input_dir, account_id)
         shutil.copytree(screener_result_dir, temp_account_dir)
         print(f"[DEBUG] 계정 폴더 복사: {screener_result_dir} -> {temp_account_dir}", flush=True)
+        
+        # WAFS.html을 CPFindings.html로 복사 (WA Summarizer 호환성)
+        wafs_file = os.path.join(temp_account_dir, 'WAFS.html')
+        cpfindings_file = os.path.join(temp_account_dir, 'CPFindings.html')
+        if os.path.exists(wafs_file):
+            shutil.copy(wafs_file, cpfindings_file)
+            print(f"[DEBUG] WAFS.html을 CPFindings.html로 복사: {cpfindings_file}", flush=True)
+        else:
+            print(f"[DEBUG] WAFS.html 파일을 찾을 수 없음: {wafs_file}", flush=True)
 
         # res 폴더 복사 (CSS/JS 등 공통 리소스) - Reference 코드와 동일한 경로 사용
         res_source = '/root/service-screener-v2/aws/res'
