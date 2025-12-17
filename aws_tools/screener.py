@@ -203,6 +203,7 @@ sys.path.insert(0, '/root/service-screener-v2')
 
 from Screener import Screener
 from utils.Config import Config
+import constants as _C
 
 # Config 초기화
 Config.init()
@@ -210,10 +211,12 @@ Config.init()
 # __fork 디렉터리에서 contexts 파싱
 fork_dir = '/root/service-screener-v2/__fork'
 contexts = {}
+serviceStat = {}
+hasGlobal = False
 
 if os.path.exists(fork_dir):
     for file in os.listdir(fork_dir):
-        if file[0] == '.' or file in ['tail.txt', 'error.txt', 'empty.txt', 'all.csv']:
+        if file[0] == '.' or file == _C.SESSUID_FILENAME or file in ['tail.txt', 'error.txt', 'empty.txt', 'all.csv']:
             continue
         
         f = file.split('.')
@@ -235,11 +238,26 @@ if os.path.exists(fork_dir):
                     contexts[f[0]]['charts'] = json.load(fp)
             except Exception as e:
                 print(f"[DEBUG] Charts 파싱 실패 {file}: {e}", flush=True)
+        else:
+            # stat 파일
+            try:
+                with open(os.path.join(fork_dir, file), 'r') as fp:
+                    cnt, rules, exceptions, timespent = list(json.load(fp).values())
+                    serviceStat[f[0]] = cnt
+                    if f[0] in Config.GLOBAL_SERVICES:
+                        hasGlobal = True
+            except Exception as e:
+                print(f"[DEBUG] Stat 파싱 실패 {file}: {e}", flush=True)
 
 print(f"[DEBUG] 파싱된 contexts 서비스 수: {len(contexts)}", flush=True)
+print(f"[DEBUG] hasGlobal: {hasGlobal}", flush=True)
+
+# Config 설정 (Slack bot main.py 참고)
+Config.set('cli_services', serviceStat)
+Config.set('cli_regions', ['ap-northeast-2', 'us-east-1'])
+Config.set('cli_frameworks', [])
 
 # Screener.generateScreenerOutput() 호출
-hasGlobal = False
 regions = ['ap-northeast-2', 'us-east-1']
 uploadToS3 = False
 
