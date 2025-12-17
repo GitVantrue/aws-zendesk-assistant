@@ -213,9 +213,15 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         # Service Screener 실행 결과 확인
         if result.returncode != 0:
-            # 로그 전체 내용 확인 (stdout + stderr)
-            log_content = result.stdout + result.stderr
-            error_msg = result.stderr.strip() if result.stderr else "Service Screener 실행 실패"
+            # 로그 파일에서 내용 읽기 (파일로 리다이렉트했으므로 stdout/stderr는 None)
+            log_content = ""
+            try:
+                with open(log_file, 'r') as f:
+                    log_content = f.read()
+            except:
+                pass
+            
+            error_msg = "Service Screener 실행 실패"
             print(f"[ERROR] Service Screener 실행 실패: {error_msg}", flush=True)
             
             # CloudFormation 권한 오류는 무시하고 계속 진행 (Reference 코드와 동일)
