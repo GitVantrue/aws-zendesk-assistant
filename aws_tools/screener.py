@@ -151,20 +151,6 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             print(f"[DEBUG] 기존 결과 삭제: {old_result_dir}", flush=True)
             shutil.rmtree(old_result_dir)
         
-        # ========================================
-        # Reference 코드 방식: Q CLI 오케스트레이션 사용
-        # ========================================
-        
-        # Service Screener 컨텍스트 파일 로드 (현재 프로젝트 경로)
-        screener_context_path = 'reference_contexts/service_screener.md'
-        try:
-            with open(screener_context_path, 'r', encoding='utf-8') as f:
-                screener_context = f.read()
-            print(f"[DEBUG] Service Screener 컨텍스트 파일 로드 성공", flush=True)
-        except Exception as e:
-            print(f"[DEBUG] 컨텍스트 파일 로드 실패: {e}", flush=True)
-            screener_context = ""
-        
         # 타임스탬프 생성 (보고서 URL용)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
@@ -173,22 +159,37 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             send_websocket_message(websocket, session_id, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...\n📍 스캔 리전: ap-northeast-2, us-east-1\n⏱️ 약 2-5분 소요될 수 있습니다.")
         
         # ========================================
-        # Service Screener 직접 실행 (Reference 코드와 동일)
+        # Service Screener 직접 실행 (Reference 코드와 동일: Screener.py --crossAccounts 방식)
         # ========================================
         
         print(f"[DEBUG] Service Screener 직접 실행 시작", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_ACCESS_KEY_ID={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_EC2_METADATA_DISABLED={env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
         
-        # Service Screener main.py 실행 (Reference 코드와 동일: --regions 옵션 사용)
-        cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
+        # crossAccounts.json 생성 (Reference 코드와 동일)
+        temp_json_path = f'/tmp/crossAccounts_{account_id}_{timestamp}.json'
+        
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,
+                "Regions": ['ap-northeast-2', 'us-east-1']
+            }
+        }
+        
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        
+        # Service Screener Screener.py 실행 (Reference 코드와 동일: --crossAccounts 옵션 사용)
+        cmd = ['python3', '/root/service-screener-v2/Screener.py', '--crossAccounts', temp_json_path]
         
         print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
         print(f"[DEBUG] Service Screener 시작 시간: {datetime.now()}", flush=True)
         
         # Service Screener 실행 (타임아웃 10분)
         # Reference 코드와 동일한 방식: 파일로 리다이렉트
-        log_file = f'/tmp/screener_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+        log_file = f'/tmp/screener_{account_id}_{timestamp}.log'
         with open(log_file, 'w') as f:
             result = subprocess.run(
                 cmd,
