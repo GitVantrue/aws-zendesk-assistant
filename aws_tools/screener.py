@@ -166,37 +166,19 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] 환경변수 전달 확인: AWS_ACCESS_KEY_ID={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_EC2_METADATA_DISABLED={env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
         
-        # crossAccounts.json 생성 (Reference 코드와 동일)
-        temp_json_path = f'/tmp/crossAccounts_{account_id}_{timestamp}.json'
+        # Service Screener main.py 실행 (Slack 봇과 동일: --regions 옵션 사용)
+        cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
         
-        cross_accounts_config = {
-            "general": {
-                "IncludeThisAccount": True,
-                "Regions": ['ap-northeast-2', 'us-east-1']
-            }
-        }
+        print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
         
-        with open(temp_json_path, 'w') as f:
-            json.dump(cross_accounts_config, f, indent=2)
-        
-        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
-        
-        # Service Screener Screener.py 실행 (Reference 코드와 동일: --crossAccounts 옵션 사용)
-        cmd = ['python3', '/root/service-screener-v2/Screener.py', '--crossAccounts', temp_json_path]
-        
-        print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
-        print(f"[DEBUG] Service Screener 시작 시간: {datetime.now()}", flush=True)
-        
-        # Service Screener 실행 (타임아웃 10분)
-        # Reference 코드와 동일한 방식: 파일로 리다이렉트
-        log_file = f'/tmp/screener_{account_id}_{timestamp}.log'
+        log_file = f'/tmp/screener_{account_id}.log'
         with open(log_file, 'w') as f:
             result = subprocess.run(
                 cmd,
                 stdout=f,
                 stderr=subprocess.STDOUT,
                 env=env_vars,
-                timeout=600,  # 10분 타임아웃
+                timeout=600,
                 cwd='/root/service-screener-v2'
             )
         
@@ -208,66 +190,19 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         except Exception as e:
             print(f"[DEBUG] 로그 파일 읽기 실패: {e}", flush=True)
         
-        print(f"[DEBUG] Service Screener 종료 시간: {datetime.now()}", flush=True)
-        print(f"[DEBUG] Service Screener 완료 - 반환코드: {result.returncode}", flush=True)
+        print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
         
-        # Service Screener 실행 결과 확인
-        if result.returncode != 0:
-            # 로그 파일에서 내용 읽기
-            log_content = ""
-            try:
-                with open(log_file, 'r') as f:
-                    log_content = f.read()
-            except:
-                pass
-            
-            error_msg = "Service Screener 실행 실패"
-            print(f"[ERROR] Service Screener 실행 실패: {error_msg}", flush=True)
-            
-            # CloudFormation 권한 오류는 무시하고 계속 진행 (Reference 코드와 동일)
-            if "cloudformation:CreateStack" in log_content or "wellarchitected:CreateWorkload" in log_content:
-                print(f"[DEBUG] CloudFormation/WellArchitected 권한 오류 무시하고 계속 진행", flush=True)
-            else:
-                return {
-                    "success": False,
-                    "summary": None,
-                    "report_url": None,
-                    "error": f"Service Screener 실행 실패: {error_msg[:500]}"
-                }
+        # Service Screener 실행 결과 확인 (Slack 봇과 동일)
+        if result.returncode == 0:
+            print(f"[DEBUG] Service Screener 실행 성공", flush=True)
         
-        # Reference 코드와 동일: Service Screener가 생성한 실제 결과 디렉터리 찾기
+        # Slack 봇과 동일: Service Screener가 생성한 실제 결과 디렉터리 찾기
         screener_dir = '/root/service-screener-v2'
         
-        # Service Screener 결과 디렉터리 패턴 확인
-        # 1. aws/{account_id} (원본 생성 경로)
-        # 2. adminlte/aws/{account_id} (복사된 경로 - 계정 격리용)
-        possible_dirs = [
-            os.path.join(screener_dir, 'aws', account_id),
-            os.path.join(screener_dir, 'adminlte', 'aws', account_id)
-        ]
+        # main.py는 adminlte/aws/{account_id}에 결과 생성
+        account_result_dir = os.path.join(screener_dir, 'adminlte', 'aws', account_id)
         
-        account_result_dir = None
-        for dir_path in possible_dirs:
-            if os.path.exists(dir_path):
-                account_result_dir = dir_path
-                print(f"[DEBUG] 결과 디렉터리 발견: {account_result_dir}", flush=True)
-                break
-        
-        # 요청한 계정이 없으면 aws 디렉터리에서 첫 번째 계정 찾기
-        if not account_result_dir:
-            aws_dir = os.path.join(screener_dir, 'aws')
-            if os.path.exists(aws_dir):
-                subdirs = [d for d in os.listdir(aws_dir) if os.path.isdir(os.path.join(aws_dir, d)) and d != 'res' and not d.startswith('.')]
-                if subdirs:
-                    # 첫 번째 계정 디렉터리 사용
-                    actual_account_id = subdirs[0]
-                    account_result_dir = os.path.join(aws_dir, actual_account_id)
-                    print(f"[DEBUG] 요청 계정 {account_id}를 찾을 수 없음. 실제 생성된 계정 {actual_account_id} 사용", flush=True)
-        
-        if not account_result_dir:
-            print(f"[DEBUG] 결과 디렉터리를 찾을 수 없음. 확인된 경로들:", flush=True)
-            for dir_path in possible_dirs:
-                print(f"[DEBUG]   - {dir_path}: 존재={os.path.exists(dir_path)}", flush=True)
+        print(f"[DEBUG] 계정 결과 디렉터리 확인: {account_result_dir}", flush=True)
         
         # 결과 처리
         if account_result_dir and os.path.exists(account_result_dir):
@@ -391,41 +326,13 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                         "error": None
                     }
         else:
-            print(f"[DEBUG] 결과 디렉터리 없음. 추가 대기 중...", flush=True)
-            
-            # Reference 코드와 동일: CloudFormation 오류가 있어도 추가 대기
-            # 스캔이 백그라운드에서 계속 진행될 수 있음
-            import time
-            for wait_count in range(450):  # 900초 = 450 * 2초 (15분)
-                time.sleep(2)
-                
-                # 다시 결과 디렉터리 찾기
-                for dir_path in possible_dirs:
-                    if os.path.exists(dir_path):
-                        account_result_dir = dir_path
-                        print(f"[DEBUG] 지연 성공! 결과 디렉터리 생성됨: {account_result_dir} (대기시간: {(wait_count+1)*2}초)", flush=True)
-                        break
-                
-                if account_result_dir and os.path.exists(account_result_dir):
-                    break
-                
-                # 진행 상황 업데이트 (30초마다)
-                if websocket and session_id and (wait_count + 1) % 15 == 0:
-                    elapsed_minutes = ((wait_count+1)*2) // 60
-                    send_websocket_message(websocket, session_id, f"⏳ 스캔 진행 중... ({elapsed_minutes}분 경과)")
-            
-            # 대기 후 다시 확인
-            if not account_result_dir or not os.path.exists(account_result_dir):
-                print(f"[DEBUG] 900초(15분) 대기 후에도 결과 디렉터리 없음", flush=True)
-                
-                return {
-                    "success": False,
-                    "summary": None,
-                    "report_url": None,
-                    "error": f"스캔이 15분 대기 후에도 결과 디렉터리를 찾을 수 없습니다. 확인된 경로: {', '.join(possible_dirs)}"
-                }
-            else:
-                print(f"[DEBUG] 대기 후 결과 디렉터리 발견: {account_result_dir}", flush=True)
+            print(f"[DEBUG] 결과 디렉터리 없음: {account_result_dir}", flush=True)
+            return {
+                "success": False,
+                "summary": None,
+                "report_url": None,
+                "error": f"스캔 결과 디렉터리를 찾을 수 없습니다: {account_result_dir}"
+            }
     
     except subprocess.TimeoutExpired:
         print(f"[ERROR] Service Screener 타임아웃", flush=True)
