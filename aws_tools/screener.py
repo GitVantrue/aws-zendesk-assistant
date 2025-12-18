@@ -95,11 +95,11 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         env_vars['AWS_CONFIG_FILE'] = os.path.join(temp_dir, 'config')
         env_vars['AWS_SHARED_CREDENTIALS_FILE'] = os.path.join(temp_dir, 'credentials')
         
-        # 자격증명 설정 (파라미터 우선, 없으면 환경 변수)
+        # 자격증명 설정 (Slack bot과 동일: 직접 접근)
         if credentials:
-            env_vars['AWS_ACCESS_KEY_ID'] = credentials.get('AWS_ACCESS_KEY_ID', '')
-            env_vars['AWS_SECRET_ACCESS_KEY'] = credentials.get('AWS_SECRET_ACCESS_KEY', '')
-            env_vars['AWS_SESSION_TOKEN'] = credentials.get('AWS_SESSION_TOKEN', '')
+            env_vars['AWS_ACCESS_KEY_ID'] = credentials['AWS_ACCESS_KEY_ID']
+            env_vars['AWS_SECRET_ACCESS_KEY'] = credentials['AWS_SECRET_ACCESS_KEY']
+            env_vars['AWS_SESSION_TOKEN'] = credentials['AWS_SESSION_TOKEN']
         
         # 리전 설정 (Slack 봇과 동일)
         env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
