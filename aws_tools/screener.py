@@ -166,8 +166,23 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] 환경변수 전달 확인: AWS_ACCESS_KEY_ID={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_EC2_METADATA_DISABLED={env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
         
-        # Service Screener main.py 실행 (Slack 봇과 동일: --regions 옵션 사용)
-        cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
+        # crossAccounts.json 생성 (참고 코드와 동일)
+        temp_json_path = f'/tmp/crossAccounts_{account_id}_{timestamp}.json'
+        
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,
+                "Regions": ['ap-northeast-2', 'us-east-1']
+            }
+        }
+        
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        
+        # Service Screener Screener.py 실행 (참고 코드와 동일: --crossAccounts 옵션 사용)
+        cmd = ['python3', '/root/service-screener-v2/Screener.py', '--crossAccounts', temp_json_path]
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
         
