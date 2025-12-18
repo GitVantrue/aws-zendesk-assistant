@@ -172,16 +172,40 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         if websocket and session_id:
             send_websocket_message(websocket, session_id, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...\n📍 스캔 리전: ap-northeast-2, us-east-1\n⏱️ 약 2-5분 소요될 수 있습니다.")
         
+        # ========================================
+        # crossAccounts.json 생성 (Reference 코드와 동일)
+        # ========================================
+        # 스캔할 리전 설정 (기본값: 서울, 버지니아)
+        scan_regions = ['ap-northeast-2', 'us-east-1']
+        
+        # crossAccounts.json 파일 생성 (Reference 코드와 동일)
+        cross_accounts_config = {
+            "general": {
+                "IncludeThisAccount": True,  # 현재 자격증명으로 스캔
+                "Regions": scan_regions  # 스캔할 리전 목록
+            }
+        }
+        
+        # 임시 JSON 파일 경로
+        temp_json_path = f'/tmp/crossAccounts_{account_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        
+        # JSON 파일 생성
+        with open(temp_json_path, 'w') as f:
+            json.dump(cross_accounts_config, f, indent=2)
+        
+        print(f"[DEBUG] crossAccounts.json 생성 완료: {temp_json_path}", flush=True)
+        print(f"[DEBUG] 스캔 대상 리전: {', '.join(scan_regions)}", flush=True)
+        
         # Service Screener 직접 실행 (main.py 사용)
         print(f"[DEBUG] Service Screener 직접 실행 시작", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_ACCESS_KEY_ID={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_EC2_METADATA_DISABLED={env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
         
-        # Service Screener Screener.py 실행 (CloudFormation 에러 무시)
+        # Service Screener Screener.py 실행 (Reference 코드와 동일: --crossAccounts 옵션 사용)
         cmd = [
             'python3',
             '/root/service-screener-v2/Screener.py',
-            '--regions', 'ap-northeast-2,us-east-1'
+            '--crossAccounts', temp_json_path
         ]
         
         print(f"[DEBUG] Service Screener 실행: {' '.join(cmd)}", flush=True)
