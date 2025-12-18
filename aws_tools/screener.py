@@ -192,17 +192,11 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         print(f"[DEBUG] Service Screener 실행 완료. 반환코드: {result.returncode}", flush=True)
         
-        # Service Screener 실행 결과 확인 (Slack 봇과 동일)
-        if result.returncode == 0:
-            print(f"[DEBUG] Service Screener 실행 성공", flush=True)
-        
-        # Slack 봇과 동일: Service Screener가 생성한 실제 결과 디렉터리 찾기
+        # Service Screener가 생성한 실제 결과 디렉터리 찾기 (반환코드 무관)
         screener_dir = '/root/service-screener-v2'
-        
-        # main.py는 adminlte/aws/{account_id}에 결과 생성
         account_result_dir = os.path.join(screener_dir, 'adminlte', 'aws', account_id)
         
-        print(f"[DEBUG] 계정 결과 디렉터리 확인: {account_result_dir}", flush=True)
+        print(f"[DEBUG] Service Screener 결과 디렉터리 확인: {account_result_dir}", flush=True)
         
         # 결과 처리
         if account_result_dir and os.path.exists(account_result_dir):
