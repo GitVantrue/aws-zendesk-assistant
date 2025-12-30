@@ -88,10 +88,30 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         temp_dir = tempfile.mkdtemp(prefix=f'q_session_{account_id}_screener_')
         print(f"[DEBUG] 임시 세션 디렉터리 생성: {temp_dir}", flush=True)
         
+        # ========================================
+        # Q CLI 캐시 무효화 (Slack 봇과 동일)
+        # ========================================
+        q_cache_dirs = [
+            os.path.expanduser('~/.cache/q'),
+            os.path.expanduser('~/.q'),
+            '/tmp/q-cache'
+        ]
+        
+        for cache_dir in q_cache_dirs:
+            if os.path.exists(cache_dir):
+                try:
+                    shutil.rmtree(cache_dir)
+                    print(f"[DEBUG] Q CLI 캐시 삭제: {cache_dir}", flush=True)
+                except Exception as e:
+                    print(f"[DEBUG] 캐시 삭제 실패 (무시): {cache_dir} - {e}", flush=True)
+        
+        # ========================================
         # 환경 변수 설정 (Reference 코드와 동일)
+        # ========================================
         env_vars = os.environ.copy()
         
         # AWS 설정 파일 경로 격리 (Reference 코드와 동일)
+        # 이 설정으로 boto3가 환경 변수의 자격증명을 우선적으로 사용하게 됨
         env_vars['AWS_CONFIG_FILE'] = os.path.join(temp_dir, 'config')
         env_vars['AWS_SHARED_CREDENTIALS_FILE'] = os.path.join(temp_dir, 'credentials')
         
