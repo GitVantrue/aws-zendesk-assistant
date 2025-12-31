@@ -147,6 +147,9 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
         env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
         
+        # MCP 서버 초기화 타임아웃 설정 (Slack bot과 동일)
+        env_vars['Q_MCP_INIT_TIMEOUT'] = '10000'  # 10초
+        
         # HOME 환경 변수 명시적 설정 (스레드 환경에서 필요할 수 있음)
         env_vars['HOME'] = '/root'
         
