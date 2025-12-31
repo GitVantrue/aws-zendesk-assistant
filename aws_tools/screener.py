@@ -142,10 +142,14 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
         env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
         
+        # HOME 환경 변수 명시적 설정 (스레드 환경에서 필요할 수 있음)
+        env_vars['HOME'] = '/root'
+        
         print(f"[DEBUG] 세션 격리 환경 설정 완료:", flush=True)
         print(f"[DEBUG] - AWS_CONFIG_FILE: {env_vars['AWS_CONFIG_FILE']}", flush=True)
         print(f"[DEBUG] - AWS_ACCESS_KEY_ID: {env_vars['AWS_ACCESS_KEY_ID'][:20]}...", flush=True)
         print(f"[DEBUG] - AWS_SESSION_TOKEN: {'설정됨' if env_vars.get('AWS_SESSION_TOKEN') else '없음'}", flush=True)
+        print(f"[DEBUG] - HOME: {env_vars.get('HOME')}", flush=True)
         
         # ========================================
         # 계정 검증 (Reference 코드와 동일)
@@ -214,6 +218,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG]   - AWS_SESSION_TOKEN: {'설정됨' if env_vars.get('AWS_SESSION_TOKEN') else '없음'}", flush=True)
         print(f"[DEBUG]   - AWS_DEFAULT_REGION: {env_vars.get('AWS_DEFAULT_REGION', 'None')}", flush=True)
         print(f"[DEBUG]   - AWS_EC2_METADATA_DISABLED: {env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
+        print(f"[DEBUG]   - HOME: {env_vars.get('HOME', 'None')}", flush=True)
+        print(f"[DEBUG]   - PATH: {env_vars.get('PATH', 'None')[:100]}...", flush=True)
         
         log_file = f'/tmp/screener_{account_id}.log'
         with open(log_file, 'w') as f:
