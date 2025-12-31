@@ -22,6 +22,11 @@ cp zendesk_app/assets/iframe.html "$PACKAGE_DIR/assets/"
 cp zendesk_app/assets/main.js "$PACKAGE_DIR/assets/"
 cp zendesk_app/assets/logo.svg "$PACKAGE_DIR/assets/"
 
+# 번역 파일 복사
+mkdir -p "$PACKAGE_DIR/assets/translations"
+cp zendesk_app/assets/translations/ko.json "$PACKAGE_DIR/assets/translations/"
+cp zendesk_app/assets/translations/en.json "$PACKAGE_DIR/assets/translations/"
+
 echo "📦 ZIP 파일 생성 중..."
 
 # ZIP 파일 생성

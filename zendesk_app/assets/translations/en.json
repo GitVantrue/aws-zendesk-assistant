@@ -1,0 +1,75 @@
+{
+  "app": {
+    "name": "AWS Zendesk Assistant",
+    "description": "AWS Analysis Tools - Service Screener, Monthly Report, CloudTrail Query"
+  },
+  "dashboard": {
+    "title": "⚡ ZenBot",
+    "subtitle": "AWS Analysis Tools"
+  },
+  "cards": {
+    "screener": {
+      "title": "Service Screener",
+      "description": "Scan and analyze all services in your AWS account"
+    },
+    "report": {
+      "title": "Monthly Report",
+      "description": "Generate a monthly report analyzing AWS security status"
+    },
+    "cloudtrail": {
+      "title": "CloudTrail",
+      "description": "Query activity logs from your AWS account"
+    },
+    "question": {
+      "title": "Direct Question",
+      "description": "Ask questions about AWS directly"
+    }
+  },
+  "buttons": {
+    "start": "Click to start",
+    "execute": "Execute",
+    "generate": "Generate",
+    "query": "Query",
+    "send": "Send",
+    "cancel": "Cancel"
+  },
+  "modals": {
+    "screener": {
+      "title": "Service Screener",
+      "description": "Scan and analyze all services in your AWS account",
+      "button": "Execute"
+    },
+    "report": {
+      "title": "Monthly Report",
+      "description": "Generate a monthly report analyzing AWS security status",
+      "thisMonth": "This Month",
+      "lastMonth": "Last Month",
+      "button": "Generate"
+    },
+    "cloudtrail": {
+      "title": "CloudTrail",
+      "description": "Query activity logs from your AWS account",
+      "allEvents": "All Events",
+      "importantEvents": "Important Events",
+      "deleteEvents": "Delete Events",
+      "button": "Query"
+    },
+    "question": {
+      "title": "Direct Question",
+      "description": "Ask questions about AWS directly",
+      "placeholder": "Enter your question...",
+      "button": "Send"
+    }
+  },
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Enter your message...",
+    "send": "Send",
+    "loading": "Processing..."
+  },
+  "errors": {
+    "connectionFailed": "Failed to connect to server",
+    "invalidInput": "Invalid input",
+    "serverError": "Server error occurred"
+  }
+}

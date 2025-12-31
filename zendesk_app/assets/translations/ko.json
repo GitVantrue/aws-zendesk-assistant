@@ -1,0 +1,75 @@
+{
+  "app": {
+    "name": "AWS Zendesk Assistant",
+    "description": "AWS 분석 도구 - Service Screener, 월간 보고서, CloudTrail 조회"
+  },
+  "dashboard": {
+    "title": "⚡ ZenBot",
+    "subtitle": "AWS 분석 도구"
+  },
+  "cards": {
+    "screener": {
+      "title": "Service Screener",
+      "description": "AWS 계정의 모든 서비스를 스캔하고 분석합니다"
+    },
+    "report": {
+      "title": "월간 보고서",
+      "description": "AWS 보안 상태를 분석한 월간 보고서를 생성합니다"
+    },
+    "cloudtrail": {
+      "title": "CloudTrail",
+      "description": "AWS 계정의 활동 로그를 조회합니다"
+    },
+    "question": {
+      "title": "직접 질문",
+      "description": "AWS에 대해 직접 질문하세요"
+    }
+  },
+  "buttons": {
+    "start": "클릭하여 시작",
+    "execute": "실행",
+    "generate": "생성",
+    "query": "조회",
+    "send": "전송",
+    "cancel": "취소"
+  },
+  "modals": {
+    "screener": {
+      "title": "Service Screener",
+      "description": "AWS 계정의 모든 서비스를 스캔하고 분석합니다",
+      "button": "실행"
+    },
+    "report": {
+      "title": "월간 보고서",
+      "description": "AWS 보안 상태를 분석한 월간 보고서를 생성합니다",
+      "thisMonth": "이번 달",
+      "lastMonth": "지난 달",
+      "button": "생성"
+    },
+    "cloudtrail": {
+      "title": "CloudTrail",
+      "description": "AWS 계정의 활동 로그를 조회합니다",
+      "allEvents": "모든 이벤트",
+      "importantEvents": "중요 이벤트",
+      "deleteEvents": "삭제 이벤트",
+      "button": "조회"
+    },
+    "question": {
+      "title": "직접 질문",
+      "description": "AWS에 대해 직접 질문하세요",
+      "placeholder": "질문을 입력하세요...",
+      "button": "전송"
+    }
+  },
+  "chat": {
+    "title": "채팅",
+    "placeholder": "메시지를 입력하세요...",
+    "send": "전송",
+    "loading": "처리 중..."
+  },
+  "errors": {
+    "connectionFailed": "서버 연결에 실패했습니다",
+    "invalidInput": "입력값이 유효하지 않습니다",
+    "serverError": "서버 오류가 발생했습니다"
+  }
+}
