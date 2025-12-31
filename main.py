@@ -22,18 +22,15 @@ def start_fastapi_server():
         import uvicorn
         log_info("FastAPI 서버 시작 중...")
         
-        # uvicorn 서버 설정
-        config = uvicorn.Config(
+        # uvicorn 직접 실행 (간단한 방식)
+        uvicorn.run(
             "zendesk_app.server.main:app",
             host="0.0.0.0",
             port=8000,
             log_level="info",
-            access_log=False
+            access_log=False,
+            server_header=False
         )
-        server = uvicorn.Server(config)
-        
-        # 서버 실행 (블로킹)
-        asyncio.run(server.serve())
     except Exception as e:
         log_error(f"FastAPI 서버 시작 실패: {e}")
 
