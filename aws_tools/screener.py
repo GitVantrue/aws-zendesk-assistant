@@ -145,6 +145,9 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         # HOME 환경 변수 명시적 설정 (스레드 환경에서 필요할 수 있음)
         env_vars['HOME'] = '/root'
         
+        # PATH 명시적 설정 (aws CLI 경로 포함)
+        env_vars['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin'
+        
         print(f"[DEBUG] 세션 격리 환경 설정 완료:", flush=True)
         print(f"[DEBUG] - AWS_CONFIG_FILE: {env_vars['AWS_CONFIG_FILE']}", flush=True)
         print(f"[DEBUG] - AWS_ACCESS_KEY_ID: {env_vars['AWS_ACCESS_KEY_ID'][:20]}...", flush=True)
