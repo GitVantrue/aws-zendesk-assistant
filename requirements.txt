@@ -16,6 +16,12 @@ requests>=2.31.0
 # HTTP/WebSocket 하이브리드 서버
 aiohttp>=3.8.0
 
+# FastAPI 서버
+fastapi>=0.104.0
+uvicorn>=0.24.0
+jinja2>=3.1.0
+python-multipart>=0.0.6
+
 # Property-based testing
 hypothesis>=6.100.0
 
