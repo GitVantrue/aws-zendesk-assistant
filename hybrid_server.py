@@ -29,7 +29,6 @@ class HybridServer:
     
     def setup_routes(self):
         """HTTP 라우트 설정"""
-        self.app.router.add_get('/', self.health_check)
         self.app.router.add_get('/health', self.health_check)
         self.app.router.add_get('/ws', self.websocket_handler)
         
