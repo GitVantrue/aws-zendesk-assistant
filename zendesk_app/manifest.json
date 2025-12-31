@@ -1,0 +1,33 @@
+{
+  "name": "AWS Zendesk Assistant",
+  "author": {
+    "name": "AWS Team",
+    "email": "support@example.com",
+    "url": "https://example.com"
+  },
+  "defaultLocale": "ko",
+  "private": true,
+  "location": {
+    "support": {
+      "ticket_sidebar": {
+        "url": "assets/iframe.html",
+        "flexible": true
+      },
+      "new_ticket_sidebar": {
+        "url": "assets/iframe.html",
+        "flexible": true
+      }
+    }
+  },
+  "version": "1.0.0",
+  "frameworkVersion": "2.0",
+  "parameters": [
+    {
+      "name": "serverUrl",
+      "type": "text",
+      "required": true,
+      "secure": false,
+      "default": "http://localhost:8000"
+    }
+  ]
+}

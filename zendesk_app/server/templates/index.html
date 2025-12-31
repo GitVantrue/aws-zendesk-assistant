@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}ZenBot - Zendesk Support Assistant{% endblock %}
+
+{% block content %}
+<div class="zenbot-app">
+  <!-- 네비게이션 바 -->
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-icon">⚡</span>
+      <span class="brand-name">ZenBot</span>
+    </div>
+    <div class="nav-actions">
+      {% if ticket_data %}
+      <button class="nav-btn" id="ticketInfoBtn" title="티켓 정보">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 12H15M9 16H15M17 3H5C3.89543 3 3 3.89543 3 5V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V7L17 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      {% endif %}
+      <button class="nav-btn" id="chatBtn" title="채팅">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- 메인 콘텐츠 -->
+  <main class="main-area">
+    <!-- 대시보드 뷰 -->
+    <div class="dashboard-view active" id="dashboardView">
+      <div class="dashboard-header">
+        <h1>AWS 분석 도구</h1>
+        <p>필요한 작업을 선택하거나 직접 질문하세요</p>
+      </div>
+
+      <div class="dashboard-grid">
+        <!-- Service Screener 카드 -->
+        <div class="feature-card" id="screenerCard">
+          <div class="card-top">
+            <div class="card-icon-large">🔍</div>
+            <h3>Service Screener</h3>
+          </div>
+          <p>AWS 계정의 모든 서비스를 스캔하고 분석합니다</p>
+          <div class="card-cta">클릭하여 시작</div>
+        </div>
+
+        <!-- 월간 보고서 카드 -->
+        <div class="feature-card" id="reportCard">
+          <div class="card-top">
+            <div class="card-icon-large">📊</div>
+            <h3>월간 보고서</h3>
+          </div>
+          <p>AWS 보안 상태를 분석한 월간 보고서를 생성합니다</p>
+          <div class="card-cta">클릭하여 시작</div>
+        </div>
+
+        <!-- CloudTrail 카드 -->
+        <div class="feature-card" id="cloudtrailCard">
+          <div class="card-top">
+            <div class="card-icon-large">📋</div>
+            <h3>CloudTrail</h3>
+          </div>
+          <p>AWS 계정의 활동 로그를 조회합니다</p>
+          <div class="card-cta">클릭하여 시작</div>
+        </div>
+
+        <!-- 직접 질문 카드 -->
+        <div class="feature-card" id="openChatBtn">
+          <div class="card-top">
+            <div class="card-icon-large">💬</div>
+            <h3>직접 질문</h3>
+          </div>
+          <p>AWS에 대해 직접 질문하세요</p>
+          <div class="card-cta">클릭하여 채팅 시작</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 채팅 뷰 -->
+    <div class="chat-view" id="chatView">
+      <div class="chat-container">
+        <div class="chat-header">
+          <div class="chat-title">
+            <span class="chat-icon">💬</span>
+            <h2>ZenBot 채팅</h2>
+          </div>
+          <button class="close-btn" id="closeChatBtn">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="messages-area" id="messagesContainer">
+          <div class="welcome-message">
+            <div class="welcome-icon">⚡</div>
+            <h3>안녕하세요!</h3>
+            <p>AWS에 대해 궁금한 점을 물어보세요</p>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <div class="input-wrapper">
+            <textarea id="messageInput" placeholder="질문을 입력하세요..." rows="1" maxlength="4000"></textarea>
+            <button class="send-btn" id="sendButton" disabled>
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="input-footer">
+            <span class="char-count"><span id="charCount">0</span>/4000</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- 티켓 정보 모달 -->
+{% if ticket_data %}
+<div class="modal" id="ticketModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>티켓 정보</h3>
+      <button class="modal-close" id="ticketModalClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="ticket-field">
+        <label>ID</label>
+        <span>{{ ticket_data.id }}</span>
+      </div>
+      <div class="ticket-field">
+        <label>제목</label>
+        <span>{{ ticket_data.subject or '제목 없음' }}</span>
+      </div>
+      <div class="ticket-field">
+        <label>상태</label>
+        <span class="status-badge status-{{ ticket_data.status }}">{{ ticket_data.status }}</span>
+      </div>
+      <div class="ticket-field">
+        <label>우선순위</label>
+        <span class="priority-badge priority-{{ ticket_data.priority }}">{{ ticket_data.priority }}</span>
+      </div>
+      <div class="ticket-field">
+        <label>요청자</label>
+        <span>{{ ticket_data.requesterName }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-content">
+    <div class="spinner"></div>
+    <span>처리 중...</span>
+  </div>
+</div>
+
+<!-- Service Screener 모달 -->
+<div class="modal" id="screenerModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>🔍 Service Screener</h3>
+      <button class="modal-close" id="screenerModalClose">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc">AWS 계정의 모든 서비스를 스캔하고 분석합니다</p>
+      <div class="form-group">
+        <label>계정 ID</label>
+        <input type="text" id="screenerAccountId" placeholder="예: 123456789012" maxlength="12">
+      </div>
+      <button class="modal-action-btn" id="runScreenerBtn">실행</button>
+    </div>
+  </div>
+</div>
+
+<!-- 월간 보고서 모달 -->
+<div class="modal" id="reportModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>📊 월간 보고서</h3>
+      <button class="modal-close" id="reportModalClose">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc">AWS 보안 상태를 분석한 월간 보고서를 생성합니다</p>
+      <div class="form-group">
+        <label>계정 ID</label>
+        <input type="text" id="reportAccountId" placeholder="예: 123456789012" maxlength="12">
+      </div>
+      <div class="form-group">
+        <label>기간</label>
+        <select id="reportMonth">
+          <option value="">이번 달</option>
+          <option value="last-month">지난 달</option>
+        </select>
+      </div>
+      <button class="modal-action-btn" id="generateReportBtn">생성</button>
+    </div>
+  </div>
+</div>
+
+<!-- CloudTrail 모달 -->
+<div class="modal" id="cloudtrailModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>📋 CloudTrail</h3>
+      <button class="modal-close" id="cloudtrailModalClose">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc">AWS 계정의 활동 로그를 조회합니다</p>
+      <div class="form-group">
+        <label>계정 ID</label>
+        <input type="text" id="cloudtrailAccountId" placeholder="예: 123456789012" maxlength="12">
+      </div>
+      <div class="form-group">
+        <label>이벤트 유형</label>
+        <select id="eventType">
+          <option value="">모든 이벤트</option>
+          <option value="critical">중요 이벤트</option>
+          <option value="delete">삭제 이벤트</option>
+        </select>
+      </div>
+      <button class="modal-action-btn" id="queryCloudtrailBtn">조회</button>
+    </div>
+  </div>
+</div>
+
+<!-- 토스트 컨테이너 -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- 스크립트 -->
+<script>
+  window.ticketData = {{ ticket_data | tojson if ticket_data else 'null' }};
+  window.websocketUrl = "{{ websocket_url }}";
+</script>
+{% endblock %}

@@ -1,0 +1,31 @@
+{
+  "app": {
+    "name": "AWS AgentCore Chatbot",
+    "short_description": "AI-powered chatbot using AWS AgentCore for customer support",
+    "long_description": "Enhance your customer support with AI-powered assistance. This chatbot integrates with AWS AgentCore (Amazon Bedrock) to provide intelligent responses, ticket summarization, response suggestions, and sentiment analysis.",
+    "installation_instructions": "### Prerequisites\n\n1. AWS Account with AgentCore/Bedrock access\n2. An existing Bedrock Agent configured in your AWS account\n\n### Configuration\n\n1. **AWS Region**: Enter your AWS region (e.g., us-east-1)\n2. **AWS Access Key ID**: Your IAM user access key with Bedrock permissions\n3. **AWS Secret Access Key**: Your IAM user secret key\n4. **Agent ID**: Your Bedrock Agent ID\n5. **Agent Alias ID**: Your Bedrock Agent Alias ID"
+  },
+  "parameters": {
+    "awsRegion": {
+      "label": "AWS Region",
+      "helpText": "The AWS region where your Bedrock Agent is deployed (e.g., us-east-1)"
+    },
+    "awsAccessKeyId": {
+      "label": "AWS Access Key ID",
+      "helpText": "Your IAM user access key with Bedrock Agent runtime permissions"
+    },
+    "awsSecretAccessKey": {
+      "label": "AWS Secret Access Key",
+      "helpText": "Your IAM user secret access key"
+    },
+    "agentId": {
+      "label": "Agent ID",
+      "helpText": "The unique identifier of your Bedrock Agent"
+    },
+    "agentAliasId": {
+      "label": "Agent Alias ID",
+      "helpText": "The alias identifier of your Bedrock Agent"
+    }
+  }
+}
+

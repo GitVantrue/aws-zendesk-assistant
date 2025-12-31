@@ -1,0 +1,25 @@
+{
+  "name": "zendesk-agentcore-chatbot",
+  "version": "1.0.0",
+  "description": "AWS AgentCore chatbot app for Zendesk Support",
+  "author": "Your Company",
+  "license": "MIT",
+  "scripts": {
+    "validate": "zcli apps:validate",
+    "server": "zcli apps:server",
+    "package": "zcli apps:package",
+    "clean": "rm -rf tmp dist *.zip"
+  },
+  "devDependencies": {
+    "@zendesk/zcli": "^1.0.0-beta.45"
+  },
+  "keywords": [
+    "zendesk",
+    "chatbot",
+    "aws",
+    "agentcore",
+    "bedrock",
+    "ai"
+  ]
+}
+

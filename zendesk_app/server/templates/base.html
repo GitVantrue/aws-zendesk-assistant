@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}AWS Zendesk Assistant{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <div class="app-container">
+    {% block content %}{% endblock %}
+  </div>
+
+  <script src="{{ url_for('static', path='websocket.js') }}"></script>
+  <script src="{{ url_for('static', path='app.js') }}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

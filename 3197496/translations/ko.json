@@ -1,0 +1,31 @@
+{
+  "app": {
+    "name": "AWS AgentCore 챗봇",
+    "short_description": "AWS AgentCore를 활용한 AI 기반 고객 지원 챗봇",
+    "long_description": "AI 기반 지원으로 고객 서비스를 강화하세요. 이 챗봇은 AWS AgentCore(Amazon Bedrock)와 통합되어 지능형 응답, 티켓 요약, 응답 제안 및 감성 분석 기능을 제공합니다.",
+    "installation_instructions": "### 사전 요구사항\n\n1. AgentCore/Bedrock 접근이 가능한 AWS 계정\n2. AWS 계정에 구성된 Bedrock Agent\n\n### 설정\n\n1. **AWS Region**: AWS 리전 입력 (예: us-east-1)\n2. **AWS Access Key ID**: Bedrock 권한이 있는 IAM 사용자 액세스 키\n3. **AWS Secret Access Key**: IAM 사용자 시크릿 키\n4. **Agent ID**: Bedrock Agent ID\n5. **Agent Alias ID**: Bedrock Agent Alias ID"
+  },
+  "parameters": {
+    "awsRegion": {
+      "label": "AWS 리전",
+      "helpText": "Bedrock Agent가 배포된 AWS 리전 (예: us-east-1)"
+    },
+    "awsAccessKeyId": {
+      "label": "AWS Access Key ID",
+      "helpText": "Bedrock Agent 런타임 권한이 있는 IAM 사용자 액세스 키"
+    },
+    "awsSecretAccessKey": {
+      "label": "AWS Secret Access Key",
+      "helpText": "IAM 사용자 시크릿 액세스 키"
+    },
+    "agentId": {
+      "label": "Agent ID",
+      "helpText": "Bedrock Agent의 고유 식별자"
+    },
+    "agentAliasId": {
+      "label": "Agent Alias ID",
+      "helpText": "Bedrock Agent의 별칭 식별자"
+    }
+  }
+}
+
