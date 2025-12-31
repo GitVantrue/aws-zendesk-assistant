@@ -67,11 +67,26 @@ async def index(request: Request, ticket: str = None):
                 logger.error("[ERROR] 티켓 정보 파싱 실패")
         
         # 템플릿 렌더링
-        return templates.TemplateResponse("index.html", {
-            "request": request,
-            "ticket_data": ticket_data,
-            "websocket_url": app_state.websocket_url
-        })
+        try:
+            return templates.TemplateResponse("index.html", {
+                "request": request,
+                "ticket_data": ticket_data,
+                "websocket_url": app_state.websocket_url
+            })
+        except Exception as template_error:
+            logger.error(f"[ERROR] 템플릿 렌더링 실패: {template_error}")
+            # 템플릿 파일이 없으면 간단한 HTML 반환
+            return f"""
+            <!DOCTYPE html>
+            <html>
+            <head><title>AWS Zendesk Assistant</title></head>
+            <body>
+                <h1>AWS Zendesk Assistant</h1>
+                <p>WebSocket URL: {app_state.websocket_url}</p>
+                <p>Ticket Data: {ticket_data}</p>
+            </body>
+            </html>
+            """
         
     except Exception as e:
         logger.error(f"[ERROR] 페이지 렌더링 실패: {e}")
