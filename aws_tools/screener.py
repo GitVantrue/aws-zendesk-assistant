@@ -222,7 +222,6 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 cmd,
                 stdout=f,
                 stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL,
                 env=env_vars,
                 timeout=600,
                 cwd='/root/service-screener-v2'
