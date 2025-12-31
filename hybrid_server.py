@@ -169,14 +169,19 @@ class HybridServer:
         except Exception as e:
             print(f"[ERROR] 질문 처리 중 오류: {e}", flush=True)
             try:
-                # 에러 메시지 전송
-                asyncio.run(ws.send_str(json.dumps({
-                    "type": "error",
-                    "message": f"처리 중 오류 발생: {str(e)}",
-                    "session_id": session_id
-                }, ensure_ascii=False)))
-            except:
-                pass
+                # 에러 메시지 전송 (새 루프에서 실행)
+                error_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(error_loop)
+                try:
+                    error_loop.run_until_complete(ws.send_str(json.dumps({
+                        "type": "error",
+                        "message": f"처리 중 오류 발생: {str(e)}",
+                        "session_id": session_id
+                    }, ensure_ascii=False)))
+                finally:
+                    error_loop.close()
+            except Exception as send_error:
+                print(f"[ERROR] 에러 메시지 전송 실패: {send_error}", flush=True)
         finally:
             self.processing_questions.discard(question_key)
     
