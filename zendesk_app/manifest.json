@@ -5,6 +5,7 @@
     "email": "support@example.com",
     "url": "https://example.com"
   },
+  "defaultLocale": "en",
   "private": true,
   "location": {
     "support": {
@@ -28,5 +29,8 @@
       "secure": false,
       "default": "http://localhost:8000"
     }
-  ]
+  ],
+  "translations": {
+    "en": "translations/en.json"
+  }
 }

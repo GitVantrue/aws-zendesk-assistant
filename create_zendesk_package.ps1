@@ -20,6 +20,11 @@ Copy-Item "zendesk_app/assets/iframe.html" "$assetsDir/"
 Copy-Item "zendesk_app/assets/main.js" "$assetsDir/"
 Copy-Item "zendesk_app/assets/logo.svg" "$assetsDir/"
 
+# 번역 파일 복사
+$translationsDir = Join-Path $packageDir "translations"
+New-Item -ItemType Directory -Path $translationsDir -Force | Out-Null
+Copy-Item "zendesk_app/assets/translations/en.json" "$translationsDir/"
+
 Write-Host "📦 ZIP 파일 생성 중..." -ForegroundColor Yellow
 
 # ZIP 파일 생성
