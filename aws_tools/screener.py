@@ -120,6 +120,9 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             env_vars['AWS_ACCESS_KEY_ID'] = credentials['AWS_ACCESS_KEY_ID']
             env_vars['AWS_SECRET_ACCESS_KEY'] = credentials['AWS_SECRET_ACCESS_KEY']
             env_vars['AWS_SESSION_TOKEN'] = credentials['AWS_SESSION_TOKEN']
+            print(f"[DEBUG] 자격증명 설정: ACCESS_KEY={credentials['AWS_ACCESS_KEY_ID'][:20]}..., SESSION_TOKEN 있음", flush=True)
+        else:
+            print(f"[DEBUG] 자격증명 없음 - EC2 IAM 역할 사용", flush=True)
         
         # 리전 설정 (Slack 봇과 동일)
         env_vars['AWS_DEFAULT_REGION'] = 'ap-northeast-2'
@@ -128,7 +131,10 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         env_vars['AWS_EC2_METADATA_DISABLED'] = 'true'
         env_vars['AWS_SDK_LOAD_CONFIG'] = '0'
         
-        print(f"[DEBUG] 자격증명 확인: ACCESS_KEY={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}..., SESSION_TOKEN={'있음' if env_vars.get('AWS_SESSION_TOKEN') else '없음'}", flush=True)
+        print(f"[DEBUG] 환경 변수 설정 완료:", flush=True)
+        print(f"[DEBUG] - AWS_DEFAULT_REGION: {env_vars.get('AWS_DEFAULT_REGION')}", flush=True)
+        print(f"[DEBUG] - AWS_EC2_METADATA_DISABLED: {env_vars.get('AWS_EC2_METADATA_DISABLED')}", flush=True)
+        print(f"[DEBUG] - AWS_SDK_LOAD_CONFIG: {env_vars.get('AWS_SDK_LOAD_CONFIG')}", flush=True)
         
         # ========================================
         # 계정 검증 (Reference 코드와 동일)
@@ -185,11 +191,13 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         print(f"[DEBUG] Service Screener 직접 실행 시작", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_ACCESS_KEY_ID={env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
         print(f"[DEBUG] 환경변수 전달 확인: AWS_EC2_METADATA_DISABLED={env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
+        print(f"[DEBUG] 환경변수 전달 확인: AWS_DEFAULT_REGION={env_vars.get('AWS_DEFAULT_REGION', 'None')}", flush=True)
         
         # Service Screener main.py 실행 (시스템 Python 사용 - Slack bot과 동일)
         cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
+        print(f"[DEBUG] 작업 디렉터리: /root/service-screener-v2", flush=True)
         
         log_file = f'/tmp/screener_{account_id}.log'
         with open(log_file, 'w') as f:
@@ -199,7 +207,8 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
                 stderr=subprocess.STDOUT,
                 env=env_vars,
                 timeout=600,
-                cwd='/root/service-screener-v2'
+                cwd='/root/service-screener-v2',
+                text=True
             )
         
         # 로그 파일 내용 읽기
