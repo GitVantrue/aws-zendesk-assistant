@@ -374,25 +374,30 @@ def send_websocket_message_safe(websocket, session_id, message):
     """
     try:
         import json
+        import asyncio
+        
         ws_message = {
             "type": "message",
             "session_id": session_id,
             "message": message,
             "timestamp": datetime.now().isoformat()
         }
+        
         # 비동기 전송 시도 (실패해도 무시)
-        import asyncio
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                asyncio.run_coroutine_threadsafe(
+                # run_coroutine_threadsafe는 Future를 반환하므로 await 불필요
+                future = asyncio.run_coroutine_threadsafe(
                     websocket.send_str(json.dumps(ws_message, ensure_ascii=False)),
                     loop
                 )
-        except:
-            pass
-    except:
-        pass
+                # Future 결과를 기다리지 않음 (비동기 전송)
+                print(f"[DEBUG] WebSocket 메시지 스케줄됨: {session_id}", flush=True)
+        except Exception as e:
+            print(f"[DEBUG] WebSocket 메시지 전송 스케줄 실패 (무시): {e}", flush=True)
+    except Exception as e:
+        print(f"[DEBUG] WebSocket 메시지 전송 오류 (무시): {e}", flush=True)
 
 
 def send_websocket_message(websocket, session_id, message):
@@ -415,11 +420,12 @@ def send_websocket_message(websocket, session_id, message):
             # 현재 이벤트 루프 확인
             try:
                 loop = asyncio.get_running_loop()
-                # 이미 async 컨텍스트에 있으면 직접 실행 불가 - 콜백으로 스케줄
+                # 이미 async 컨텍스트에 있으면 run_coroutine_threadsafe 사용
                 asyncio.run_coroutine_threadsafe(
                     websocket.send_str(json.dumps(ws_message, ensure_ascii=False)),
                     loop
                 )
+                print(f"[DEBUG] WebSocket 메시지 스케줄됨: {session_id}", flush=True)
             except RuntimeError:
                 # 이벤트 루프가 없으면 새로 생성
                 def send_async():
@@ -430,6 +436,7 @@ def send_websocket_message(websocket, session_id, message):
                             websocket.send_str(json.dumps(ws_message, ensure_ascii=False))
                         )
                         loop.close()
+                        print(f"[DEBUG] WebSocket 메시지 전송 완료: {session_id}", flush=True)
                     except Exception as e:
                         print(f"[ERROR] WebSocket 전송 실패: {e}", flush=True)
                 
@@ -437,8 +444,6 @@ def send_websocket_message(websocket, session_id, message):
                 send_thread = threading.Thread(target=send_async)
                 send_thread.daemon = True
                 send_thread.start()
-            
-            print(f"[DEBUG] WebSocket 메시지 전송: {session_id} - {message[:100]}...", flush=True)
         
     except Exception as e:
         print(f"[ERROR] WebSocket 메시지 전송 실패: {e}", flush=True)
