@@ -78,14 +78,29 @@ class ZendeskAssistantLoader {
     }
   }
 
-  redirectToServer() {
+  async redirectToServer() {
     try {
-      // 티켓 정보를 URL 파라미터로 인코딩
-      const ticketParam = encodeURIComponent(JSON.stringify(this.ticketData));
-      const iframeUrl = `${this.serverUrl}/?ticket=${ticketParam}`;
+      // 1단계: 티켓 정보를 서버에 POST로 전송
+      console.log('[DEBUG] 티켓 정보를 서버에 전송 중...');
+      
+      const response = await fetch(`${this.serverUrl}/api/ticket`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(this.ticketData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`서버 응답 오류: ${response.status}`);
+      }
+      
+      console.log('[DEBUG] 티켓 정보 전송 완료');
+      
+      // 2단계: iframe 로드 (URL은 간단하게)
+      const iframeUrl = `${this.serverUrl}/`;
       
       console.log('[DEBUG] iframe 로드 시작:', iframeUrl);
-      console.log('[DEBUG] 티켓 데이터:', this.ticketData);
       
       // iframe 생성 및 로드
       const iframe = document.createElement('iframe');
@@ -119,7 +134,7 @@ class ZendeskAssistantLoader {
       console.log('[DEBUG] iframe DOM에 추가 완료');
       
     } catch (error) {
-      console.error('[ERROR] iframe 로드 실패:', error);
+      console.error('[ERROR] 서버 연결 실패:', error);
       console.error('[ERROR] 스택:', error.stack);
       this.showError('서버 연결 실패: ' + error.message);
     }

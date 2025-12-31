@@ -53,28 +53,44 @@ class AppState:
 app_state = AppState()
 
 
+@app.post("/api/ticket")
+async def set_ticket(request: Request):
+    """
+    티켓 정보 저장 (POST)
+    
+    Args:
+        request: FastAPI 요청
+    
+    Returns:
+        저장 결과
+    """
+    try:
+        ticket_data = await request.json()
+        app_state.ticket_data = ticket_data
+        logger.info(f"[DEBUG] 티켓 정보 저장: {ticket_data.get('id')}")
+        return {"status": "success", "ticket_id": ticket_data.get('id')}
+    except Exception as e:
+        logger.error(f"[ERROR] 티켓 정보 저장 실패: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request, ticket: str = None):
+async def index(request: Request):
     """
     메인 페이지
     
     Args:
         request: FastAPI 요청
-        ticket: URL 파라미터로 전달된 티켓 정보 (JSON 인코딩)
     
     Returns:
         렌더링된 HTML
     """
     try:
-        # 티켓 정보 파싱
-        ticket_data = None
-        if ticket:
-            try:
-                ticket_data = json.loads(ticket)
-                app_state.ticket_data = ticket_data
-                logger.info(f"[DEBUG] 티켓 정보 수신: {ticket_data.get('id')}")
-            except json.JSONDecodeError:
-                logger.error("[ERROR] 티켓 정보 파싱 실패")
+        # 저장된 티켓 정보 사용
+        ticket_data = app_state.ticket_data
+        
+        if ticket_data:
+            logger.info(f"[DEBUG] 저장된 티켓 정보 사용: {ticket_data.get('id')}")
         
         # 템플릿 렌더링
         try:
