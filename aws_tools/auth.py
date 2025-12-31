@@ -88,10 +88,12 @@ def get_cached_credentials(account_id: str) -> dict:
         dict: 유효한 자격증명 또는 None
     """
     with _cache_lock:
+        log_debug(f"캐시 상태 확인: 계정={account_id}, 캐시 크기={len(_credentials_cache)}, 캐시 키={list(_credentials_cache.keys())}")
+        
         if account_id in _credentials_cache:
             cached = _credentials_cache[account_id]
             if is_credentials_valid(cached):
-                log_debug(f"캐시된 자격증명 사용: {account_id}")
+                log_debug(f"✅ 캐시된 자격증명 사용: {account_id}")
                 # 타임스탐프 제외한 자격증명만 반환
                 return {
                     'AWS_ACCESS_KEY_ID': cached['AWS_ACCESS_KEY_ID'],
@@ -101,7 +103,9 @@ def get_cached_credentials(account_id: str) -> dict:
             else:
                 # 만료된 캐시 삭제
                 del _credentials_cache[account_id]
-                log_debug(f"만료된 자격증명 캐시 삭제: {account_id}")
+                log_debug(f"❌ 만료된 자격증명 캐시 삭제: {account_id}")
+        else:
+            log_debug(f"❌ 캐시 미스: 계정 {account_id}에 대한 캐시 없음")
     
     return None
 
@@ -121,7 +125,7 @@ def cache_credentials(account_id: str, credentials: dict):
             'AWS_SESSION_TOKEN': credentials['AWS_SESSION_TOKEN'],
             'timestamp': datetime.now()
         }
-        log_debug(f"자격증명 캐시 저장: {account_id} (만료: {_CACHE_EXPIRY_MINUTES}분)")
+        log_debug(f"[캐싱 저장] 자격증명 캐시 저장: {account_id} (만료: {_CACHE_EXPIRY_MINUTES}분, 캐시 크기: {len(_credentials_cache)})")
 
 
 def get_crossaccount_session(account_id: str) -> dict:
@@ -135,13 +139,15 @@ def get_crossaccount_session(account_id: str) -> dict:
     Returns:
         dict: AWS 환경 변수 또는 None
     """
+    log_debug(f"[캐싱 시작] 계정 {account_id}에 대한 자격증명 조회")
+    
     # 1. 캐시 확인 (먼저 캐시된 자격증명 사용)
     cached_creds = get_cached_credentials(account_id)
     if cached_creds:
-        log_debug(f"캐시된 자격증명 반환: {account_id}")
+        log_debug(f"[캐싱 성공] 캐시된 자격증명 반환: {account_id}")
         return cached_creds
     
-    log_debug(f"캐시 미스 - 새로운 자격증명 생성: {account_id}")
+    log_debug(f"[캐싱 미스] 새로운 자격증명 생성 필요: {account_id}")
     
     try:
         log_debug(f"계정 {account_id}에 대한 cross-account 세션 생성 시도")
