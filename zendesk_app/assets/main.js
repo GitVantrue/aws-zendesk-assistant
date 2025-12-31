@@ -73,16 +73,33 @@ class ZendeskAssistantLoader {
     try {
       // 티켓 정보를 URL 파라미터로 인코딩
       const ticketParam = encodeURIComponent(JSON.stringify(this.ticketData));
-      const redirectUrl = `${this.serverUrl}/?ticket=${ticketParam}`;
+      const iframeUrl = `${this.serverUrl}/?ticket=${ticketParam}`;
       
-      console.log('[DEBUG] Python 서버로 리다이렉트:', redirectUrl);
+      console.log('[DEBUG] iframe 로드:', iframeUrl);
       
-      // iframe 콘텐츠 로드
-      window.location.href = redirectUrl;
+      // iframe 생성 및 로드
+      const iframe = document.createElement('iframe');
+      iframe.src = iframeUrl;
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.border = 'none';
+      iframe.style.margin = '0';
+      iframe.style.padding = '0';
+      
+      // 기존 콘텐츠 제거
+      document.body.innerHTML = '';
+      document.body.style.margin = '0';
+      document.body.style.padding = '0';
+      document.body.style.overflow = 'hidden';
+      
+      // iframe 추가
+      document.body.appendChild(iframe);
+      
+      console.log('[DEBUG] iframe 로드 완료');
       
     } catch (error) {
-      console.error('[ERROR] 리다이렉트 실패:', error);
-      this.showError('서버 연결 실패');
+      console.error('[ERROR] iframe 로드 실패:', error);
+      this.showError('서버 연결 실패: ' + error.message);
     }
   }
 
