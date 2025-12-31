@@ -16,7 +16,7 @@ import traceback
 def run_service_screener_async(account_id, credentials=None, websocket=None, session_id=None):
     """
     AWS Service Screener 비동기 실행 (Reference 코드 방식)
-    백그라운드 스레드에서 실행하되, 받은 credentials를 그대로 사용
+    이미 스레드 컨텍스트에서 호출되므로, 직접 동기 실행 (추가 스레드 생성 안 함)
     
     Args:
         account_id (str): AWS 계정 ID
@@ -24,57 +24,49 @@ def run_service_screener_async(account_id, credentials=None, websocket=None, ses
         websocket: WebSocket 연결 (진행 상황 전송용)
         session_id (str): 세션 ID
     """
-    def screener_worker():
-        """백그라운드에서 실행되는 Service Screener 작업"""
-        try:
-            print(f"[DEBUG] Service Screener 백그라운드 작업 시작: {account_id}", flush=True)
-            print(f"[DEBUG] 받은 자격증명 확인: {bool(credentials)}", flush=True)
-            
-            # 받은 credentials를 그대로 사용 (이미 유효한 임시 자격증명)
-            # 스레드 내에서 재생성하지 않음 (토큰 만료 위험)
-            result = run_service_screener_sync(account_id, credentials, websocket, session_id)
-            
-            print(f"[DEBUG] Service Screener 실행 결과: success={result.get('success')}", flush=True)
-            
-            if result["success"]:
-                # 성공 시 결과 전송
-                if websocket and session_id:
-                    success_message = f"✅ Service Screener 스캔 완료!\n\n{result['summary']}"
-                    send_websocket_message(websocket, session_id, success_message)
-                    
-                    if result["report_url"]:
-                        report_message = f"📊 Service Screener 상세 보고서:\n{result['report_url']}"
-                        send_websocket_message(websocket, session_id, report_message)
-                    
-                    # WA Summary를 별도 스레드에서 실행 (Reference 코드와 동일)
-                    if result.get("screener_result_dir") and result.get("timestamp"):
-                        print(f"[DEBUG] WA Summary 생성 시작", flush=True)
-                        wa_thread = threading.Thread(
-                            target=generate_wa_summary_async,
-                            args=(account_id, result["screener_result_dir"], result["timestamp"], websocket, session_id)
-                        )
-                        wa_thread.daemon = True
-                        wa_thread.start()
-            else:
-                # 실패 시 오류 전송
-                if websocket and session_id:
-                    error_message = f"❌ Service Screener 실행 실패:\n{result['error']}"
-                    send_websocket_message(websocket, session_id, error_message)
-                    
-        except Exception as e:
-            print(f"[ERROR] Service Screener 백그라운드 작업 중 오류: {str(e)}", flush=True)
-            traceback.print_exc()
+    try:
+        print(f"[DEBUG] Service Screener 실행 시작: {account_id}", flush=True)
+        print(f"[DEBUG] 받은 자격증명 확인: {bool(credentials)}", flush=True)
+        
+        # 받은 credentials를 그대로 사용 (이미 유효한 임시 자격증명)
+        # 스레드 내에서 재생성하지 않음 (토큰 만료 위험)
+        result = run_service_screener_sync(account_id, credentials, websocket, session_id)
+        
+        print(f"[DEBUG] Service Screener 실행 결과: success={result.get('success')}", flush=True)
+        
+        if result["success"]:
+            # 성공 시 결과 전송
             if websocket and session_id:
-                error_message = f"❌ Service Screener 실행 중 오류가 발생했습니다: {str(e)}"
+                success_message = f"✅ Service Screener 스캔 완료!\n\n{result['summary']}"
+                send_websocket_message(websocket, session_id, success_message)
+                
+                if result["report_url"]:
+                    report_message = f"📊 Service Screener 상세 보고서:\n{result['report_url']}"
+                    send_websocket_message(websocket, session_id, report_message)
+                
+                # WA Summary를 별도 스레드에서 실행 (Reference 코드와 동일)
+                if result.get("screener_result_dir") and result.get("timestamp"):
+                    print(f"[DEBUG] WA Summary 생성 시작", flush=True)
+                    wa_thread = threading.Thread(
+                        target=generate_wa_summary_async,
+                        args=(account_id, result["screener_result_dir"], result["timestamp"], websocket, session_id)
+                    )
+                    wa_thread.daemon = True
+                    wa_thread.start()
+        else:
+            # 실패 시 오류 전송
+            if websocket and session_id:
+                error_message = f"❌ Service Screener 실행 실패:\n{result['error']}"
                 send_websocket_message(websocket, session_id, error_message)
+                
+    except Exception as e:
+        print(f"[ERROR] Service Screener 실행 중 오류: {str(e)}", flush=True)
+        traceback.print_exc()
+        if websocket and session_id:
+            error_message = f"❌ Service Screener 실행 중 오류가 발생했습니다: {str(e)}"
+            send_websocket_message(websocket, session_id, error_message)
     
-    # 백그라운드 스레드에서 실행
-    print(f"[DEBUG] Service Screener 백그라운드 스레드 시작: {account_id}", flush=True)
-    thread = threading.Thread(target=screener_worker)
-    thread.daemon = True
-    thread.start()
-    
-    # 즉시 반환 (비동기)
+    # 즉시 반환 (비동기 응답)
     return {
         "success": True,
         "message": "Service Screener 스캔을 시작했습니다. 완료되면 결과를 전송해드리겠습니다.",
@@ -356,7 +348,7 @@ def generate_wa_summary_async(account_id, screener_result_dir, timestamp, websoc
 
 def send_websocket_message(websocket, session_id, message):
     """
-    WebSocket으로 메시지 전송
+    WebSocket으로 메시지 전송 (스레드 안전)
     """
     try:
         import asyncio
@@ -371,21 +363,31 @@ def send_websocket_message(websocket, session_id, message):
                 "timestamp": datetime.now().isoformat()
             }
             
-            # 비동기 전송을 위한 코루틴 생성 및 실행
-            def send_async():
-                try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    loop.run_until_complete(websocket.send_str(json.dumps(ws_message)))
-                    loop.close()
-                except Exception as e:
-                    print(f"[ERROR] WebSocket 전송 실패: {e}", flush=True)
-            
-            # 별도 스레드에서 실행 (블로킹 방지)
-            import threading
-            thread = threading.Thread(target=send_async)
-            thread.daemon = True
-            thread.start()
+            # 현재 이벤트 루프 확인
+            try:
+                loop = asyncio.get_running_loop()
+                # 이미 async 컨텍스트에 있으면 직접 실행 불가 - 콜백으로 스케줄
+                asyncio.run_coroutine_threadsafe(
+                    websocket.send_str(json.dumps(ws_message, ensure_ascii=False)),
+                    loop
+                )
+            except RuntimeError:
+                # 이벤트 루프가 없으면 새로 생성
+                def send_async():
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        loop.run_until_complete(
+                            websocket.send_str(json.dumps(ws_message, ensure_ascii=False))
+                        )
+                        loop.close()
+                    except Exception as e:
+                        print(f"[ERROR] WebSocket 전송 실패: {e}", flush=True)
+                
+                # 별도 스레드에서 실행 (블로킹 방지)
+                send_thread = threading.Thread(target=send_async)
+                send_thread.daemon = True
+                send_thread.start()
             
             print(f"[DEBUG] WebSocket 메시지 전송: {session_id} - {message[:100]}...", flush=True)
         
