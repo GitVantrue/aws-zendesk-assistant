@@ -16,10 +16,18 @@ class ZendeskAssistantLoader {
       
       // Zendesk 클라이언트 초기화
       this.client = ZAFClient.init();
+      console.log('[DEBUG] ZAF 클라이언트 초기화 완료');
       
       // 앱 설정 가져오기
-      const metadata = await this.client.metadata();
-      this.serverUrl = metadata.settings.serverUrl || 'http://localhost:8000';
+      let metadata;
+      try {
+        metadata = await this.client.metadata();
+        console.log('[DEBUG] 메타데이터:', metadata);
+        this.serverUrl = metadata.settings.serverUrl || 'http://localhost:8000';
+      } catch (metadataError) {
+        console.warn('[WARN] 메타데이터 조회 실패, 기본값 사용:', metadataError);
+        this.serverUrl = 'http://localhost:8000';
+      }
       
       console.log('[DEBUG] 서버 URL:', this.serverUrl);
       
@@ -31,6 +39,7 @@ class ZendeskAssistantLoader {
       
     } catch (error) {
       console.error('[ERROR] 초기화 실패:', error);
+      console.error('[ERROR] 스택:', error.stack);
       this.showError(error.message);
     }
   }
@@ -75,16 +84,28 @@ class ZendeskAssistantLoader {
       const ticketParam = encodeURIComponent(JSON.stringify(this.ticketData));
       const iframeUrl = `${this.serverUrl}/?ticket=${ticketParam}`;
       
-      console.log('[DEBUG] iframe 로드:', iframeUrl);
+      console.log('[DEBUG] iframe 로드 시작:', iframeUrl);
+      console.log('[DEBUG] 티켓 데이터:', this.ticketData);
       
       // iframe 생성 및 로드
       const iframe = document.createElement('iframe');
+      iframe.id = 'aws-assistant-iframe';
       iframe.src = iframeUrl;
       iframe.style.width = '100%';
       iframe.style.height = '100%';
       iframe.style.border = 'none';
       iframe.style.margin = '0';
       iframe.style.padding = '0';
+      
+      // iframe 로드 이벤트 리스너
+      iframe.onload = () => {
+        console.log('[DEBUG] iframe 로드 완료');
+      };
+      
+      iframe.onerror = (error) => {
+        console.error('[ERROR] iframe 로드 실패:', error);
+        this.showError('iframe 로드 실패: ' + error);
+      };
       
       // 기존 콘텐츠 제거
       document.body.innerHTML = '';
@@ -95,10 +116,11 @@ class ZendeskAssistantLoader {
       // iframe 추가
       document.body.appendChild(iframe);
       
-      console.log('[DEBUG] iframe 로드 완료');
+      console.log('[DEBUG] iframe DOM에 추가 완료');
       
     } catch (error) {
       console.error('[ERROR] iframe 로드 실패:', error);
+      console.error('[ERROR] 스택:', error.stack);
       this.showError('서버 연결 실패: ' + error.message);
     }
   }

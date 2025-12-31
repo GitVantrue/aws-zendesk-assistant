@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
 # 현재 디렉토리를 Python 경로에 추가
@@ -26,6 +27,15 @@ logger = logging.getLogger(__name__)
 
 # FastAPI 앱 초기화
 app = FastAPI(title="AWS Zendesk Assistant")
+
+# CORS 미들웨어 추가 (Zendesk 앱 호환성)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Zendesk 앱에서의 요청 허용
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 템플릿 설정
 templates = Jinja2Templates(directory=TEMPLATE_DIR)

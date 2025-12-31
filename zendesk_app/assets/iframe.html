@@ -22,6 +22,7 @@
       align-items: center;
       height: 100vh;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      flex-direction: column;
     }
     
     .spinner {
@@ -31,6 +32,7 @@
       border-top: 4px solid white;
       border-radius: 50%;
       animation: spin 1s linear infinite;
+      margin-bottom: 20px;
     }
     
     @keyframes spin {
@@ -39,11 +41,29 @@
     }
     
     .loading-text {
-      position: absolute;
-      bottom: 30px;
       color: white;
       font-size: 14px;
       text-align: center;
+    }
+    
+    .debug-info {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #0f0;
+      font-family: monospace;
+      font-size: 10px;
+      padding: 10px;
+      border-radius: 4px;
+      max-width: 300px;
+      max-height: 150px;
+      overflow-y: auto;
+      display: none;
+    }
+    
+    .debug-info.show {
+      display: block;
     }
   </style>
 </head>
@@ -52,6 +72,43 @@
     <div class="spinner"></div>
     <div class="loading-text">AWS Assistant 로딩 중...</div>
   </div>
+  
+  <div class="debug-info" id="debugInfo"></div>
+
+  <script>
+    // 디버그 정보 표시
+    const debugInfo = document.getElementById('debugInfo');
+    const logs = [];
+    
+    function addDebugLog(message) {
+      logs.push(new Date().toLocaleTimeString() + ': ' + message);
+      if (logs.length > 20) logs.shift();
+      debugInfo.textContent = logs.join('\n');
+      debugInfo.classList.add('show');
+    }
+    
+    // 콘솔 로그 가로채기
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalWarn = console.warn;
+    
+    console.log = function(...args) {
+      originalLog.apply(console, args);
+      addDebugLog('[LOG] ' + args.join(' '));
+    };
+    
+    console.error = function(...args) {
+      originalError.apply(console, args);
+      addDebugLog('[ERROR] ' + args.join(' '));
+    };
+    
+    console.warn = function(...args) {
+      originalWarn.apply(console, args);
+      addDebugLog('[WARN] ' + args.join(' '));
+    };
+    
+    addDebugLog('iframe.html 로드됨');
+  </script>
 
   <script src="https://static.zdassets.com/zendesk_app_framework_sdk/2.0/zaf_sdk.min.js"></script>
   <script src="main.js"></script>
