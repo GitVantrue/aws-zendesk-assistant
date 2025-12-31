@@ -5,7 +5,6 @@
     "email": "support@example.com",
     "url": "https://example.com"
   },
-  "defaultLocale": "en",
   "private": true,
   "location": {
     "support": {
