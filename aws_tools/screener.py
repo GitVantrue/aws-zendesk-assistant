@@ -390,13 +390,18 @@ def send_websocket_message_safe(websocket, session_id, message):
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                # run_coroutine_threadsafe는 Future를 반환하므로 await 불필요
+                # run_coroutine_threadsafe는 Future를 반환
+                # Future를 기다려야 coroutine이 완료됨
                 future = asyncio.run_coroutine_threadsafe(
                     websocket.send_str(json.dumps(ws_message, ensure_ascii=False)),
                     loop
                 )
-                # Future 결과를 기다리지 않음 (비동기 전송)
-                print(f"[DEBUG] WebSocket 메시지 스케줄됨: {session_id}", flush=True)
+                # 타임아웃 설정하여 Future 완료 대기 (최대 1초)
+                try:
+                    future.result(timeout=1.0)
+                    print(f"[DEBUG] WebSocket 메시지 전송 완료: {session_id}", flush=True)
+                except Exception as future_error:
+                    print(f"[DEBUG] WebSocket 메시지 전송 실패 (무시): {future_error}", flush=True)
         except Exception as e:
             print(f"[DEBUG] WebSocket 메시지 전송 스케줄 실패 (무시): {e}", flush=True)
     except Exception as e:
