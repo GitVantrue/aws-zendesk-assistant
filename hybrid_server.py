@@ -216,7 +216,7 @@ class HybridServer:
         print(f"[DEBUG] Hybrid 서버 시작: {self.host}:{self.port}", flush=True)
         
         # Heartbeat 태스크 시작
-        asyncio.create_task(self.send_heartbeat())
+        heartbeat_task = asyncio.create_task(self.send_heartbeat())
         
         # HTTP 서버 시작
         runner = web.AppRunner(self.app)
@@ -226,8 +226,33 @@ class HybridServer:
         
         print(f"[DEBUG] ✅ Hybrid 서버 실행 중: http://{self.host}:{self.port}", flush=True)
         
-        # 무한 대기
-        await asyncio.Event().wait()
+        try:
+            # 무한 대기
+            await asyncio.Event().wait()
+        except KeyboardInterrupt:
+            print(f"[INFO] 종료 시그널 수신, 서버를 중지합니다...", flush=True)
+        finally:
+            # Graceful shutdown
+            print(f"[DEBUG] 서버 정리 중...", flush=True)
+            
+            # 모든 WebSocket 연결 종료
+            for client_id, ws in list(self.connected_clients.items()):
+                try:
+                    await ws.close()
+                    print(f"[DEBUG] WebSocket 연결 종료: {client_id}", flush=True)
+                except Exception as e:
+                    print(f"[DEBUG] WebSocket 종료 실패: {client_id} - {e}", flush=True)
+            
+            # Heartbeat 태스크 취소
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                print(f"[DEBUG] Heartbeat 태스크 취소됨", flush=True)
+            
+            # 서버 정리
+            await runner.cleanup()
+            print(f"[DEBUG] 서버 정리 완료", flush=True)
 
 
 async def main():
