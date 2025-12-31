@@ -16,10 +16,11 @@ import traceback
 def run_service_screener_async(account_id, credentials=None, websocket=None, session_id=None):
     """
     AWS Service Screener 비동기 실행 (Reference 코드 방식)
+    백그라운드 스레드에서 실행하되, 받은 credentials를 그대로 사용
     
     Args:
         account_id (str): AWS 계정 ID
-        credentials (dict): AWS 자격증명
+        credentials (dict): AWS 자격증명 (이미 유효한 임시 자격증명)
         websocket: WebSocket 연결 (진행 상황 전송용)
         session_id (str): 세션 ID
     """
@@ -27,8 +28,10 @@ def run_service_screener_async(account_id, credentials=None, websocket=None, ses
         """백그라운드에서 실행되는 Service Screener 작업"""
         try:
             print(f"[DEBUG] Service Screener 백그라운드 작업 시작: {account_id}", flush=True)
+            print(f"[DEBUG] 받은 자격증명 확인: {bool(credentials)}", flush=True)
             
-            # 실제 Service Screener 실행 (동기 방식)
+            # 받은 credentials를 그대로 사용 (이미 유효한 임시 자격증명)
+            # 스레드 내에서 재생성하지 않음 (토큰 만료 위험)
             result = run_service_screener_sync(account_id, credentials, websocket, session_id)
             
             print(f"[DEBUG] Service Screener 실행 결과: success={result.get('success')}", flush=True)
