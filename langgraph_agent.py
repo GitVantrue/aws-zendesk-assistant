@@ -126,7 +126,7 @@ def analyze_question_type(question: str) -> tuple[str, Optional[str]]:
         return 'screener', None
 
     # 우선순위 2: 월간 보고서 생성 관련 (가장 구체적)
-    report_keywords = ['보고서', 'report', '리포트', '월간보고서', '월간 보고서', '보안보고서', '감사보고서']
+    report_keywords = ['보고서', 'report', '리포트', '월간보고서', '월간 보고서', '월간', '보안보고서', '감사보고서', '월별']
     if any(keyword in question_lower for keyword in report_keywords):
         return 'report', 'reference_contexts/security_report.md'
 

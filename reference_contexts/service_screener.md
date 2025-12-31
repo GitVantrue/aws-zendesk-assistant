@@ -231,6 +231,14 @@ python3 /root/service-screener-v2/Screener.py
 - 리소스 변경 작업 없음
 - 감사 로그 기록
 
+### 필수 권한
+Service Screener 실행에 필요한 최소 권한:
+- EC2, S3, IAM, RDS, Lambda 등 주요 서비스의 Describe/List 권한
+- CloudFormation 스택 조회 권한 (선택사항 - 스택 분석 시에만 필요)
+
+**중요**: CloudFormation 권한이 없어도 Service Screener는 정상 작동합니다. 
+CloudFormation 권한이 없으면 해당 부분만 스킵되고 다른 서비스는 정상 스캔됩니다.
+
 ### 데이터 보호
 - 민감 정보 마스킹
 - 보고서 파일 임시 저장 (`/tmp`)
