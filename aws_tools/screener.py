@@ -38,11 +38,18 @@ def run_service_screener_async(account_id, credentials=None, websocket=None, ses
             # 성공 시 결과 전송
             if websocket and session_id:
                 success_message = f"✅ Service Screener 스캔 완료!\n\n{result['summary']}"
-                send_websocket_message(websocket, session_id, success_message)
+                # WebSocket 메시지 전송 (비동기 처리 - 에러 무시)
+                try:
+                    send_websocket_message_safe(websocket, session_id, success_message)
+                except:
+                    pass
                 
                 if result["report_url"]:
                     report_message = f"📊 Service Screener 상세 보고서:\n{result['report_url']}"
-                    send_websocket_message(websocket, session_id, report_message)
+                    try:
+                        send_websocket_message_safe(websocket, session_id, report_message)
+                    except:
+                        pass
                 
                 # WA Summary를 별도 스레드에서 실행 (Reference 코드와 동일)
                 if result.get("screener_result_dir") and result.get("timestamp"):
@@ -57,14 +64,20 @@ def run_service_screener_async(account_id, credentials=None, websocket=None, ses
             # 실패 시 오류 전송
             if websocket and session_id:
                 error_message = f"❌ Service Screener 실행 실패:\n{result['error']}"
-                send_websocket_message(websocket, session_id, error_message)
+                try:
+                    send_websocket_message_safe(websocket, session_id, error_message)
+                except:
+                    pass
                 
     except Exception as e:
         print(f"[ERROR] Service Screener 실행 중 오류: {str(e)}", flush=True)
         traceback.print_exc()
         if websocket and session_id:
             error_message = f"❌ Service Screener 실행 중 오류가 발생했습니다: {str(e)}"
-            send_websocket_message(websocket, session_id, error_message)
+            try:
+                send_websocket_message_safe(websocket, session_id, error_message)
+            except:
+                pass
     
     # 즉시 반환 (비동기 응답)
     return {
@@ -192,7 +205,10 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         
         # 진행 상황 업데이트
         if websocket and session_id:
-            send_websocket_message(websocket, session_id, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...\n📍 스캔 리전: ap-northeast-2, us-east-1\n⏱️ 약 2-5분 소요될 수 있습니다.")
+            try:
+                send_websocket_message_safe(websocket, session_id, f"🔍 계정 {account_id} AWS Service Screener 스캔을 시작합니다...\n📍 스캔 리전: ap-northeast-2, us-east-1\n⏱️ 약 2-5분 소요될 수 있습니다.")
+            except:
+                pass
         
         # ========================================
         # Service Screener 직접 실행 (Slack bot과 동일)
@@ -334,7 +350,10 @@ def generate_wa_summary_async(account_id, screener_result_dir, timestamp, websoc
         print(f"[DEBUG] Well-Architected 통합 보고서 생성 시작", flush=True)
         
         if websocket and session_id:
-            send_websocket_message(websocket, session_id, "📋 Well-Architected 통합 분석 보고서를 생성하고 있습니다...")
+            try:
+                send_websocket_message_safe(websocket, session_id, "📋 Well-Architected 통합 분석 보고서를 생성하고 있습니다...")
+            except:
+                pass
         
         # WA 보고서 생성 로직 (향후 구현)
         print(f"[DEBUG] WA 보고서 생성 완료", flush=True)
@@ -342,7 +361,38 @@ def generate_wa_summary_async(account_id, screener_result_dir, timestamp, websoc
     except Exception as e:
         print(f"[ERROR] WA 보고서 비동기 생성 중 오류: {str(e)}", flush=True)
         if websocket and session_id:
-            send_websocket_message(websocket, session_id, f"❌ Well-Architected 보고서 생성 중 오류: {str(e)}")
+            try:
+                send_websocket_message_safe(websocket, session_id, f"❌ Well-Architected 보고서 생성 중 오류: {str(e)}")
+            except:
+                pass
+
+
+def send_websocket_message_safe(websocket, session_id, message):
+    """
+    WebSocket 메시지 전송 (안전한 버전 - 에러 무시)
+    스레드 컨텍스트에서 호출되므로 간단하게 처리
+    """
+    try:
+        import json
+        ws_message = {
+            "type": "message",
+            "session_id": session_id,
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+        # 비동기 전송 시도 (실패해도 무시)
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.run_coroutine_threadsafe(
+                    websocket.send_str(json.dumps(ws_message, ensure_ascii=False)),
+                    loop
+                )
+        except:
+            pass
+    except:
+        pass
 
 
 def send_websocket_message(websocket, session_id, message):
