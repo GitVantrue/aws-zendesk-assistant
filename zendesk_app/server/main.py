@@ -4,16 +4,22 @@ AWS Zendesk Assistant - FastAPI 서버
 """
 import json
 import logging
+import os
+import sys
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
-import config
+
+# 현재 디렉토리를 Python 경로에 추가
+sys.path.insert(0, os.path.dirname(__file__))
+
+from config import HOST, PORT, LOG_LEVEL, TEMPLATE_DIR, STATIC_DIR, WEBSOCKET_URL
 
 # 로깅 설정
 logging.basicConfig(
-    level=config.LOG_LEVEL,
+    level=LOG_LEVEL,
     format='[%(levelname)s] %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -22,17 +28,17 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="AWS Zendesk Assistant")
 
 # 템플릿 설정
-templates = Jinja2Templates(directory=config.TEMPLATE_DIR)
+templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 # 정적 파일 마운트
-app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # 전역 상태
 class AppState:
     """앱 상태 관리"""
     def __init__(self):
         self.ticket_data = None
-        self.websocket_url = config.WEBSOCKET_URL
+        self.websocket_url = WEBSOCKET_URL
 
 app_state = AppState()
 
@@ -92,10 +98,10 @@ async def get_ticket():
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info(f"[DEBUG] FastAPI 서버 시작: {config.HOST}:{config.PORT}")
+    logger.info(f"[DEBUG] FastAPI 서버 시작: {HOST}:{PORT}")
     uvicorn.run(
         app,
-        host=config.HOST,
-        port=config.PORT,
-        log_level=config.LOG_LEVEL.lower()
+        host=HOST,
+        port=PORT,
+        log_level=LOG_LEVEL.lower()
     )
