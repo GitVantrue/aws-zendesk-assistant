@@ -1,10 +1,18 @@
 """
 Cross-account Authentication
 Reference 코드의 인증 로직 재사용
+자격증명 캐싱 추가 (WebSocket 환경에서 매번 새로운 자격증명 생성 문제 해결)
 """
 import re
 import boto3
 from utils.logging_config import log_debug, log_error
+from datetime import datetime, timedelta
+import threading
+
+# 자격증명 캐시 (계정별 저장)
+_credentials_cache = {}
+_cache_lock = threading.Lock()
+_CACHE_EXPIRY_MINUTES = 50  # 임시 자격증명 유효 시간 (기본 1시간, 50분으로 설정)
 
 
 def extract_account_id(text: str) -> str:
@@ -45,9 +53,80 @@ def get_crossaccount_credentials():
         return None, None
 
 
+def is_credentials_valid(credentials: dict) -> bool:
+    """
+    캐시된 자격증명이 유효한지 확인
+    
+    Args:
+        credentials: 캐시된 자격증명 딕셔너리
+        
+    Returns:
+        bool: 유효 여부
+    """
+    if not credentials or 'timestamp' not in credentials:
+        return False
+    
+    # 캐시 만료 시간 확인
+    cache_time = credentials['timestamp']
+    expiry_time = cache_time + timedelta(minutes=_CACHE_EXPIRY_MINUTES)
+    
+    if datetime.now() > expiry_time:
+        log_debug(f"자격증명 캐시 만료")
+        return False
+    
+    return True
+
+
+def get_cached_credentials(account_id: str) -> dict:
+    """
+    캐시에서 자격증명 가져오기
+    
+    Args:
+        account_id: AWS 계정 ID
+        
+    Returns:
+        dict: 유효한 자격증명 또는 None
+    """
+    with _cache_lock:
+        if account_id in _credentials_cache:
+            cached = _credentials_cache[account_id]
+            if is_credentials_valid(cached):
+                log_debug(f"캐시된 자격증명 사용: {account_id}")
+                # 타임스탐프 제외한 자격증명만 반환
+                return {
+                    'AWS_ACCESS_KEY_ID': cached['AWS_ACCESS_KEY_ID'],
+                    'AWS_SECRET_ACCESS_KEY': cached['AWS_SECRET_ACCESS_KEY'],
+                    'AWS_SESSION_TOKEN': cached['AWS_SESSION_TOKEN']
+                }
+            else:
+                # 만료된 캐시 삭제
+                del _credentials_cache[account_id]
+                log_debug(f"만료된 자격증명 캐시 삭제: {account_id}")
+    
+    return None
+
+
+def cache_credentials(account_id: str, credentials: dict):
+    """
+    자격증명을 캐시에 저장
+    
+    Args:
+        account_id: AWS 계정 ID
+        credentials: 저장할 자격증명
+    """
+    with _cache_lock:
+        _credentials_cache[account_id] = {
+            'AWS_ACCESS_KEY_ID': credentials['AWS_ACCESS_KEY_ID'],
+            'AWS_SECRET_ACCESS_KEY': credentials['AWS_SECRET_ACCESS_KEY'],
+            'AWS_SESSION_TOKEN': credentials['AWS_SESSION_TOKEN'],
+            'timestamp': datetime.now()
+        }
+        log_debug(f"자격증명 캐시 저장: {account_id} (만료: {_CACHE_EXPIRY_MINUTES}분)")
+
+
 def get_crossaccount_session(account_id: str) -> dict:
     """
-    Cross-account 세션 생성
+    Cross-account 세션 생성 (캐싱 포함)
     Reference 코드와 동일한 로직 (User 방식 → Role 방식 폴백)
     
     Args:
@@ -56,6 +135,14 @@ def get_crossaccount_session(account_id: str) -> dict:
     Returns:
         dict: AWS 환경 변수 또는 None
     """
+    # 1. 캐시 확인 (먼저 캐시된 자격증명 사용)
+    cached_creds = get_cached_credentials(account_id)
+    if cached_creds:
+        log_debug(f"캐시된 자격증명 반환: {account_id}")
+        return cached_creds
+    
+    log_debug(f"캐시 미스 - 새로운 자격증명 생성: {account_id}")
+    
     try:
         log_debug(f"계정 {account_id}에 대한 cross-account 세션 생성 시도")
         access_key, secret_key = get_crossaccount_credentials()
@@ -74,11 +161,16 @@ def get_crossaccount_session(account_id: str) -> dict:
             )
             credentials = assumed_role['Credentials']
             log_debug("Cross-account 세션 생성 성공")
-            return {
+            
+            # 생성된 자격증명 캐시에 저장
+            creds_dict = {
                 'AWS_ACCESS_KEY_ID': credentials['AccessKeyId'],
                 'AWS_SECRET_ACCESS_KEY': credentials['SecretAccessKey'],
                 'AWS_SESSION_TOKEN': credentials['SessionToken']
             }
+            cache_credentials(account_id, creds_dict)
+            
+            return creds_dict
         else:
             log_error("Cross-account 자격증명을 가져올 수 없음")
     except Exception as user_error:
@@ -115,11 +207,16 @@ def get_crossaccount_session(account_id: str) -> dict:
             )
             credentials = assumed_role['Credentials']
             log_debug("Role 방식 Cross-account 세션 생성 성공")
-            return {
+            
+            # 생성된 자격증명 캐시에 저장
+            creds_dict = {
                 'AWS_ACCESS_KEY_ID': credentials['AccessKeyId'],
                 'AWS_SECRET_ACCESS_KEY': credentials['SecretAccessKey'],
                 'AWS_SESSION_TOKEN': credentials['SessionToken']
             }
+            cache_credentials(account_id, creds_dict)
+            
+            return creds_dict
         except Exception as role_error:
             log_error(f"Role 방식도 실패: {role_error}")
 
