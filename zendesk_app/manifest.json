@@ -29,8 +29,5 @@
       "secure": false,
       "default": "http://localhost:8000"
     }
-  ],
-  "translations": {
-    "en": "assets/translations/en.json"
-  }
+  ]
 }
