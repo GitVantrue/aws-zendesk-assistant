@@ -207,6 +207,13 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
         cmd = ['python3', '/root/service-screener-v2/main.py', '--regions', 'ap-northeast-2,us-east-1']
         
         print(f"[DEBUG] Service Screener 직접 실행: {' '.join(cmd)}", flush=True)
+        print(f"[DEBUG] Working directory: /root/service-screener-v2", flush=True)
+        print(f"[DEBUG] 환경 변수 최종 확인:", flush=True)
+        print(f"[DEBUG]   - AWS_ACCESS_KEY_ID: {env_vars.get('AWS_ACCESS_KEY_ID', 'None')[:20]}...", flush=True)
+        print(f"[DEBUG]   - AWS_SECRET_ACCESS_KEY: {'설정됨' if env_vars.get('AWS_SECRET_ACCESS_KEY') else '없음'}", flush=True)
+        print(f"[DEBUG]   - AWS_SESSION_TOKEN: {'설정됨' if env_vars.get('AWS_SESSION_TOKEN') else '없음'}", flush=True)
+        print(f"[DEBUG]   - AWS_DEFAULT_REGION: {env_vars.get('AWS_DEFAULT_REGION', 'None')}", flush=True)
+        print(f"[DEBUG]   - AWS_EC2_METADATA_DISABLED: {env_vars.get('AWS_EC2_METADATA_DISABLED', 'None')}", flush=True)
         
         log_file = f'/tmp/screener_{account_id}.log'
         with open(log_file, 'w') as f:
