@@ -1,12 +1,11 @@
 """
-AWS Zendesk Assistant - WebSocket Server + FastAPI Server
-메인 진입점
+AWS Zendesk Assistant - WebSocket Server
+메인 진입점 (WebSocket만 실행)
+FastAPI는 별도 프로세스로 실행: python3 fastapi_server.py
 """
 import asyncio
 import signal
 import sys
-import threading
-import time
 from hybrid_server import HybridServer
 from utils.logging_config import setup_logging, log_info, log_error
 
@@ -14,25 +13,6 @@ from utils.logging_config import setup_logging, log_info, log_error
 # 전역 변수로 서버 참조 유지
 _server = None
 _main_task = None
-
-
-def start_fastapi_server():
-    """FastAPI 서버를 별도 스레드에서 실행"""
-    try:
-        import uvicorn
-        log_info("FastAPI 서버 시작 중...")
-        
-        # uvicorn 직접 실행 (간단한 방식)
-        uvicorn.run(
-            "zendesk_app.server.main:app",
-            host="0.0.0.0",
-            port=8000,
-            log_level="info",
-            access_log=False,
-            server_header=False
-        )
-    except Exception as e:
-        log_error(f"FastAPI 서버 시작 실패: {e}")
 
 
 def signal_handler(signum, frame):
@@ -50,13 +30,7 @@ async def main():
     # 로깅 설정
     logger = setup_logging("DEBUG")
     
-    log_info("AWS Zendesk Assistant 시작")
-    
-    # FastAPI 서버를 별도 스레드에서 시작 (non-daemon)
-    fastapi_thread = threading.Thread(target=start_fastapi_server, daemon=False)
-    fastapi_thread.start()
-    time.sleep(2)  # FastAPI 서버 시작 대기
-    log_info("✅ FastAPI 서버 시작됨: http://0.0.0.0:8000")
+    log_info("AWS Zendesk Assistant WebSocket 서버 시작")
     
     # Hybrid 서버 생성 (HTTP + WebSocket)
     _server = HybridServer(host="0.0.0.0", port=8765)
@@ -85,4 +59,4 @@ if __name__ == "__main__":
         log_error(f"예상치 못한 오류: {e}")
         sys.exit(1)
     finally:
-        log_info("AWS Zendesk Assistant 종료")
+        log_info("AWS Zendesk Assistant WebSocket 서버 종료")

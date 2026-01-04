@@ -18,18 +18,43 @@ class ZendeskAssistantLoader {
       this.client = ZAFClient.init();
       console.log('[DEBUG] ZAF 클라이언트 초기화 완료');
       
-      // 앱 설정 가져오기
+      // 서버 URL 결정 (우선순위)
+      // 1. 메타데이터에서 가져오기
+      // 2. 환경 변수 (window.ZENDESK_SERVER_URL)
+      // 3. 현재 호스트 기반 (EC2 ALB 호환)
+      // 4. 기본값
+      
       let metadata;
       try {
         metadata = await this.client.metadata();
         console.log('[DEBUG] 메타데이터:', metadata);
-        this.serverUrl = metadata.settings.serverUrl || 'http://localhost:8000';
+        this.serverUrl = metadata.settings.serverUrl;
       } catch (metadataError) {
-        console.warn('[WARN] 메타데이터 조회 실패, 기본값 사용:', metadataError);
-        this.serverUrl = 'http://localhost:8000';
+        console.warn('[WARN] 메타데이터 조회 실패:', metadataError);
       }
       
-      console.log('[DEBUG] 서버 URL:', this.serverUrl);
+      // 메타데이터에서 못 가져왔으면 다른 방법 시도
+      if (!this.serverUrl) {
+        // 환경 변수 확인
+        if (typeof window.ZENDESK_SERVER_URL !== 'undefined') {
+          this.serverUrl = window.ZENDESK_SERVER_URL;
+          console.log('[DEBUG] 환경 변수에서 서버 URL 가져옴:', this.serverUrl);
+        } else {
+          // 현재 호스트 기반으로 서버 URL 구성 (EC2 ALB 호환)
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          this.serverUrl = `${protocol}//${host}`;
+          console.log('[DEBUG] 현재 호스트 기반 서버 URL:', this.serverUrl);
+        }
+      }
+      
+      // 최후의 기본값
+      if (!this.serverUrl) {
+        this.serverUrl = 'http://localhost:8000';
+        console.warn('[WARN] 기본값 사용:', this.serverUrl);
+      }
+      
+      console.log('[DEBUG] 최종 서버 URL:', this.serverUrl);
       
       // 티켓 정보 수집
       await this.loadTicketData();

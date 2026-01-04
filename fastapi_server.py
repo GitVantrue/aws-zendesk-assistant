@@ -1,26 +1,22 @@
 """
-AWS Zendesk Assistant - FastAPI 서버
-역할: UI 렌더링 + WebSocket 통신 + 티켓 정보 관리
+FastAPI 서버 (독립 실행)
+역할: UI 렌더링 + 티켓 정보 관리
 """
-import json
 import logging
 import os
 import sys
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from pathlib import Path
-
-# 현재 디렉토리를 Python 경로에 추가
-sys.path.insert(0, os.path.dirname(__file__))
-
-from config import HOST, PORT, LOG_LEVEL, TEMPLATE_DIR, STATIC_DIR, WEBSOCKET_URL
+import uvicorn
 
 # 로깅 설정
 logging.basicConfig(
-    level=LOG_LEVEL,
+    level=logging.INFO,
     format='[%(levelname)s] %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -28,42 +24,42 @@ logger = logging.getLogger(__name__)
 # FastAPI 앱 초기화
 app = FastAPI(title="AWS Zendesk Assistant")
 
-# CORS 미들웨어 추가 (Zendesk 앱 호환성)
+# CORS 미들웨어 추가
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Zendesk 앱에서의 요청 허용
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
+# 경로 설정
+BASE_DIR = Path(__file__).parent
+TEMPLATE_DIR = BASE_DIR / "zendesk_app" / "server" / "templates"
+STATIC_DIR = BASE_DIR / "zendesk_app" / "server" / "static"
+
 # 템플릿 설정
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
+templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
 # 정적 파일 마운트
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # 전역 상태
 class AppState:
     """앱 상태 관리"""
     def __init__(self):
         self.ticket_data = None
-        self.websocket_url = WEBSOCKET_URL
+        self.websocket_url = "ws://localhost:8765"
 
 app_state = AppState()
 
 
 @app.post("/api/ticket")
 async def set_ticket(request: Request):
-    """
-    티켓 정보 저장 (POST)
-    
-    Args:
-        request: FastAPI 요청
-    
-    Returns:
-        저장 결과
-    """
+    """티켓 정보 저장"""
     try:
         ticket_data = await request.json()
         app_state.ticket_data = ticket_data
@@ -76,17 +72,8 @@ async def set_ticket(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    """
-    메인 페이지
-    
-    Args:
-        request: FastAPI 요청
-    
-    Returns:
-        렌더링된 HTML
-    """
+    """메인 페이지"""
     try:
-        # 저장된 티켓 정보 사용
         ticket_data = app_state.ticket_data
         
         if ticket_data:
@@ -124,7 +111,7 @@ async def health():
     """헬스 체크"""
     return {
         "status": "healthy",
-        "service": "AWS Zendesk Assistant",
+        "service": "AWS Zendesk Assistant FastAPI",
         "websocket_url": app_state.websocket_url
     }
 
@@ -138,11 +125,12 @@ async def get_ticket():
 
 
 if __name__ == "__main__":
-    import uvicorn
-    logger.info(f"[DEBUG] FastAPI 서버 시작: {HOST}:{PORT}")
+    logger.info("[INFO] FastAPI 서버 시작: http://0.0.0.0:8000")
     uvicorn.run(
         app,
-        host=HOST,
-        port=PORT,
-        log_level=LOG_LEVEL.lower()
+        host="0.0.0.0",
+        port=8000,
+        log_level="info",
+        access_log=False,
+        server_header=False
     )
