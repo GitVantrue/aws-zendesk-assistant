@@ -52,9 +52,17 @@ class AppState:
     """앱 상태 관리"""
     def __init__(self):
         self.ticket_data = None
-        self.websocket_url = "ws://localhost:8765"
+        self.websocket_url = None  # 동적으로 설정됨
 
 app_state = AppState()
+
+
+def get_websocket_url(request: Request) -> str:
+    """현재 요청 기반으로 WebSocket URL 생성"""
+    # 클라이언트가 접속한 호스트 기반으로 WebSocket URL 구성
+    host = request.headers.get("host", "localhost:8000")
+    protocol = "wss" if request.url.scheme == "https" else "ws"
+    return f"{protocol}://{host.split(':')[0]}:8765"
 
 
 @app.post("/api/ticket")
@@ -75,16 +83,19 @@ async def index(request: Request):
     """메인 페이지"""
     try:
         ticket_data = app_state.ticket_data
+        websocket_url = get_websocket_url(request)
         
         if ticket_data:
             logger.info(f"[DEBUG] 저장된 티켓 정보 사용: {ticket_data.get('id')}")
+        
+        logger.info(f"[DEBUG] WebSocket URL: {websocket_url}")
         
         # 템플릿 렌더링
         try:
             return templates.TemplateResponse("index.html", {
                 "request": request,
                 "ticket_data": ticket_data,
-                "websocket_url": app_state.websocket_url
+                "websocket_url": websocket_url
             })
         except Exception as template_error:
             logger.error(f"[ERROR] 템플릿 렌더링 실패: {template_error}")
@@ -95,7 +106,7 @@ async def index(request: Request):
             <head><title>AWS Zendesk Assistant</title></head>
             <body>
                 <h1>AWS Zendesk Assistant</h1>
-                <p>WebSocket URL: {app_state.websocket_url}</p>
+                <p>WebSocket URL: {websocket_url}</p>
                 <p>Ticket Data: {ticket_data}</p>
             </body>
             </html>
@@ -107,12 +118,12 @@ async def index(request: Request):
 
 
 @app.get("/health")
-async def health():
+async def health(request: Request):
     """헬스 체크"""
     return {
         "status": "healthy",
         "service": "AWS Zendesk Assistant FastAPI",
-        "websocket_url": app_state.websocket_url
+        "websocket_url": get_websocket_url(request)
     }
 
 
