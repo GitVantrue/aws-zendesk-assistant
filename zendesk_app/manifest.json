@@ -5,8 +5,8 @@
     "email": "support@example.com",
     "url": "https://example.com"
   },
-  "defaultLocale": "en",
-  "private": true,
+  "defaultLocale": "ko",
+  "private": false,
   "location": {
     "support": {
       "ticket_sidebar": {
@@ -20,17 +20,5 @@
     }
   },
   "version": "1.0.0",
-  "frameworkVersion": "2.0",
-  "parameters": [
-    {
-      "name": "serverUrl",
-      "type": "text",
-      "required": true,
-      "secure": false,
-      "default": "http://localhost:8000"
-    }
-  ],
-  "translations": {
-    "en": "translations/en.json"
-  }
+  "frameworkVersion": "2.0"
 }

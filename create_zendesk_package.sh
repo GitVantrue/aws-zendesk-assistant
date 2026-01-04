@@ -1,56 +1,57 @@
 #!/bin/bash
 
 # Zendesk 앱 패키징 스크립트
-# 사용법: bash create_zendesk_package.sh
+# 역할: zendesk_app 폴더를 zip으로 패키징
 
 set -e
 
-echo "🔄 Zendesk 앱 패키징 시작..."
+echo "🔧 Zendesk 앱 패키징 시작..."
 
-# 임시 디렉토리 생성
-TEMP_DIR=$(mktemp -d)
-PACKAGE_DIR="$TEMP_DIR/zendesk-aws-assistant"
-mkdir -p "$PACKAGE_DIR/assets"
+# 작업 디렉토리
+WORK_DIR=$(pwd)
+ZENDESK_APP_DIR="$WORK_DIR/zendesk_app"
+OUTPUT_FILE="$WORK_DIR/zendesk-aws-assistant.zip"
 
-echo "📁 패키지 구조 생성 중..."
+# 기존 zip 파일 제거
+if [ -f "$OUTPUT_FILE" ]; then
+    echo "📦 기존 패키지 제거: $OUTPUT_FILE"
+    rm "$OUTPUT_FILE"
+fi
 
-# manifest.json 복사
-cp zendesk_app/manifest.json "$PACKAGE_DIR/"
+# manifest.json 확인
+if [ ! -f "$ZENDESK_APP_DIR/manifest.json" ]; then
+    echo "❌ manifest.json을 찾을 수 없습니다: $ZENDESK_APP_DIR/manifest.json"
+    exit 1
+fi
 
-# assets 파일 복사
-cp zendesk_app/assets/iframe.html "$PACKAGE_DIR/assets/"
-cp zendesk_app/assets/main.js "$PACKAGE_DIR/assets/"
-cp zendesk_app/assets/logo.svg "$PACKAGE_DIR/assets/"
+# assets 폴더 확인
+if [ ! -d "$ZENDESK_APP_DIR/assets" ]; then
+    echo "❌ assets 폴더를 찾을 수 없습니다: $ZENDESK_APP_DIR/assets"
+    exit 1
+fi
 
-# 번역 파일 복사
-mkdir -p "$PACKAGE_DIR/translations"
-cp zendesk_app/assets/translations/en.json "$PACKAGE_DIR/translations/"
+# zip 파일 생성 (manifest.json과 assets만 포함)
+echo "📦 패키징 중..."
+cd "$ZENDESK_APP_DIR"
+zip -r "$OUTPUT_FILE" manifest.json assets/
+cd "$WORK_DIR"
 
-echo "📦 ZIP 파일 생성 중..."
+# 결과 확인
+if [ -f "$OUTPUT_FILE" ]; then
+    SIZE=$(du -h "$OUTPUT_FILE" | cut -f1)
+    echo "✅ 패키징 완료!"
+    echo "📁 파일: $OUTPUT_FILE"
+    echo "📊 크기: $SIZE"
+    echo ""
+    echo "📋 패키지 내용:"
+    unzip -l "$OUTPUT_FILE"
+else
+    echo "❌ 패키징 실패"
+    exit 1
+fi
 
-# ZIP 파일 생성
-cd "$TEMP_DIR"
-zip -r zendesk-aws-assistant.zip zendesk-aws-assistant/
-cd -
-
-# 최종 위치로 이동
-mv "$TEMP_DIR/zendesk-aws-assistant.zip" ./zendesk-aws-assistant.zip
-
-echo "✅ 완료!"
 echo ""
-echo "📊 패키지 정보:"
-ls -lh zendesk-aws-assistant.zip
-echo ""
-echo "📋 패키지 내용:"
-unzip -l zendesk-aws-assistant.zip
-echo ""
-echo "🚀 배포 준비 완료!"
-echo "   Zendesk 마켓플레이스에 zendesk-aws-assistant.zip을 업로드하세요."
-echo ""
-echo "⚙️  주의사항:"
-echo "   1. Python 서버가 EC2에서 실행 중이어야 합니다"
-echo "   2. manifest.json의 serverUrl을 EC2 주소로 설정하세요"
-echo "   3. 앱 설정에서 serverUrl 파라미터를 입력해야 합니다"
-
-# 정리
-rm -rf "$TEMP_DIR"
+echo "🚀 다음 단계:"
+echo "1. Zendesk 마켓플레이스에 로그인"
+echo "2. 앱 업로드: $OUTPUT_FILE"
+echo "3. 테스트 및 배포"
