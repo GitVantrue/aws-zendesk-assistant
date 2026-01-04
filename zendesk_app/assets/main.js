@@ -108,7 +108,10 @@ class ZendeskAssistantLoader {
       // 1단계: 티켓 정보를 서버에 POST로 전송
       console.log('[DEBUG] 티켓 정보를 서버에 전송 중...');
       
-      const response = await fetch(`${this.serverUrl}/api/ticket`, {
+      // HTTPS 사용 (젠데스크는 HTTPS만 허용)
+      const apiUrl = this.serverUrl.replace(/^http:/, 'https:');
+      
+      const response = await fetch(`${apiUrl}/api/ticket`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -123,7 +126,7 @@ class ZendeskAssistantLoader {
       console.log('[DEBUG] 티켓 정보 전송 완료');
       
       // 2단계: iframe 로드 (URL은 간단하게)
-      const iframeUrl = `${this.serverUrl}/`;
+      const iframeUrl = `${apiUrl}/`;
       
       console.log('[DEBUG] iframe 로드 시작:', iframeUrl);
       

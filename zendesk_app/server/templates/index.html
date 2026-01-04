@@ -232,6 +232,12 @@
 <!-- 스크립트 -->
 <script>
   window.ticketData = {{ ticket_data | tojson if ticket_data else 'null' }};
-  window.websocketUrl = "{{ websocket_url }}";
+  
+  // WebSocket URL을 HTTPS로 변환 (젠데스크는 HTTPS만 허용)
+  let websocketUrl = "{{ websocket_url }}";
+  websocketUrl = websocketUrl.replace(/^ws:/, 'wss:').replace(/^http:/, 'https:');
+  window.websocketUrl = websocketUrl;
+  
+  console.log('[DEBUG] WebSocket URL:', window.websocketUrl);
 </script>
 {% endblock %}
