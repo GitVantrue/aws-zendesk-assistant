@@ -47,16 +47,6 @@ templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# 전역 상태
-class AppState:
-    """앱 상태 관리"""
-    def __init__(self):
-        self.ticket_data = None
-        self.websocket_url = None  # 동적으로 설정됨
-
-app_state = AppState()
-
-
 def get_websocket_url(request: Request) -> str:
     """현재 요청 기반으로 WebSocket URL 생성"""
     # 클라이언트가 접속한 호스트 기반으로 WebSocket URL 구성
@@ -65,36 +55,17 @@ def get_websocket_url(request: Request) -> str:
     return f"{protocol}://{host.split(':')[0]}:8765"
 
 
-@app.post("/api/ticket")
-async def set_ticket(request: Request):
-    """티켓 정보 저장"""
-    try:
-        ticket_data = await request.json()
-        app_state.ticket_data = ticket_data
-        logger.info(f"[DEBUG] 티켓 정보 저장: {ticket_data.get('id')}")
-        return {"status": "success", "ticket_id": ticket_data.get('id')}
-    except Exception as e:
-        logger.error(f"[ERROR] 티켓 정보 저장 실패: {e}")
-        return {"status": "error", "message": str(e)}
-
-
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """메인 페이지"""
     try:
-        ticket_data = app_state.ticket_data
         websocket_url = get_websocket_url(request)
-        
-        if ticket_data:
-            logger.info(f"[DEBUG] 저장된 티켓 정보 사용: {ticket_data.get('id')}")
-        
         logger.info(f"[DEBUG] WebSocket URL: {websocket_url}")
         
         # 템플릿 렌더링
         try:
             return templates.TemplateResponse("index.html", {
                 "request": request,
-                "ticket_data": ticket_data,
                 "websocket_url": websocket_url
             })
         except Exception as template_error:
@@ -107,7 +78,6 @@ async def index(request: Request):
             <body>
                 <h1>AWS Zendesk Assistant</h1>
                 <p>WebSocket URL: {websocket_url}</p>
-                <p>Ticket Data: {ticket_data}</p>
             </body>
             </html>
             """
@@ -125,14 +95,6 @@ async def health(request: Request):
         "service": "AWS Zendesk Assistant FastAPI",
         "websocket_url": get_websocket_url(request)
     }
-
-
-@app.get("/api/ticket")
-async def get_ticket():
-    """현재 티켓 정보 조회"""
-    if app_state.ticket_data:
-        return app_state.ticket_data
-    return {"error": "티켓 정보 없음"}
 
 
 if __name__ == "__main__":
