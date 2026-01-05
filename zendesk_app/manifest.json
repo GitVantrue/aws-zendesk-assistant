@@ -1,5 +1,5 @@
 {
-  "name": "AWS Zendesk Assistant",
+  "name": "AWS Zendesk Assistant v2",
   "author": {
     "name": "AWS Team",
     "email": "support@example.com",
@@ -19,6 +19,6 @@
       }
     }
   },
-  "version": "1.0.2",
+  "version": "2.0.0",
   "frameworkVersion": "2.0"
 }
