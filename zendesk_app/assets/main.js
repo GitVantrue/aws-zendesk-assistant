@@ -8,7 +8,8 @@
   const WS_PORT = 8765;
   
   // WebSocket URL 생성 (wss 사용 - Zendesk는 HTTPS)
-  const wsUrl = `wss://${ALB_HOST}:${WS_PORT}`;
+  // ALB가 /ws 경로로 라우팅하므로 경로 포함
+  const wsUrl = `wss://${ALB_HOST}:${WS_PORT}/ws`;
   
   console.log('[DEBUG] WebSocket URL:', wsUrl);
   
