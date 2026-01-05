@@ -276,8 +276,8 @@ async def main():
     # /tmp/reports 디렉터리 생성
     os.makedirs('/tmp/reports', exist_ok=True)
     
-    # 서버 생성 및 시작
-    server = HybridServer(host="0.0.0.0", port=8765)
+    # 서버 생성 및 시작 (SSL 비활성화 - ALB가 HTTPS 처리)
+    server = HybridServer(host="0.0.0.0", port=8765, use_ssl=False)
     await server.start()
 
 
