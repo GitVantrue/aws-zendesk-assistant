@@ -49,10 +49,16 @@ if STATIC_DIR.exists():
 
 def get_websocket_url(request: Request) -> str:
     """현재 요청 기반으로 WebSocket URL 생성"""
-    # 클라이언트가 접속한 호스트 기반으로 WebSocket URL 구성
+    # ALB를 통해 들어오는 요청이므로 ALB의 호스트명 사용
+    # 예: q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com
     host = request.headers.get("host", "localhost:8000")
     protocol = "wss" if request.url.scheme == "https" else "ws"
-    return f"{protocol}://{host.split(':')[0]}:8765"
+    
+    # ALB 호스트명 그대로 사용 (포트 제거)
+    hostname = host.split(':')[0]
+    
+    # WebSocket URL 생성 (포트 8765)
+    return f"{protocol}://{hostname}:8765"
 
 
 @app.get("/", response_class=HTMLResponse)
