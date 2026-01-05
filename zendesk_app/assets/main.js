@@ -4,8 +4,11 @@
  */
 
 (function() {
-  // HTTP URL 사용 (ALB를 통해 EC2의 8765 포트로 포워딩)
-  const serverUrl = "http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com";
+  // 현재 페이지의 프로토콜 사용 (HTTPS 또는 HTTP)
+  const protocol = window.location.protocol; // https: 또는 http:
+  const serverUrl = protocol + "//q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com";
+  
+  console.log('[DEBUG] Server URL:', serverUrl);
   
   // iframe 생성 및 로드
   const iframe = document.createElement('iframe');
