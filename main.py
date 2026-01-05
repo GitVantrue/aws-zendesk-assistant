@@ -32,8 +32,8 @@ async def main():
     
     log_info("AWS Zendesk Assistant WebSocket 서버 시작")
     
-    # Hybrid 서버 생성 (HTTP + WebSocket)
-    _server = HybridServer(host="0.0.0.0", port=8765)
+    # Hybrid 서버 생성 (HTTP + WebSocket, SSL 비활성화 - ALB가 HTTPS 처리)
+    _server = HybridServer(host="0.0.0.0", port=8765, use_ssl=False)
     
     # 종료 시그널 핸들러 등록
     signal.signal(signal.SIGINT, signal_handler)
