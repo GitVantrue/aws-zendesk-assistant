@@ -48,17 +48,12 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 def get_websocket_url(request: Request) -> str:
-    """현재 요청 기반으로 WebSocket URL 생성"""
-    # ALB를 통해 들어오는 요청이므로 ALB의 호스트명 사용
-    # 예: q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com
-    host = request.headers.get("host", "localhost:8000")
-    protocol = "wss" if request.url.scheme == "https" else "ws"
+    """WebSocket URL 생성 (ALB 도메인 사용)"""
+    # ALB 도메인 (고정)
+    alb_domain = "q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com"
     
-    # ALB 호스트명 그대로 사용 (포트 제거)
-    hostname = host.split(':')[0]
-    
-    # WebSocket URL 생성 (포트 8765)
-    return f"{protocol}://{hostname}:8765"
+    # WebSocket URL 생성 (포트 8765, wss 사용)
+    return f"wss://{alb_domain}:8765"
 
 
 @app.get("/", response_class=HTMLResponse)
