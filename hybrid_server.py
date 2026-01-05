@@ -1,12 +1,13 @@
 """
 Hybrid HTTP/WebSocket Server for AWS Zendesk Assistant
-ALB 호환성을 위한 HTTP + WebSocket 서버
+ALB 호환성을 위한 HTTP + WebSocket 서버 (HTTPS 지원)
 """
 
 import os
 import json
 import asyncio
 import threading
+import ssl
 from aiohttp import web, WSMsgType
 from datetime import datetime
 from langgraph_agent import process_question_workflow
@@ -211,19 +212,41 @@ class HybridServer:
                 print(f"[ERROR] Heartbeat 오류: {e}", flush=True)
     
     async def start(self):
-        """서버 시작"""
+        """서버 시작 (HTTP + HTTPS)"""
         print(f"[DEBUG] Hybrid 서버 시작: {self.host}:{self.port}", flush=True)
         
         # Heartbeat 태스크 시작
         heartbeat_task = asyncio.create_task(self.send_heartbeat())
         
+        # SSL 컨텍스트 설정 (HTTPS)
+        ssl_context = None
+        cert_file = "/root/cert.pem"
+        key_file = "/root/key.pem"
+        
+        if os.path.exists(cert_file) and os.path.exists(key_file):
+            try:
+                ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+                ssl_context.load_cert_chain(cert_file, key_file)
+                print(f"[DEBUG] ✅ SSL 인증서 로드 완료: {cert_file}", flush=True)
+            except Exception as e:
+                print(f"[WARNING] SSL 인증서 로드 실패: {e}", flush=True)
+                ssl_context = None
+        else:
+            print(f"[WARNING] SSL 인증서 파일을 찾을 수 없습니다. HTTP만 사용합니다.", flush=True)
+        
         # HTTP 서버 시작
         runner = web.AppRunner(self.app)
         await runner.setup()
-        site = web.TCPSite(runner, self.host, self.port)
-        await site.start()
         
-        print(f"[DEBUG] ✅ Hybrid 서버 실행 중: http://{self.host}:{self.port}", flush=True)
+        # HTTPS 포트 (443) 또는 HTTP 포트 (8765)
+        if ssl_context:
+            site = web.TCPSite(runner, self.host, 443, ssl_context=ssl_context)
+            print(f"[DEBUG] ✅ HTTPS 서버 실행 중: https://{self.host}:443", flush=True)
+        else:
+            site = web.TCPSite(runner, self.host, self.port)
+            print(f"[DEBUG] ✅ HTTP 서버 실행 중: http://{self.host}:{self.port}", flush=True)
+        
+        await site.start()
         
         try:
             # 무한 대기

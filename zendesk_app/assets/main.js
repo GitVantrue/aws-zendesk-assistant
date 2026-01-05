@@ -4,10 +4,13 @@
  */
 
 (function() {
+  // HTTPS URL로 변경 (자체 서명 인증서 사용)
+  const serverUrl = "https://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com";
+  
   // iframe 생성 및 로드
   const iframe = document.createElement('iframe');
   iframe.id = 'aws-assistant-iframe';
-  iframe.src = window.location.origin + '/';
+  iframe.src = serverUrl + '/';
   iframe.style.width = '100%';
   iframe.style.height = '100%';
   iframe.style.border = 'none';

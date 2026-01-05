@@ -1,0 +1,22 @@
+{
+  "app": {
+    "name": "AWS Zendesk 어시스턴트",
+    "short_description": "AWS 서비스 분석 및 지원을 위한 Zendesk 앱",
+    "long_description": "AWS 서비스 분석, 보안 보고서, CloudTrail 조회 등 다양한 AWS 기능을 Zendesk 티켓 내에서 직접 사용할 수 있습니다.",
+    "installation_instructions": "### 사전 요구사항\n\n1. AWS 계정 접근 권한\n2. 필요한 IAM 권한 설정\n\n### 설정\n\n1. **AWS Region**: AWS 리전 입력 (예: ap-northeast-2)\n2. **AWS Access Key ID**: 필요한 권한이 있는 IAM 사용자 액세스 키\n3. **AWS Secret Access Key**: IAM 사용자 시크릿 키"
+  },
+  "parameters": {
+    "awsRegion": {
+      "label": "AWS 리전",
+      "helpText": "AWS 서비스가 배포된 리전 (예: ap-northeast-2)"
+    },
+    "awsAccessKeyId": {
+      "label": "AWS Access Key ID",
+      "helpText": "필요한 권한이 있는 IAM 사용자 액세스 키"
+    },
+    "awsSecretAccessKey": {
+      "label": "AWS Secret Access Key",
+      "helpText": "IAM 사용자 시크릿 액세스 키"
+    }
+  }
+}

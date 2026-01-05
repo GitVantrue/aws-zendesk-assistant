@@ -30,6 +30,13 @@ if (-not (Test-Path $ASSETS)) {
     exit 1
 }
 
+# translations 폴더 확인
+$TRANSLATIONS = Join-Path $ZENDESK_APP_DIR "assets" "translations"
+if (-not (Test-Path $TRANSLATIONS)) {
+    Write-Host "❌ translations 폴더를 찾을 수 없습니다: $TRANSLATIONS" -ForegroundColor Red
+    exit 1
+}
+
 # zip 파일 생성
 Write-Host "📦 패키징 중..." -ForegroundColor Cyan
 
