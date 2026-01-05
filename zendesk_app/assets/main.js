@@ -4,12 +4,11 @@
  */
 
 (function() {
-  const ALB_HOST = 'q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com';
-  const WS_PORT = 8765;
+  // ALB 도메인으로 연결 (HTTPS → WebSocket 업그레이드)
+  const ALB_DOMAIN = 'q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com';
   
-  // WebSocket URL 생성 (wss 사용 - Zendesk는 HTTPS)
-  // ALB가 /ws 경로로 라우팅하므로 경로 포함
-  const wsUrl = `wss://${ALB_HOST}:${WS_PORT}/ws`;
+  // WebSocket URL 생성 (wss 사용 - ALB가 HTTPS 처리)
+  const wsUrl = `wss://${ALB_DOMAIN}/ws`;
   
   console.log('[DEBUG] WebSocket URL:', wsUrl);
   
