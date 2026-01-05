@@ -7,6 +7,7 @@ import os
 import json
 import asyncio
 import threading
+import ssl
 from aiohttp import web, WSMsgType
 from datetime import datetime
 from langgraph_agent import process_question_workflow
@@ -15,9 +16,10 @@ from langgraph_agent import process_question_workflow
 class HybridServer:
     """HTTP와 WebSocket을 모두 지원하는 하이브리드 서버"""
     
-    def __init__(self, host: str = "0.0.0.0", port: int = 8765):
+    def __init__(self, host: str = "0.0.0.0", port: int = 8765, use_ssl: bool = True):
         self.host = host
         self.port = port
+        self.use_ssl = use_ssl
         self.app = web.Application()
         self.connected_clients = {}
         self.processing_questions = set()
@@ -25,7 +27,7 @@ class HybridServer:
         # 라우트 설정
         self.setup_routes()
         
-        print(f"[DEBUG] Hybrid 서버 초기화: {host}:{port}", flush=True)
+        print(f"[DEBUG] Hybrid 서버 초기화: {host}:{port} (SSL: {use_ssl})", flush=True)
     
     def setup_routes(self):
         """HTTP 라우트 설정"""
@@ -217,13 +219,28 @@ class HybridServer:
         # Heartbeat 태스크 시작
         heartbeat_task = asyncio.create_task(self.send_heartbeat())
         
+        # SSL 설정
+        ssl_context = None
+        if self.use_ssl:
+            cert_file = "/root/cert.pem"
+            key_file = "/root/key.pem"
+            
+            if os.path.exists(cert_file) and os.path.exists(key_file):
+                ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+                ssl_context.load_cert_chain(cert_file, key_file)
+                print(f"[DEBUG] SSL 인증서 로드됨: {cert_file}", flush=True)
+            else:
+                print(f"[WARNING] SSL 인증서 파일 없음, HTTP로 실행합니다", flush=True)
+                self.use_ssl = False
+        
         # HTTP 서버 시작
         runner = web.AppRunner(self.app)
         await runner.setup()
-        site = web.TCPSite(runner, self.host, self.port)
+        site = web.TCPSite(runner, self.host, self.port, ssl_context=ssl_context)
         await site.start()
         
-        print(f"[DEBUG] ✅ Hybrid 서버 실행 중: http://{self.host}:{self.port}", flush=True)
+        protocol = "https" if self.use_ssl else "http"
+        print(f"[DEBUG] ✅ Hybrid 서버 실행 중: {protocol}://{self.host}:{self.port}", flush=True)
         
         try:
             # 무한 대기
