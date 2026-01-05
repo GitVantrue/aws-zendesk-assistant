@@ -99,11 +99,11 @@ async def health(request: Request):
 
 
 if __name__ == "__main__":
-    logger.info("[INFO] FastAPI 서버 시작: http://0.0.0.0:8000")
+    logger.info("[INFO] FastAPI 서버 시작: http://0.0.0.0:8001")
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8000,
+        port=8001,
         log_level="info",
         access_log=False,
         server_header=False
