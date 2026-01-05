@@ -52,8 +52,8 @@ def get_websocket_url(request: Request) -> str:
     # ALB 도메인 (고정)
     alb_domain = "q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com"
     
-    # WebSocket URL 생성 (포트 8000, wss 사용)
-    return f"wss://{alb_domain}:8000"
+    # WebSocket URL 생성 (포트 8001, wss 사용)
+    return f"wss://{alb_domain}:8001"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -99,11 +99,11 @@ async def health(request: Request):
 
 
 if __name__ == "__main__":
-    logger.info("[INFO] FastAPI 서버 시작: http://0.0.0.0:8001")
+    logger.info("[INFO] FastAPI 서버 시작: http://0.0.0.0:8000")
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8001,
+        port=8000,
         log_level="info",
         access_log=False,
         server_header=False

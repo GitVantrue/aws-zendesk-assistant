@@ -8,7 +8,7 @@
   
   // ALB 도메인
   const ALB_DOMAIN = 'q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com';
-  const wsUrl = `wss://${ALB_DOMAIN}:8000`;
+  const wsUrl = `wss://${ALB_DOMAIN}:8001`;
   
   let ws = null;
   let connectionStatus = 'disconnected';
