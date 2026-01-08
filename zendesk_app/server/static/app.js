@@ -75,11 +75,23 @@ class ZenBotDashboard {
 
     // 채팅 입력
     this.sendButton.addEventListener('click', () => this.handleSend());
+    
+    // input 이벤트: 문자 입력 시 (한글 입력 중에도 발생)
     this.messageInput.addEventListener('input', () => {
       this.updateCharCount();
-      this.autoResizeInput();
       this.updateSendButtonState();
     });
+    
+    // compositionend 이벤트: 한글/일본어 입력 완료 후
+    this.messageInput.addEventListener('compositionend', () => {
+      this.autoResizeInput();
+    });
+    
+    // change 이벤트: 값이 변경되었을 때
+    this.messageInput.addEventListener('change', () => {
+      this.autoResizeInput();
+    });
+    
     this.messageInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -211,8 +223,12 @@ class ZenBotDashboard {
   }
 
   autoResizeInput() {
+    // 높이를 초기값으로 리셋
     this.messageInput.style.height = 'auto';
-    this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 120) + 'px';
+    
+    // scrollHeight를 기반으로 새 높이 계산
+    const newHeight = Math.min(this.messageInput.scrollHeight, 120);
+    this.messageInput.style.height = newHeight + 'px';
   }
 
   updateSendButtonState() {
@@ -229,15 +245,18 @@ class ZenBotDashboard {
     
     console.log('[DEBUG] handleSend 시작:', message);
     
+    // 메시지 추가
     this.addMessage(message, 'user');
     this.hideWelcomeMessage();
     
+    // 입력 필드 초기화
     this.messageInput.value = '';
     this.messageInput.style.height = 'auto';
+    this.messageInput.style.height = '40px';
     this.updateCharCount();
-    this.autoResizeInput();
     this.updateSendButtonState();
     
+    // 처리 상태 설정
     this.isProcessing = true;
     this.updateSendButtonState();
     
@@ -250,8 +269,6 @@ class ZenBotDashboard {
       this.isProcessing = false;
       this.updateSendButtonState();
       this.showToast('메시지 전송 실패', 'error');
-    } else {
-      console.log('[DEBUG] 메시지 전송 성공, 응답 대기 중');
     }
   }
 

@@ -635,8 +635,10 @@ body {
   color: var(--text-primary);
   font-family: inherit;
   font-size: 14px;
+  line-height: 1.5;
   resize: none;
   max-height: 120px;
+  min-height: 40px;
   transition: all 0.2s;
   overflow: hidden;
 }
