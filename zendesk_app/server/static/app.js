@@ -232,9 +232,6 @@ class ZenBotDashboard {
     this.addMessage(message, 'user');
     this.hideWelcomeMessage();
     
-    // 봇이 입력 중 표시 추가
-    this.addMessage('', 'ai-streaming');
-    
     this.isProcessing = true;
     this.updateSendButtonState();
     

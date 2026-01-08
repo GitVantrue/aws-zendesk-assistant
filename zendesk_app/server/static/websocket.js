@@ -228,6 +228,10 @@ function handleWebSocketMessage(data) {
       
     case 'streaming_complete':
       console.log('[DEBUG] 스트리밍 완료');
+      if (window.zenBotDashboard) {
+        window.zenBotDashboard.isProcessing = false;
+        window.zenBotDashboard.updateSendButtonState();
+      }
       break;
       
     case 'result':
