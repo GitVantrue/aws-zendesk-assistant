@@ -228,19 +228,16 @@ function handleWebSocketMessage(data) {
       
     case 'streaming_complete':
       console.log('[DEBUG] 스트리밍 완료');
-      hideLoadingOverlay();
       break;
       
     case 'result':
       console.log('[DEBUG] 결과 수신');
       addMessage(data.data.answer, 'ai');
-      hideLoadingOverlay();
       break;
       
     case 'error':
       console.error('[ERROR] 서버 오류:', data.message);
       addMessage(`❌ 오류: ${data.message}`, 'error');
-      hideLoadingOverlay();
       showToast(data.message, 'error');
       break;
       

@@ -233,14 +233,15 @@ class ZenBotDashboard {
     this.addMessage(message, 'user');
     this.hideWelcomeMessage();
     
-    this.showLoadingOverlay();
+    // 봇이 입력 중 표시 추가
+    this.addMessage('', 'ai-streaming');
+    
     this.isProcessing = true;
     this.updateSendButtonState();
     
     const success = sendQuestion(message);
     
     if (!success) {
-      this.hideLoadingOverlay();
       this.isProcessing = false;
       this.updateSendButtonState();
       this.showToast('메시지 전송 실패', 'error');
@@ -313,14 +314,6 @@ class ZenBotDashboard {
     this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
   }
 
-  showLoadingOverlay() {
-    this.loadingOverlay.classList.add('active');
-  }
-
-  hideLoadingOverlay() {
-    this.loadingOverlay.classList.remove('active');
-  }
-
   showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
@@ -365,14 +358,6 @@ function appendToLastMessage(content) {
 function showToast(message, type) {
   if (window.zenBotDashboard) {
     window.zenBotDashboard.showToast(message, type);
-  }
-}
-
-function hideLoadingOverlay() {
-  if (window.zenBotDashboard) {
-    window.zenBotDashboard.hideLoadingOverlay();
-    window.zenBotDashboard.isProcessing = false;
-    window.zenBotDashboard.updateSendButtonState();
   }
 }
 
