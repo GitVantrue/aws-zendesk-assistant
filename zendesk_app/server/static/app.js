@@ -229,13 +229,14 @@ class ZenBotDashboard {
     
     console.log('[DEBUG] handleSend 시작:', message);
     
+    this.addMessage(message, 'user');
+    this.hideWelcomeMessage();
+    
     this.messageInput.value = '';
+    this.messageInput.style.height = 'auto';
     this.updateCharCount();
     this.autoResizeInput();
     this.updateSendButtonState();
-    
-    this.addMessage(message, 'user');
-    this.hideWelcomeMessage();
     
     this.isProcessing = true;
     this.updateSendButtonState();
