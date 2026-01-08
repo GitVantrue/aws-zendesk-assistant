@@ -157,7 +157,15 @@ let wsClient = null;
  */
 function initWebSocket(url) {
   return new Promise((resolve, reject) => {
-    wsClient = new WebSocketClient(url);
+    // FastAPI 프록시 엔드포인트로 연결 (ALB 도메인 사용)
+    // 클라이언트 → FastAPI (/ws) → 백엔드 (localhost:8001)
+    const proxyUrl = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const wsProxyUrl = `${proxyUrl}//${host}/ws`;
+    
+    console.log('[DEBUG] WebSocket 프록시 URL:', wsProxyUrl);
+    
+    wsClient = new WebSocketClient(wsProxyUrl);
     
     wsClient.onConnectionChange((connected) => {
       console.log(`[DEBUG] WebSocket 연결 상태: ${connected ? '연결됨' : '연결 끊김'}`);
