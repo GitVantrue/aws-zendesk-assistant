@@ -249,23 +249,58 @@ class ZenBotDashboard {
       return;
     }
     
-    // 모달 닫기
-    this.closeReportModal();
-    
-    // 채팅 열기
-    this.openChat();
+    // 로딩 상태 표시
+    const generateBtn = document.getElementById('generateReportBtn');
+    const originalText = generateBtn.textContent;
+    generateBtn.textContent = '생성 중...';
+    generateBtn.disabled = true;
     
     // 메시지 작성
-    let message = `월간 보안 보고서를 생성해주세요. 계정 ID: ${accountId}`;
-    if (month) {
-      const [year, monthNum] = month.split('-');
-      message += `, 기간: ${year}년 ${monthNum}월`;
-    }
+    const [year, monthNum] = month.split('-');
+    const message = `월간 보안 보고서를 생성해주세요. 계정 ID: ${accountId}, 기간: ${year}년 ${monthNum}월`;
     
-    this.messageInput.value = message;
-    this.updateCharCount();
-    this.updateSendButtonState();
-    setTimeout(() => this.handleSend(), 100);
+    // WebSocket으로 요청 전송
+    sendQuestion(message);
+    
+    // 응답 대기 (최대 60초)
+    let attempts = 0;
+    const checkInterval = setInterval(() => {
+      attempts++;
+      
+      // 마지막 메시지 확인
+      if (window.zenBotDashboard && window.zenBotDashboard.messages.length > 0) {
+        const lastMessage = window.zenBotDashboard.messages[window.zenBotDashboard.messages.length - 1];
+        
+        // 보고서 URL이 포함된 메시지 찾기
+        if (lastMessage.content.includes('http') && lastMessage.content.includes('reports')) {
+          clearInterval(checkInterval);
+          
+          // URL 추출
+          const urlMatch = lastMessage.content.match(/(http:\/\/[^\s<]+\.html)/);
+          if (urlMatch) {
+            const reportUrl = urlMatch[1];
+            
+            // 모달에 결과 표시
+            document.getElementById('reportResult').style.display = 'block';
+            document.getElementById('reportLink').href = reportUrl;
+            document.getElementById('reportLink').textContent = reportUrl;
+            
+            generateBtn.textContent = originalText;
+            generateBtn.disabled = false;
+            
+            this.showToast('보고서 생성 완료!', 'success');
+          }
+        }
+      }
+      
+      // 60초 초과 시 중단
+      if (attempts > 120) {
+        clearInterval(checkInterval);
+        generateBtn.textContent = originalText;
+        generateBtn.disabled = false;
+        this.showToast('보고서 생성 시간 초과', 'error');
+      }
+    }, 500);
   }
 
   queryCloudtrail() {
