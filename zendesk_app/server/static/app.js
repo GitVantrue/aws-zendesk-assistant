@@ -33,7 +33,6 @@ class ZenBotDashboard {
     this.messageInput = document.getElementById('messageInput');
     this.sendButton = document.getElementById('sendButton');
     this.charCount = document.getElementById('charCount');
-    this.loadingOverlay = document.getElementById('loadingOverlay');
     this.toastContainer = document.getElementById('toastContainer');
     this.ticketModal = document.getElementById('ticketModal');
   }
