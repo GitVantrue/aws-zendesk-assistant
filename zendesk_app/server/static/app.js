@@ -336,8 +336,9 @@ class ZenBotDashboard {
       return `<a href="${url}" target="_blank" style="color: #818cf8; text-decoration: underline; cursor: pointer;">${text}</a>`;
     });
     
-    // 3. 일반 URL 링크 (http로 시작하는 URL만 - 이미 https는 http로 변환됨)
-    content = content.replace(/(http:\/\/[^\s<]+)/g, (match) => {
+    // 3. 일반 URL 링크 (http로 시작하는 URL만)
+    // URL은 공백, 따옴표, 꺾쇠괄호로 끝남
+    content = content.replace(/(http:\/\/[^\s"<>)]+)/g, (match) => {
       // 이미 <a> 태그로 감싸진 URL은 제외
       if (match.includes('</a>')) return match;
       return `<a href="${match}" target="_blank" style="color: #818cf8; text-decoration: underline; cursor: pointer;">${match}</a>`;
