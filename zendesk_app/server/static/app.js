@@ -309,6 +309,9 @@ class ZenBotDashboard {
 
   formatMessage(content) {
     return content
+      // URL을 링크로 변환 (http/https로 시작하는 URL)
+      .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color: #818cf8; text-decoration: underline; cursor: pointer;">$1</a>')
+      // 마크다운 포맷
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
       .replace(/`(.*?)`/g, '<code>$1</code>')

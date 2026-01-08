@@ -587,7 +587,7 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                 if html_report_path:
                     # 보고서 URL 생성 (ALB를 통해 접근)
                     html_filename = os.path.basename(html_report_path)
-                    html_url = f"https://web-tool-lb-627934048.ap-northeast-2.elb.amazonaws.com/reports/{html_filename}"
+                    html_url = f"http://web-tool-lb-627934048.ap-northeast-2.elb.amazonaws.com/reports/{html_filename}"
                     
                     answer = f"""
 ## 📊 {period_text} AWS 월간 보고서 생성 완료

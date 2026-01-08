@@ -567,8 +567,38 @@ body {
   border-radius: 10px;
   border: 1px solid rgba(71, 85, 105, 0.3);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   word-wrap: break-word;
+  word-break: break-word;
+}
+
+.message-bubble a {
+  color: #818cf8;
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.message-bubble a:hover {
+  color: #a5b4fc;
+}
+
+.message-bubble code {
+  background: rgba(99, 102, 241, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.message-bubble strong {
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.message-bubble em {
+  font-style: italic;
+  color: #cbd5e1;
 }
 
 .message.user .message-bubble {
