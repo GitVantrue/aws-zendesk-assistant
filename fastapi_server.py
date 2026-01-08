@@ -117,9 +117,10 @@ async def websocket_endpoint(websocket: WebSocket):
     backend_ws = None
     
     try:
-        # 백엔드 WebSocket 서버에 연결
-        logger.info(f"[DEBUG] 백엔드 연결 시도: {BACKEND_WEBSOCKET_URL}")
-        backend_ws = await websockets.connect(BACKEND_WEBSOCKET_URL)
+        # 백엔드 WebSocket 서버에 연결 (경로 포함)
+        backend_url = f"{BACKEND_WEBSOCKET_URL}/ws"
+        logger.info(f"[DEBUG] 백엔드 연결 시도: {backend_url}")
+        backend_ws = await websockets.connect(backend_url)
         logger.info("[DEBUG] 백엔드 WebSocket 연결 성공")
         
         # 클라이언트에 연결 확인 메시지 전송
