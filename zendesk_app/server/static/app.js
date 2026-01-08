@@ -17,8 +17,18 @@ class ZenBotDashboard {
     try {
       console.log('[DEBUG] ZenBot 초기화 시작');
       this.cacheElements();
+      console.log('[DEBUG] 요소 캐싱 완료');
+      
+      // 이벤트 리스너 등록 전에 DOM이 준비되었는지 확인
+      if (!this.dashboardView || !this.chatView) {
+        throw new Error('필수 DOM 요소를 찾을 수 없음');
+      }
+      
       this.setupEventListeners();
+      console.log('[DEBUG] 이벤트 리스너 등록 완료');
+      
       await initWebSocket(this.websocketUrl);
+      console.log('[DEBUG] WebSocket 초기화 완료');
       console.log('[DEBUG] ZenBot 초기화 완료');
     } catch (error) {
       console.error('[ERROR] 초기화 실패:', error);
@@ -38,22 +48,23 @@ class ZenBotDashboard {
   }
 
   setupEventListeners() {
+    // 로고 클릭 시 홈 화면으로 (가장 먼저)
+    const navBrand = document.getElementById('navBrand');
+    console.log('[DEBUG] navBrand 요소:', navBrand);
+    if (navBrand) {
+      navBrand.addEventListener('click', (e) => {
+        console.log('[DEBUG] navBrand 클릭됨', e);
+        this.goHome();
+      });
+      console.log('[DEBUG] navBrand 클릭 이벤트 등록 완료');
+    } else {
+      console.error('[ERROR] navBrand 요소를 찾을 수 없음');
+    }
+    
     // 채팅 열기/닫기
     document.getElementById('openChatBtn')?.addEventListener('click', () => this.openChat());
     document.getElementById('closeChatBtn')?.addEventListener('click', () => this.closeChat());
     document.getElementById('chatBtn')?.addEventListener('click', () => this.openChat());
-    
-    // 로고 클릭 시 홈 화면으로
-    const navBrand = document.getElementById('navBrand');
-    if (navBrand) {
-      console.log('[DEBUG] navBrand 요소 찾음');
-      navBrand.addEventListener('click', () => {
-        console.log('[DEBUG] navBrand 클릭됨');
-        this.goHome();
-      });
-    } else {
-      console.error('[ERROR] navBrand 요소를 찾을 수 없음');
-    }
 
     // 카드 클릭 이벤트
     document.getElementById('screenerCard')?.addEventListener('click', () => this.openScreenerModal());
