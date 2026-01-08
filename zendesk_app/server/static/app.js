@@ -330,25 +330,25 @@ class ZenBotDashboard {
     content = content.replace(/https:\/\//g, 'http://');
     
     // 2. 마크다운 링크 [텍스트](URL) 처리 - 가장 먼저 처리
+    // 플레이스홀더로 임시 저장
+    const links = [];
     content = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
-      // URL도 https를 http로 변환
       url = url.replace(/https:\/\//g, 'http://');
-      return `<a href="${url}" target="_blank" style="color: #818cf8; text-decoration: underline; cursor: pointer;">${text}</a>`;
+      const link = `<a href="${url}" target="_blank" style="color: #818cf8; text-decoration: underline; cursor: pointer;">${text}</a>`;
+      links.push(link);
+      return `__LINK_${links.length - 1}__`;
     });
     
-    // 3. 일반 URL 링크 (http로 시작하는 URL만)
-    // URL은 공백, 따옴표, 꺾쇠괄호로 끝남
-    content = content.replace(/(http:\/\/[^\s"<>)]+)/g, (match) => {
-      // 이미 <a> 태그로 감싸진 URL은 제외
-      if (match.includes('</a>')) return match;
-      return `<a href="${match}" target="_blank" style="color: #818cf8; text-decoration: underline; cursor: pointer;">${match}</a>`;
-    });
-    
-    // 4. 마크다운 포맷
+    // 3. 마크다운 포맷
     content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
     content = content.replace(/`(.*?)`/g, '<code>$1</code>');
     content = content.replace(/\n/g, '<br>');
+    
+    // 4. 플레이스홀더를 실제 링크로 복원
+    content = content.replace(/__LINK_(\d+)__/g, (match, index) => {
+      return links[parseInt(index)] || match;
+    });
     
     return content;
   }
