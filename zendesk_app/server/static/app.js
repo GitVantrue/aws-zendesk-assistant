@@ -44,7 +44,16 @@ class ZenBotDashboard {
     document.getElementById('chatBtn')?.addEventListener('click', () => this.openChat());
     
     // 로고 클릭 시 홈 화면으로
-    document.getElementById('navBrand')?.addEventListener('click', () => this.goHome());
+    const navBrand = document.getElementById('navBrand');
+    if (navBrand) {
+      console.log('[DEBUG] navBrand 요소 찾음');
+      navBrand.addEventListener('click', () => {
+        console.log('[DEBUG] navBrand 클릭됨');
+        this.goHome();
+      });
+    } else {
+      console.error('[ERROR] navBrand 요소를 찾을 수 없음');
+    }
 
     // 카드 클릭 이벤트
     document.getElementById('screenerCard')?.addEventListener('click', () => this.openScreenerModal());
@@ -122,6 +131,8 @@ class ZenBotDashboard {
   }
 
   goHome() {
+    console.log('[DEBUG] goHome() 호출됨');
+    
     // 채팅 닫기
     this.isChatOpen = false;
     this.chatView.classList.remove('active');
@@ -146,6 +157,8 @@ class ZenBotDashboard {
     
     // 처리 상태 초기화
     this.isProcessing = false;
+    
+    console.log('[DEBUG] goHome() 완료');
   }
 
   openScreenerModal() {
