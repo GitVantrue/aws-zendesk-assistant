@@ -212,11 +212,7 @@ class ZenBotDashboard {
 
   autoResizeInput() {
     this.messageInput.style.height = 'auto';
-    const scrollHeight = this.messageInput.scrollHeight;
-    const paddingTop = parseInt(window.getComputedStyle(this.messageInput).paddingTop);
-    const paddingBottom = parseInt(window.getComputedStyle(this.messageInput).paddingBottom);
-    const totalPadding = paddingTop + paddingBottom;
-    this.messageInput.style.height = Math.min(scrollHeight + totalPadding, 120) + 'px';
+    this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 120) + 'px';
   }
 
   updateSendButtonState() {

@@ -638,6 +638,7 @@ body {
   resize: none;
   max-height: 120px;
   transition: all 0.2s;
+  overflow: hidden;
 }
 
 #messageInput:focus {
