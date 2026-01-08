@@ -326,14 +326,30 @@ class ZenBotDashboard {
   }
 
   formatMessage(content) {
-    return content
-      // URL을 링크로 변환 (http/https로 시작하는 URL)
-      .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color: #818cf8; text-decoration: underline; cursor: pointer;">$1</a>')
-      // 마크다운 포맷
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>')
-      .replace(/\n/g, '<br>');
+    // 1. https를 http로 변환
+    content = content.replace(/https:\/\//g, 'http://');
+    
+    // 2. 마크다운 링크 [텍스트](URL) 처리 - 가장 먼저 처리
+    content = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
+      // URL도 https를 http로 변환
+      url = url.replace(/https:\/\//g, 'http://');
+      return `<a href="${url}" target="_blank" style="color: #818cf8; text-decoration: underline; cursor: pointer;">${text}</a>`;
+    });
+    
+    // 3. 일반 URL 링크 (http로 시작하는 URL만 - 이미 https는 http로 변환됨)
+    content = content.replace(/(http:\/\/[^\s<]+)/g, (match) => {
+      // 이미 <a> 태그로 감싸진 URL은 제외
+      if (match.includes('</a>')) return match;
+      return `<a href="${match}" target="_blank" style="color: #818cf8; text-decoration: underline; cursor: pointer;">${match}</a>`;
+    });
+    
+    // 4. 마크다운 포맷
+    content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    content = content.replace(/`(.*?)`/g, '<code>$1</code>');
+    content = content.replace(/\n/g, '<br>');
+    
+    return content;
   }
 
   hideWelcomeMessage() {
