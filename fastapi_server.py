@@ -1,18 +1,21 @@
 """
 FastAPI 서버 (독립 실행)
-역할: UI 렌더링 + 티켓 정보 관리
+역할: UI 렌더링 + WebSocket 프록시
 """
 import logging
 import os
 import sys
+import asyncio
+import json
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+import websockets
 
 # 로깅 설정
 logging.basicConfig(
@@ -20,6 +23,10 @@ logging.basicConfig(
     format='[%(levelname)s] %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# 백엔드 WebSocket 서버 설정
+BACKEND_WEBSOCKET_URL = os.getenv("WEBSOCKET_BACKEND_URL", "ws://localhost:8001")
+logger.info(f"[INFO] 백엔드 WebSocket URL: {BACKEND_WEBSOCKET_URL}")
 
 # FastAPI 앱 초기화
 app = FastAPI(title="AWS Zendesk Assistant")
@@ -96,6 +103,94 @@ async def health(request: Request):
         "service": "AWS Zendesk Assistant FastAPI",
         "websocket_url": get_websocket_url(request)
     }
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    WebSocket 프록시 엔드포인트
+    클라이언트 ↔ FastAPI ↔ 백엔드 WebSocket 서버
+    """
+    await websocket.accept()
+    logger.info("[DEBUG] 클라이언트 WebSocket 연결됨")
+    
+    backend_ws = None
+    
+    try:
+        # 백엔드 WebSocket 서버에 연결
+        logger.info(f"[DEBUG] 백엔드 연결 시도: {BACKEND_WEBSOCKET_URL}")
+        backend_ws = await websockets.connect(BACKEND_WEBSOCKET_URL)
+        logger.info("[DEBUG] 백엔드 WebSocket 연결 성공")
+        
+        # 클라이언트에 연결 확인 메시지 전송
+        await websocket.send_json({
+            "type": "connected",
+            "message": "FastAPI WebSocket 프록시 연결됨"
+        })
+        
+        # 양방향 메시지 전달
+        async def forward_from_client():
+            """클라이언트 → 백엔드"""
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    logger.info(f"[DEBUG] 클라이언트 메시지 수신: {data[:100]}")
+                    
+                    # 백엔드로 전달
+                    await backend_ws.send(data)
+                    logger.info("[DEBUG] 백엔드로 메시지 전달 완료")
+                    
+            except WebSocketDisconnect:
+                logger.info("[DEBUG] 클라이언트 연결 종료")
+            except Exception as e:
+                logger.error(f"[ERROR] 클라이언트 메시지 처리 오류: {e}")
+        
+        async def forward_from_backend():
+            """백엔드 → 클라이언트"""
+            try:
+                while True:
+                    data = await backend_ws.recv()
+                    logger.info(f"[DEBUG] 백엔드 메시지 수신: {data[:100]}")
+                    
+                    # 클라이언트로 전달
+                    await websocket.send_text(data)
+                    logger.info("[DEBUG] 클라이언트로 메시지 전달 완료")
+                    
+            except websockets.exceptions.ConnectionClosed:
+                logger.info("[DEBUG] 백엔드 연결 종료")
+            except Exception as e:
+                logger.error(f"[ERROR] 백엔드 메시지 처리 오류: {e}")
+        
+        # 두 개의 태스크를 동시에 실행
+        await asyncio.gather(
+            forward_from_client(),
+            forward_from_backend()
+        )
+        
+    except Exception as e:
+        logger.error(f"[ERROR] WebSocket 프록시 오류: {e}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"WebSocket 연결 오류: {str(e)}"
+            })
+        except:
+            pass
+        
+    finally:
+        # 정리
+        if backend_ws:
+            try:
+                await backend_ws.close()
+                logger.info("[DEBUG] 백엔드 WebSocket 연결 종료")
+            except:
+                pass
+        
+        try:
+            await websocket.close()
+            logger.info("[DEBUG] 클라이언트 WebSocket 연결 종료")
+        except:
+            pass
 
 
 if __name__ == "__main__":
