@@ -54,6 +54,16 @@ templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# 캐시 방지 미들웨어
+@app.middleware("http")
+async def add_cache_headers(request, call_next):
+    response = await call_next(request)
+    # 모든 응답에 캐시 방지 헤더 추가
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 def get_websocket_url(request: Request) -> str:
     """WebSocket URL 생성 (ALB 도메인 사용)"""
     # ALB 도메인 (고정)
@@ -72,10 +82,15 @@ async def index(request: Request):
         
         # 템플릿 렌더링
         try:
-            return templates.TemplateResponse("index.html", {
+            response = templates.TemplateResponse("index.html", {
                 "request": request,
                 "websocket_url": websocket_url
             })
+            # 캐시 방지 헤더 추가
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            return response
         except Exception as template_error:
             logger.error(f"[ERROR] 템플릿 렌더링 실패: {template_error}")
             # 템플릿 파일이 없으면 간단한 HTML 반환
