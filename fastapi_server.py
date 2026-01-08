@@ -143,8 +143,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     
             except WebSocketDisconnect:
                 logger.info("[DEBUG] 클라이언트 연결 종료")
+                raise
             except Exception as e:
                 logger.error(f"[ERROR] 클라이언트 메시지 처리 오류: {e}")
+                raise
         
         async def forward_from_backend():
             """백엔드 → 클라이언트"""
@@ -159,14 +161,20 @@ async def websocket_endpoint(websocket: WebSocket):
                     
             except websockets.exceptions.ConnectionClosed:
                 logger.info("[DEBUG] 백엔드 연결 종료")
+                raise
             except Exception as e:
                 logger.error(f"[ERROR] 백엔드 메시지 처리 오류: {e}")
+                raise
         
-        # 두 개의 태스크를 동시에 실행
-        await asyncio.gather(
-            forward_from_client(),
-            forward_from_backend()
-        )
+        # 두 개의 태스크를 동시에 실행 (하나가 실패해도 계속 실행)
+        try:
+            await asyncio.gather(
+                forward_from_client(),
+                forward_from_backend(),
+                return_exceptions=True
+            )
+        except Exception as e:
+            logger.error(f"[ERROR] 메시지 전달 중 오류: {e}")
         
     except Exception as e:
         logger.error(f"[ERROR] WebSocket 프록시 오류: {e}")
