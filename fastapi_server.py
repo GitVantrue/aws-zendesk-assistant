@@ -54,6 +54,11 @@ templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# 보고서 파일 마운트
+REPORTS_DIR = Path("/tmp/reports")
+if REPORTS_DIR.exists():
+    app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
+
 # 캐시 방지 미들웨어
 @app.middleware("http")
 async def add_cache_headers(request, call_next):
