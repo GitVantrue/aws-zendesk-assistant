@@ -42,6 +42,9 @@ class ZenBotDashboard {
     document.getElementById('openChatBtn')?.addEventListener('click', () => this.openChat());
     document.getElementById('closeChatBtn')?.addEventListener('click', () => this.closeChat());
     document.getElementById('chatBtn')?.addEventListener('click', () => this.openChat());
+    
+    // 로고 클릭 시 홈 화면으로
+    document.getElementById('navBrand')?.addEventListener('click', () => this.goHome());
 
     // 카드 클릭 이벤트
     document.getElementById('screenerCard')?.addEventListener('click', () => this.openScreenerModal());
@@ -116,6 +119,33 @@ class ZenBotDashboard {
     this.isChatOpen = false;
     this.chatView.classList.remove('active');
     this.dashboardView.classList.add('active');
+  }
+
+  goHome() {
+    // 채팅 닫기
+    this.isChatOpen = false;
+    this.chatView.classList.remove('active');
+    this.dashboardView.classList.add('active');
+    
+    // 입력 필드 초기화
+    this.messageInput.value = '';
+    this.messageInput.style.height = 'auto';
+    this.messageInput.style.height = '40px';
+    this.updateCharCount();
+    this.updateSendButtonState();
+    
+    // 메시지 초기화
+    this.messages = [];
+    this.messagesContainer.innerHTML = `
+      <div class="welcome-message">
+        <div class="welcome-icon">⚡</div>
+        <h3>안녕하세요!</h3>
+        <p>AWS에 대해 궁금한 점을 물어보세요</p>
+      </div>
+    `;
+    
+    // 처리 상태 초기화
+    this.isProcessing = false;
   }
 
   openScreenerModal() {
