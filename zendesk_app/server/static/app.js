@@ -183,12 +183,18 @@ class ZenBotDashboard {
 
   openReportModal() {
     document.getElementById('reportModal')?.classList.add('active');
+    // 오늘 날짜를 기본값으로 설정
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    document.getElementById('reportMonth').value = `${year}-${month}`;
   }
 
   closeReportModal() {
     document.getElementById('reportModal')?.classList.remove('active');
     document.getElementById('reportAccountId').value = '';
     document.getElementById('reportMonth').value = '';
+    document.getElementById('reportResult').style.display = 'none';
   }
 
   openCloudtrailModal() {
@@ -238,14 +244,26 @@ class ZenBotDashboard {
       return;
     }
     
+    if (!month) {
+      this.showToast('분석 기간을 선택하세요', 'warning');
+      return;
+    }
+    
+    // 모달 닫기
     this.closeReportModal();
+    
+    // 채팅 열기
     this.openChat();
+    
+    // 메시지 작성
     let message = `월간 보안 보고서를 생성해주세요. 계정 ID: ${accountId}`;
-    if (month) message += `, 기간: ${month}`;
+    if (month) {
+      const [year, monthNum] = month.split('-');
+      message += `, 기간: ${year}년 ${monthNum}월`;
+    }
     
     this.messageInput.value = message;
     this.updateCharCount();
-    this.autoResizeInput();
     this.updateSendButtonState();
     setTimeout(() => this.handleSend(), 100);
   }

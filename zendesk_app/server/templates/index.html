@@ -71,6 +71,36 @@
       </div>
     </div>
 
+    <!-- 월간 보고서 모달 -->
+    <div class="modal" id="reportModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>📊 월간 보안 보고서</h3>
+          <button class="modal-close" id="reportModalClose">×</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">AWS 계정의 보안 상태를 분석한 월간 보고서를 생성합니다.</p>
+          
+          <div class="form-group">
+            <label>계정 ID</label>
+            <input type="text" id="reportAccountId" placeholder="예: 950027134314" maxlength="12">
+          </div>
+          
+          <div class="form-group">
+            <label>분석 기간</label>
+            <input type="month" id="reportMonth">
+          </div>
+          
+          <button class="modal-action-btn" id="generateReportBtn">보고서 생성</button>
+          
+          <div id="reportResult" style="display: none; margin-top: 16px; padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.3);">
+            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">생성된 보고서:</p>
+            <a id="reportLink" href="#" target="_blank" style="color: #818cf8; text-decoration: underline; word-break: break-all;"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 채팅 뷰 -->
     <div class="chat-view" id="chatView">
       <div class="chat-container">
@@ -129,6 +159,6 @@
   window.websocketUrl = websocketUrl;
   
   console.log('[DEBUG] WebSocket URL:', window.websocketUrl);
-  console.log('[DEBUG] 버전: 3.0.1');
+  console.log('[DEBUG] 버전: 3.0.2');
 </script>
 {% endblock %}
