@@ -285,7 +285,13 @@ class ZenBotDashboard {
     let bubbleContent = this.formatMessage(message.content);
     
     if (message.type === 'progress') {
-      bubbleContent = `<span style="color: #6366f1;">⏳ ${message.content}</span>`;
+      // 진행 메시지: 로딩 스피너 + 텍스트
+      bubbleContent = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 16px; height: 16px; border: 2px solid rgba(99, 102, 241, 0.2); border-top-color: #6366f1; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+          <span style="color: #6366f1;">${message.content}</span>
+        </div>
+      `;
     } else if (message.type === 'error') {
       bubbleContent = `<span style="color: #ef4444;">${message.content}</span>`;
     }

@@ -223,7 +223,7 @@ function handleWebSocketMessage(data) {
       
     case 'progress':
       console.log('[DEBUG] 진행 상황:', data.message);
-      // 진행 메시지는 마지막 메시지를 업데이트
+      // 진행 메시지는 마지막 메시지를 업데이트 (새 메시지 생성 안 함)
       if (lastProgressMessageId) {
         updateLastMessage(data.message, 'progress');
       } else {

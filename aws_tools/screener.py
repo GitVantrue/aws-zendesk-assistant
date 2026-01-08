@@ -296,7 +296,7 @@ def run_service_screener_sync(account_id, credentials=None, websocket=None, sess
             summary = parse_screener_results(account_result_dir, account_id)
             
             # Service Screener 보고서 URL 생성
-            report_url = f"http://q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com/reports/screener_{account_id}_{timestamp}/index.html"
+            report_url = f"https://web-tool-lb-627934048.ap-northeast-2.elb.amazonaws.com/reports/screener_{account_id}_{timestamp}/index.html"
             print(f"[DEBUG] Service Screener 보고서 URL 생성: {report_url}", flush=True)
             
             return {

@@ -7,7 +7,7 @@
   console.log('[DEBUG] main.js 로드됨');
   
   // ALB 도메인
-  const ALB_DOMAIN = 'q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com';
+  const ALB_DOMAIN = 'web-tool-lb-627934048.ap-northeast-2.elb.amazonaws.com';
   const wsUrl = `wss://${ALB_DOMAIN}:8001/ws`;
   
   let ws = null;

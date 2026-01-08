@@ -67,7 +67,7 @@ async def add_cache_headers(request, call_next):
 def get_websocket_url(request: Request) -> str:
     """WebSocket URL 생성 (ALB 도메인 사용)"""
     # ALB 도메인 (고정)
-    alb_domain = "q-slack-lb-353058502.ap-northeast-2.elb.amazonaws.com"
+    alb_domain = "web-tool-lb-627934048.ap-northeast-2.elb.amazonaws.com"
     
     # WebSocket URL 생성 (포트 8001, wss 사용)
     return f"wss://{alb_domain}:8001"
