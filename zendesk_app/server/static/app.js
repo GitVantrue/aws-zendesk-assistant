@@ -222,7 +222,12 @@ class ZenBotDashboard {
 
   async handleSend() {
     const message = this.messageInput.value.trim();
-    if (!message || this.isProcessing) return;
+    if (!message || this.isProcessing) {
+      console.log('[DEBUG] handleSend 무시: message=', message, 'isProcessing=', this.isProcessing);
+      return;
+    }
+    
+    console.log('[DEBUG] handleSend 시작:', message);
     
     this.messageInput.value = '';
     this.updateCharCount();
@@ -235,12 +240,17 @@ class ZenBotDashboard {
     this.isProcessing = true;
     this.updateSendButtonState();
     
+    console.log('[DEBUG] sendQuestion 호출 전');
     const success = sendQuestion(message);
+    console.log('[DEBUG] sendQuestion 결과:', success);
     
     if (!success) {
+      console.error('[ERROR] 메시지 전송 실패');
       this.isProcessing = false;
       this.updateSendButtonState();
       this.showToast('메시지 전송 실패', 'error');
+    } else {
+      console.log('[DEBUG] 메시지 전송 성공, 응답 대기 중');
     }
   }
 

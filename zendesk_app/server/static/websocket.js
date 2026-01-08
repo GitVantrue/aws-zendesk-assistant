@@ -164,6 +164,8 @@ function initWebSocket(url) {
     const wsProxyUrl = `${proxyUrl}//${host}/ws`;
     
     console.log('[DEBUG] WebSocket 프록시 URL:', wsProxyUrl);
+    console.log('[DEBUG] window.location.protocol:', window.location.protocol);
+    console.log('[DEBUG] window.location.host:', window.location.host);
     
     wsClient = new WebSocketClient(wsProxyUrl);
     
@@ -195,14 +197,22 @@ function initWebSocket(url) {
     });
     
     wsClient.connect()
-      .then(() => resolve(wsClient))
-      .catch(error => reject(error));
+      .then(() => {
+        console.log('[DEBUG] WebSocket 연결 성공, resolve 호출');
+        resolve(wsClient);
+      })
+      .catch(error => {
+        console.error('[ERROR] WebSocket 연결 실패:', error);
+        reject(error);
+      });
   });
 }
 
 /**
  * WebSocket 메시지 처리
  */
+let lastProgressMessageId = null;
+
 function handleWebSocketMessage(data) {
   const type = data.type;
   
@@ -213,11 +223,18 @@ function handleWebSocketMessage(data) {
       
     case 'progress':
       console.log('[DEBUG] 진행 상황:', data.message);
-      addMessage(data.message, 'progress');
+      // 진행 메시지는 마지막 메시지를 업데이트
+      if (lastProgressMessageId) {
+        updateLastMessage(data.message, 'progress');
+      } else {
+        addMessage(data.message, 'progress');
+        lastProgressMessageId = Date.now();
+      }
       break;
       
     case 'streaming_start':
       console.log('[DEBUG] 스트리밍 시작');
+      lastProgressMessageId = null; // 진행 메시지 종료
       addMessage('', 'ai-streaming');
       break;
       
@@ -237,11 +254,19 @@ function handleWebSocketMessage(data) {
     case 'result':
       console.log('[DEBUG] 결과 수신');
       addMessage(data.data.answer, 'ai');
+      if (window.zenBotDashboard) {
+        window.zenBotDashboard.isProcessing = false;
+        window.zenBotDashboard.updateSendButtonState();
+      }
       break;
       
     case 'error':
       console.error('[ERROR] 서버 오류:', data.message);
       addMessage(`❌ 오류: ${data.message}`, 'error');
+      if (window.zenBotDashboard) {
+        window.zenBotDashboard.isProcessing = false;
+        window.zenBotDashboard.updateSendButtonState();
+      }
       showToast(data.message, 'error');
       break;
       
@@ -255,10 +280,42 @@ function handleWebSocketMessage(data) {
 }
 
 /**
+ * 마지막 메시지 업데이트 (진행 상황용)
+ */
+function updateLastMessage(content, type) {
+  if (window.zenBotDashboard && window.zenBotDashboard.messages.length > 0) {
+    const lastMessage = window.zenBotDashboard.messages[window.zenBotDashboard.messages.length - 1];
+    lastMessage.content = content;
+    lastMessage.type = type;
+    
+    const lastElement = document.querySelector(`[data-id="${lastMessage.id}"] .message-bubble`);
+    if (lastElement) {
+      let bubbleContent = window.zenBotDashboard.formatMessage(content);
+      if (type === 'progress') {
+        bubbleContent = `<span style="color: #6366f1;">⏳ ${content}</span>`;
+      }
+      lastElement.innerHTML = bubbleContent;
+      window.zenBotDashboard.scrollToBottom();
+    }
+  }
+}
+
+/**
  * 질문 전송
  */
 function sendQuestion(question) {
-  if (!wsClient || !wsClient.isConnected()) {
+  console.log('[DEBUG] sendQuestion 호출:', question);
+  console.log('[DEBUG] wsClient:', wsClient);
+  console.log('[DEBUG] wsClient.isConnected():', wsClient ? wsClient.isConnected() : 'wsClient is null');
+  
+  if (!wsClient) {
+    console.error('[ERROR] wsClient가 초기화되지 않음');
+    showToast('WebSocket 클라이언트가 초기화되지 않았습니다', 'error');
+    return false;
+  }
+  
+  if (!wsClient.isConnected()) {
+    console.error('[ERROR] WebSocket 연결 안 됨. 상태:', wsClient.ws ? wsClient.ws.readyState : 'ws is null');
     showToast('서버에 연결되지 않았습니다', 'error');
     return false;
   }
@@ -269,7 +326,10 @@ function sendQuestion(question) {
     session_id: generateSessionId()
   };
   
-  return wsClient.send(JSON.stringify(message));
+  console.log('[DEBUG] 메시지 전송:', message);
+  const result = wsClient.send(JSON.stringify(message));
+  console.log('[DEBUG] 메시지 전송 결과:', result);
+  return result;
 }
 
 /**
