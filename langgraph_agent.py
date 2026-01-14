@@ -272,13 +272,13 @@ async def send_websocket_progress(state: AgentState, message: str):
             log_error(f"진행 상황 전송 실패: {e}")
 
 
-def split_answer_into_chunks(answer: str, chunk_size: int = 20) -> list[str]:
+def split_answer_into_chunks(answer: str, chunk_size: int = 50) -> list[str]:
     """
-    답변을 자연스러운 청크로 분할 (한 글자씩 또는 작은 단위)
+    답변을 자연스러운 청크로 분할
     
     Args:
         answer: 전체 답변 텍스트
-        chunk_size: 청크 크기 (문자 수) - 기본값 20으로 더 자연스러운 타이핑
+        chunk_size: 청크 크기 (문자 수) - 기본값 50으로 자연스러운 타이핑 속도
         
     Returns:
         청크 리스트
@@ -353,7 +353,7 @@ async def send_websocket_result(state: AgentState, result: Dict[str, Any]):
             await state["websocket"].send_str(json.dumps(start_message, ensure_ascii=False))
             
             # 청크별 전송
-            chunks = split_answer_into_chunks(answer, chunk_size=20)
+            chunks = split_answer_into_chunks(answer, chunk_size=50)
             for i, chunk in enumerate(chunks):
                 chunk_message = {
                     "type": "streaming_chunk",
@@ -364,8 +364,8 @@ async def send_websocket_result(state: AgentState, result: Dict[str, Any]):
                 }
                 await state["websocket"].send_str(json.dumps(chunk_message, ensure_ascii=False))
                 
-                # 자연스러운 타이핑 속도 (매우 빠름 - 한 글자씩 빠르게)
-                delay = 0.02  # 20ms 고정 딜레이
+                # 자연스러운 타이핑 속도 (빠르고 자연스럽게)
+                delay = 0.01  # 10ms 고정 딜레이 (더 빠른 출력)
                 await asyncio.sleep(delay)
             
             # 스트리밍 완료 신호 (전체 결과 포함)
