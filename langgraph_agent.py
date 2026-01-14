@@ -272,51 +272,45 @@ async def send_websocket_progress(state: AgentState, message: str):
             log_error(f"진행 상황 전송 실패: {e}")
 
 
-def split_answer_into_chunks(answer: str, chunk_size: int = 100) -> list[str]:
+def split_answer_into_chunks(answer: str, chunk_size: int = 20) -> list[str]:
     """
-    답변을 자연스러운 청크로 분할
+    답변을 자연스러운 청크로 분할 (한 글자씩 또는 작은 단위)
     
     Args:
         answer: 전체 답변 텍스트
-        chunk_size: 청크 크기 (문자 수)
+        chunk_size: 청크 크기 (문자 수) - 기본값 20으로 더 자연스러운 타이핑
         
     Returns:
         청크 리스트
     """
-    if not answer or len(answer) <= chunk_size:
-        return [answer]
+    if not answer:
+        return []
     
     chunks = []
-    sentences = answer.replace('\n\n', '\n').split('\n')
+    i = 0
     
-    current_chunk = ""
-    for sentence in sentences:
-        # 현재 청크에 문장을 추가했을 때 크기 확인
-        if len(current_chunk + sentence) <= chunk_size:
-            current_chunk += sentence + '\n'
-        else:
-            # 현재 청크가 있으면 저장
-            if current_chunk.strip():
-                chunks.append(current_chunk.strip())
-            
-            # 문장이 너무 길면 강제로 분할
-            if len(sentence) > chunk_size:
-                words = sentence.split(' ')
-                temp_chunk = ""
-                for word in words:
-                    if len(temp_chunk + word) <= chunk_size:
-                        temp_chunk += word + ' '
-                    else:
-                        if temp_chunk.strip():
-                            chunks.append(temp_chunk.strip())
-                        temp_chunk = word + ' '
-                current_chunk = temp_chunk
+    while i < len(answer):
+        # 공백이나 문장 부호를 기준으로 자연스럽게 분할
+        end = min(i + chunk_size, len(answer))
+        
+        # 마지막 청크가 아니면 공백이나 문장 부호에서 끝나도록 조정
+        if end < len(answer):
+            # 공백 찾기
+            space_pos = answer.rfind(' ', i, end)
+            if space_pos > i:
+                end = space_pos + 1
             else:
-                current_chunk = sentence + '\n'
-    
-    # 마지막 청크 추가
-    if current_chunk.strip():
-        chunks.append(current_chunk.strip())
+                # 문장 부호 찾기
+                for punct in ['.', ',', '!', '?', ':', ';', '\n']:
+                    punct_pos = answer.rfind(punct, i, end)
+                    if punct_pos > i:
+                        end = punct_pos + 1
+                        break
+        
+        chunk = answer[i:end]
+        if chunk:
+            chunks.append(chunk)
+        i = end
     
     return chunks
 
@@ -359,7 +353,7 @@ async def send_websocket_result(state: AgentState, result: Dict[str, Any]):
             await state["websocket"].send_str(json.dumps(start_message, ensure_ascii=False))
             
             # 청크별 전송
-            chunks = split_answer_into_chunks(answer, chunk_size=150)
+            chunks = split_answer_into_chunks(answer, chunk_size=20)
             for i, chunk in enumerate(chunks):
                 chunk_message = {
                     "type": "streaming_chunk",
@@ -370,8 +364,8 @@ async def send_websocket_result(state: AgentState, result: Dict[str, Any]):
                 }
                 await state["websocket"].send_str(json.dumps(chunk_message, ensure_ascii=False))
                 
-                # 자연스러운 타이핑 속도 (청크 크기에 따라 조절)
-                delay = min(0.3, len(chunk) * 0.01)
+                # 자연스러운 타이핑 속도 (매우 빠름 - 한 글자씩 빠르게)
+                delay = 0.02  # 20ms 고정 딜레이
                 await asyncio.sleep(delay)
             
             # 스트리밍 완료 신호 (전체 결과 포함)
