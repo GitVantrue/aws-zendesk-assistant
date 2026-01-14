@@ -417,6 +417,9 @@ class ZenBotDashboard {
           <span style="color: #6366f1;">${message.content}</span>
         </div>
       `;
+    } else if (message.type === 'ai-streaming') {
+      // 스트리밍 메시지: 초기에는 빈 상태
+      bubbleContent = message.content ? this.formatMessage(message.content) : '';
     } else if (message.type === 'error') {
       bubbleContent = `<span style="color: #ef4444;">${message.content}</span>`;
     }
