@@ -510,7 +510,8 @@ function appendToLastMessage(content) {
     
     const lastElement = document.querySelector(`[data-id="${lastMessage.id}"] .message-bubble`);
     if (lastElement) {
-      lastElement.innerHTML = window.zenBotDashboard.formatMessage(lastMessage.content);
+      // 스트리밍 중에는 formatMessage 호출하지 않고 직접 텍스트 추가 (성능 최적화)
+      lastElement.textContent += content;
     }
   }
 }

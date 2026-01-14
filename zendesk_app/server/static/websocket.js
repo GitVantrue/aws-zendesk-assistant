@@ -245,6 +245,14 @@ function handleWebSocketMessage(data) {
       
     case 'streaming_complete':
       console.log('[DEBUG] 스트리밍 완료');
+      // 스트리밍 완료 후 최종 포맷팅 적용
+      if (window.zenBotDashboard && window.zenBotDashboard.messages.length > 0) {
+        const lastMessage = window.zenBotDashboard.messages[window.zenBotDashboard.messages.length - 1];
+        const lastElement = document.querySelector(`[data-id="${lastMessage.id}"] .message-bubble`);
+        if (lastElement) {
+          lastElement.innerHTML = window.zenBotDashboard.formatMessage(lastMessage.content);
+        }
+      }
       if (window.zenBotDashboard) {
         window.zenBotDashboard.isProcessing = false;
         window.zenBotDashboard.updateSendButtonState();
