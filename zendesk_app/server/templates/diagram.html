@@ -259,6 +259,27 @@ async function initDiagram() {
   if (iframe) {
     iframe.onload = () => {
       console.log('Draw.io iframe 로드 완료');
+      
+      // 빈 다이어그램 초기화
+      setTimeout(() => {
+        const emptyDiagram = `<mxGraphModel>
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+  </root>
+</mxGraphModel>`;
+        
+        iframe.contentWindow.postMessage(
+          JSON.stringify({
+            action: 'load',
+            autosave: 1,
+            xml: emptyDiagram
+          }),
+          '*'
+        );
+        console.log('빈 다이어그램 초기화 완료');
+      }, 1000);
+      
       addBotMessage('✅ Draw.io 에디터가 준비되었습니다.');
     };
     
