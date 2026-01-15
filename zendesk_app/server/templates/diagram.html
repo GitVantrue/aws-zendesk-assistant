@@ -252,12 +252,23 @@ const DRAWIO_EMBED_URL = 'https://embed.diagrams.net/?embed=1&ui=atlas&spin=1&pr
 async function initDiagram() {
   addBotMessage('다이어그램 에디터를 로드하고 있습니다...');
   
+  // 로딩 타임아웃 설정 (10초)
+  const loadTimeout = setTimeout(() => {
+    addBotMessage('로딩이 지연되고 있습니다. 네트워크를 확인해주세요.');
+  }, 10000);
+  
   // Draw.io 임베드 로드
   drawioFrame.src = DRAWIO_EMBED_URL;
   
   drawioFrame.onload = () => {
+    clearTimeout(loadTimeout);
     addBotMessage('다이어그램 에디터가 준비되었습니다.');
     addBotMessage('챗봇에 요청하면 AI가 다이어그램을 생성합니다.');
+  };
+  
+  drawioFrame.onerror = () => {
+    clearTimeout(loadTimeout);
+    addBotMessage('에디터 로드 실패. 페이지를 새로고침해주세요.');
   };
 }
 
