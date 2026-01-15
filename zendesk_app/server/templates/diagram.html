@@ -212,8 +212,9 @@ body {
       </div>
       <!-- Draw.io iframe 영역 -->
       <iframe id="drawioFrame"
-              src="https://embed.diagrams.net/?embed=1&ui=min&spin=1&proto=json"
-              style="width: 100%; height: calc(100vh - 60px); border: none; background: white;">
+              src="https://embed.diagrams.net/?embed=1&ui=min&spin=1&proto=json&configure=1"
+              style="width: 100%; height: calc(100vh - 60px); border: none; background: white;"
+              allow="fullscreen">
       </iframe>
     </div>
 
@@ -252,6 +253,20 @@ const diagramSendBtn = document.getElementById('diagramSendBtn');
 async function initDiagram() {
   addBotMessage('다이어그램 생성 준비 완료!');
   addBotMessage('챗봇에 "3-tier 아키텍처 만들어줘" 같은 요청을 입력하세요.');
+  
+  // Draw.io iframe 로드 확인
+  const iframe = document.getElementById('drawioFrame');
+  if (iframe) {
+    iframe.onload = () => {
+      console.log('Draw.io iframe 로드 완료');
+      addBotMessage('✅ Draw.io 에디터가 준비되었습니다.');
+    };
+    
+    iframe.onerror = () => {
+      console.error('Draw.io iframe 로드 실패');
+      addBotMessage('❌ Draw.io 로드 실패. 네트워크를 확인하세요.');
+    };
+  }
   
   // WebSocket 연결 시도
   try {
