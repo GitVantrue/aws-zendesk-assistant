@@ -636,7 +636,77 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                     "account_id": account_id,
                     "authenticated": True
                 }
-        elif question_type in ["cloudtrail", "cloudwatch", "general", "drawio"]:
+        elif question_type == "drawio":
+            # Draw.io 다이어그램 생성 (Q CLI로 XML만 생성)
+            from aws_tools.q_cli import call_q_cli
+            import re
+            
+            try:
+                # 진행 상황 업데이트
+                await send_websocket_progress(state, "🎨 AWS 아키텍처 다이어그램을 생성하고 있습니다...")
+                
+                # Q CLI 호출 (XML 생성만)
+                q_result = await call_q_cli(
+                    question=state["question"],
+                    account_id=account_id,
+                    credentials=credentials,
+                    context_file=state.get("context_file"),
+                    question_type=question_type,
+                    timeout=600
+                )
+                
+                if q_result["success"]:
+                    answer = q_result["answer"]
+                    
+                    # 응답에서 XML 추출
+                    xml_match = re.search(r'```xml\s*(.*?)\s*```', answer, re.DOTALL)
+                    
+                    if xml_match:
+                        diagram_xml = xml_match.group(1).strip()
+                        
+                        # WebSocket으로 XML 전송 (diagram.html에서 처리)
+                        await state["websocket"].send_str(json.dumps({
+                            "type": "diagram_xml",
+                            "xml": diagram_xml,
+                            "timestamp": datetime.now().isoformat()
+                        }, ensure_ascii=False))
+                        
+                        result = {
+                            "question": state["question"],
+                            "answer": "✅ 다이어그램이 생성되었습니다! 왼쪽 화면에서 확인하세요.",
+                            "question_type": question_type,
+                            "account_id": account_id,
+                            "authenticated": bool(credentials),
+                            "diagram_xml": diagram_xml
+                        }
+                    else:
+                        # XML이 없으면 일반 응답
+                        result = {
+                            "question": state["question"],
+                            "answer": answer,
+                            "question_type": question_type,
+                            "account_id": account_id,
+                            "authenticated": bool(credentials)
+                        }
+                else:
+                    result = {
+                        "question": state["question"],
+                        "answer": f"다이어그램 생성 실패: {q_result['error']}",
+                        "question_type": question_type,
+                        "account_id": account_id,
+                        "authenticated": bool(credentials)
+                    }
+                    
+            except Exception as e:
+                result = {
+                    "question": state["question"],
+                    "answer": f"❌ 다이어그램 생성 중 오류가 발생했습니다: {str(e)}",
+                    "question_type": question_type,
+                    "account_id": account_id,
+                    "authenticated": bool(credentials)
+                }
+        
+        elif question_type in ["cloudtrail", "cloudwatch", "general"]:
             # Q CLI 직접 호출
             from aws_tools.q_cli import call_q_cli
             

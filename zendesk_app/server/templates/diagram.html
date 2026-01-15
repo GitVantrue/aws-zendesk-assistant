@@ -210,12 +210,11 @@ body {
           <button class="action-btn" id="exportBtn">내보내기</button>
         </div>
       </div>
-      <!-- 다이어그램 이미지 표시 영역 -->
-      <div id="diagramDisplay" style="width: 100%; height: calc(100vh - 60px); background: white; display: flex; align-items: center; justify-content: center; overflow: auto;">
-        <div id="diagramContent" style="max-width: 100%; max-height: 100%; padding: 20px; text-align: center;">
-          <p style="color: #6b7280;">다이어그램이 여기에 표시됩니다.<br><br>챗봇에 "3-tier 아키텍처 만들어줘"를 입력하세요.</p>
-        </div>
-      </div>
+      <!-- Draw.io iframe 영역 -->
+      <iframe id="drawioFrame"
+              src="https://embed.diagrams.net/?embed=1&ui=min&spin=1&proto=json"
+              style="width: 100%; height: calc(100vh - 60px); border: none; background: white;">
+      </iframe>
     </div>
 
     <!-- 챗봇 영역 (25%) -->
@@ -280,29 +279,39 @@ function connectWebSocket() {
       console.log('메시지 수신:', event.data);
       const data = JSON.parse(event.data);
       
-      if (data.type === 'streaming_complete' && data.data) {
-        // 다이어그램 이미지 경로 추출
+      // Draw.io XML 수신
+      if (data.type === 'diagram_xml' && data.xml) {
+        console.log('다이어그램 XML 수신:', data.xml.substring(0, 100) + '...');
+        
+        // Draw.io iframe에 XML 로드
+        const iframe = document.getElementById('drawioFrame');
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage(
+            JSON.stringify({
+              action: 'load',
+              autosave: 1,
+              xml: data.xml
+            }),
+            '*'
+          );
+          addBotMessage('✅ 다이어그램이 로드되었습니다!');
+        }
+      }
+      // 스트리밍 완료 (기존 로직)
+      else if (data.type === 'streaming_complete' && data.data) {
+        // 다이어그램 이미지 경로 추출 (폴백)
         const answer = data.data.answer || '';
         const imageMatch = answer.match(/\/root\/aws-zendesk-assistant\/([\w-]+\.png)/);
         
         if (imageMatch) {
-          const imagePath = imageMatch[0];
           const imageName = imageMatch[1];
-          
-          // 이미지 표시
-          const diagramContent = document.getElementById('diagramContent');
-          diagramContent.innerHTML = `
-            <img src="/reports/${imageName}" 
-                 style="max-width: 100%; height: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" 
-                 alt="Generated Diagram"
-                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-            <p style="display: none; color: #ef4444;">이미지를 로드할 수 없습니다.</p>
-          `;
-          addBotMessage('✅ 다이어그램이 생성되었습니다!');
+          addBotMessage(`📊 다이어그램 이미지: /reports/${imageName}`);
         }
-      } else if (data.type === 'diagram_update') {
-        addBotMessage('다이어그램이 업데이트되었습니다.');
-      } else if (data.type === 'message') {
+      } 
+      else if (data.type === 'progress') {
+        addBotMessage(data.message);
+      }
+      else if (data.type === 'message') {
         addBotMessage(data.content);
       }
     };

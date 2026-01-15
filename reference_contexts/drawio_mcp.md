@@ -1,35 +1,21 @@
-# Draw.io MCP 사용 가이드
+# Draw.io 다이어그램 생성 가이드
 
 ## 개요
-Draw.io MCP 서버를 사용하여 AWS 아키텍처 다이어그램을 생성합니다.
+AWS 아키텍처 다이어그램을 mxGraphModel XML 형식으로 생성합니다.
 
-## 중요: 다이어그램 요청 처리 방법
+## ⚠️ 중요: 도구 호출 금지
 
 사용자가 "다이어그램 만들어줘", "아키텍처 그려줘" 등의 요청을 하면:
 
-1. **반드시 Draw.io MCP 도구를 사용**해야 합니다
-2. Python matplotlib나 다른 그래픽 라이브러리를 사용하지 마세요
-3. Draw.io MCP의 `create_new_diagram` 도구를 호출하세요
+1. **Draw.io MCP 도구를 호출하지 마세요** (start_session, create_new_diagram 등)
+2. **대신 mxGraphModel XML 텍스트만 생성하여 응답하세요**
+3. Python matplotlib나 다른 그래픽 라이브러리도 사용하지 마세요
 
-## 사용 가능한 Draw.io MCP 도구
+## 왜 도구를 호출하지 않나요?
 
-### 1. start_session
-- 새로운 다이어그램 세션 시작
-- 브라우저에서 실시간 미리보기 제공
-
-### 2. create_new_diagram
-- mxGraphModel XML로 다이어그램 생성
-- AWS 아이콘 사용 가능 (shape=mxgraph.aws4.*)
-
-### 3. edit_diagram
-- 기존 다이어그램 수정
-- ID 기반으로 셀 추가/수정/삭제
-
-### 4. get_diagram
-- 현재 다이어그램 XML 조회
-
-### 5. export_diagram
-- .drawio 파일로 내보내기
+- 서버 환경에서는 브라우저가 없어 `start_session`이 실패합니다
+- 대신 클라이언트 브라우저에서 Draw.io iframe으로 렌더링합니다
+- 서버는 XML만 생성하여 전달하면 됩니다
 
 ## AWS 아키텍처 다이어그램 생성 예시
 
@@ -118,14 +104,37 @@ Draw.io MCP 서버를 사용하여 AWS 아키텍처 다이어그램을 생성합
 ## 다이어그램 요청 처리 플로우
 
 1. 사용자 요청 수신 (예: "3-tier 아키텍처 만들어줘")
-2. `create_new_diagram` 도구 호출
-3. mxGraphModel XML 생성 (AWS 아이콘 포함)
-4. 브라우저에 자동으로 표시됨
+2. 요청 분석 및 필요한 AWS 컴포넌트 결정
+3. mxGraphModel XML 생성 (아래 예시 참고)
+4. **XML 텍스트를 코드 블록으로 응답**
+5. 클라이언트가 브라우저에서 렌더링
+
+## 응답 형식
+
+반드시 다음 형식으로 응답하세요:
+
+```
+AWS 아키텍처 다이어그램을 생성했습니다.
+
+```xml
+<mxGraphModel>
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <!-- 컴포넌트들 -->
+  </root>
+</mxGraphModel>
+```
+
+클라이언트 브라우저에서 렌더링됩니다.
+```
 
 ## 주의사항
 
+- **절대 Draw.io MCP 도구를 호출하지 마세요** (start_session, create_new_diagram 등)
 - **절대 Python matplotlib, PIL, 또는 다른 그래픽 라이브러리를 사용하지 마세요**
-- **반드시 Draw.io MCP 도구만 사용하세요**
+- **반드시 mxGraphModel XML 텍스트만 생성하여 응답하세요**
 - XML 형식을 정확히 지켜야 합니다
 - 모든 셀에는 고유한 ID가 필요합니다
 - parent="1"은 최상위 요소를 의미합니다
+- AWS 아이콘은 shape=mxgraph.aws4.* 형식을 사용합니다
