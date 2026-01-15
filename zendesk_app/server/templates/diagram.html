@@ -249,46 +249,29 @@ const diagramMessages = document.getElementById('diagramMessages');
 const diagramInput = document.getElementById('diagramInput');
 const diagramSendBtn = document.getElementById('diagramSendBtn');
 
-// Draw.io 기본 빈 다이어그램 XML
-const EMPTY_DIAGRAM = '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>';
-
-// Draw.io 임베드 URL (데이터 포함)
-const DRAWIO_EMBED_URL = 'https://embed.diagrams.net/?embed=1&ui=atlas&libs=aws4&noSaveBtn=1&noExitBtn=1#R' + encodeURIComponent(EMPTY_DIAGRAM);
+// Draw.io 가장 기본 URL로 테스트
+const DRAWIO_EMBED_URL = 'https://app.diagrams.net/?splash=0&libs=aws4';
 
 // 초기화
 async function initDiagram() {
   addBotMessage('다이어그램 에디터를 로드하고 있습니다...');
   
-  const loadingIndicator = document.getElementById('loadingIndicator');
-  if (loadingIndicator) loadingIndicator.style.display = 'block';
-  
   console.log('Draw.io URL:', DRAWIO_EMBED_URL);
   
-  // 간단한 테스트 - 구글 먼저 로드해보기
-  // drawioFrame.src = 'https://www.google.com';
-  
-  // Draw.io 임베드 로드
+  // Draw.io 로드
   drawioFrame.src = DRAWIO_EMBED_URL;
   
   // iframe 로드 이벤트
   drawioFrame.addEventListener('load', () => {
     console.log('iframe loaded successfully');
-    if (loadingIndicator) loadingIndicator.style.display = 'none';
-    addBotMessage('Draw.io가 로드되었습니다. 화면이 보이지 않으면 브라우저에서 직접 https://embed.diagrams.net 접근을 확인하세요.');
+    addBotMessage('Draw.io가 로드되었습니다.');
+    addBotMessage('왼쪽 패널에서 AWS 아이콘을 찾아 드래그하여 사용하세요.');
   });
   
   drawioFrame.addEventListener('error', (e) => {
     console.error('iframe error:', e);
-    if (loadingIndicator) loadingIndicator.style.display = 'none';
-    addBotMessage('Draw.io 로드 실패. 네트워크 연결을 확인하세요.');
+    addBotMessage('Draw.io 로드 실패. 네트워크를 확인하세요.');
   });
-  
-  // 타임아웃 체크
-  setTimeout(() => {
-    if (loadingIndicator && loadingIndicator.style.display !== 'none') {
-      addBotMessage('로딩이 오래 걸리고 있습니다. 페이지를 새로고침하거나 네트워크를 확인하세요.');
-    }
-  }, 10000);
   
   // WebSocket 연결 시도
   try {
@@ -299,7 +282,8 @@ async function initDiagram() {
 }
 
 function connectWebSocket() {
-  const wsUrl = "{{ websocket_url }}".replace(/^http/, 'ws');
+  // ALB 80 포트 사용 (wss 대신 ws, 포트 제거)
+  const wsUrl = "wss://web-tool-lb-627934048.ap-northeast-2.elb.amazonaws.com/ws";
   
   try {
     ws = new WebSocket(wsUrl);
