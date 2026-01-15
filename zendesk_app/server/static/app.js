@@ -70,6 +70,7 @@ class ZenBotDashboard {
     document.getElementById('screenerCard')?.addEventListener('click', () => this.openScreenerModal());
     document.getElementById('reportCard')?.addEventListener('click', () => this.openReportModal());
     document.getElementById('cloudtrailCard')?.addEventListener('click', () => this.openCloudtrailModal());
+    document.getElementById('diagramCard')?.addEventListener('click', () => this.openDiagram());
 
     // 모달 닫기
     document.getElementById('screenerModalClose')?.addEventListener('click', () => this.closeScreenerModal());
@@ -174,6 +175,11 @@ class ZenBotDashboard {
 
   openScreenerModal() {
     document.getElementById('screenerModal')?.classList.add('active');
+  }
+
+  openDiagram() {
+    // 다이어그램 페이지로 이동
+    window.location.href = '/diagram';
   }
 
   closeScreenerModal() {

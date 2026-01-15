@@ -115,6 +115,27 @@ async def index(request: Request):
         return f"<h1>오류 발생</h1><p>{str(e)}</p>"
 
 
+@app.get("/diagram", response_class=HTMLResponse)
+async def diagram(request: Request):
+    """다이어그램 페이지"""
+    try:
+        websocket_url = get_websocket_url(request)
+        logger.info(f"[DEBUG] Diagram WebSocket URL: {websocket_url}")
+        
+        response = templates.TemplateResponse("diagram.html", {
+            "request": request,
+            "websocket_url": websocket_url
+        })
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+        
+    except Exception as e:
+        logger.error(f"[ERROR] 다이어그램 페이지 렌더링 실패: {e}")
+        return f"<h1>오류 발생</h1><p>{str(e)}</p>"
+
+
 @app.get("/health")
 async def health(request: Request):
     """헬스 체크"""
