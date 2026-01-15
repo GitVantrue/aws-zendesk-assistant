@@ -249,8 +249,8 @@ const diagramMessages = document.getElementById('diagramMessages');
 const diagramInput = document.getElementById('diagramInput');
 const diagramSendBtn = document.getElementById('diagramSendBtn');
 
-// Draw.io 가장 기본 URL로 테스트
-const DRAWIO_EMBED_URL = 'https://app.diagrams.net/?splash=0&libs=aws4';
+// Draw.io embed 버전 (iframe 허용됨)
+const DRAWIO_EMBED_URL = 'https://embed.diagrams.net/?ui=min&libs=aws4';
 
 // 초기화
 async function initDiagram() {
@@ -261,17 +261,11 @@ async function initDiagram() {
   // Draw.io 로드
   drawioFrame.src = DRAWIO_EMBED_URL;
   
-  // iframe 로드 이벤트
-  drawioFrame.addEventListener('load', () => {
-    console.log('iframe loaded successfully');
-    addBotMessage('Draw.io가 로드되었습니다.');
-    addBotMessage('왼쪽 패널에서 AWS 아이콘을 찾아 드래그하여 사용하세요.');
-  });
-  
-  drawioFrame.addEventListener('error', (e) => {
-    console.error('iframe error:', e);
-    addBotMessage('Draw.io 로드 실패. 네트워크를 확인하세요.');
-  });
+  // 3초 후 메시지 (onload 이벤트가 안 발생할 수 있음)
+  setTimeout(() => {
+    addBotMessage('Draw.io 에디터가 준비되었습니다.');
+    addBotMessage('화면이 보이지 않으면 브라우저를 새로고침하세요.');
+  }, 3000);
   
   // WebSocket 연결 시도
   try {
