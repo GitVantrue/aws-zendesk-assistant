@@ -74,8 +74,8 @@ def get_websocket_url(request: Request) -> str:
     # ALB 도메인 (고정)
     alb_domain = "web-tool-lb-627934048.ap-northeast-2.elb.amazonaws.com"
     
-    # WebSocket URL 생성 (포트 8001, wss 사용)
-    return f"wss://{alb_domain}:8001"
+    # WebSocket URL 생성 (포트 80, /ws 경로 사용)
+    return f"wss://{alb_domain}/ws"
 
 
 @app.get("/", response_class=HTMLResponse)
