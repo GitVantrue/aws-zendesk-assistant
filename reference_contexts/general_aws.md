@@ -11,7 +11,7 @@
 
 ## AWS CLI 주요 기능
 
-### EC2 관리
+### EC2 관리깆
 - `describe-instances`: 인스턴스 현황 조회
 - `describe-security-groups`: 보안 그룹 조회
 - `describe-key-pairs`: 키 페어 조회
