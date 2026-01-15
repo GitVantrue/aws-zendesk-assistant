@@ -276,18 +276,21 @@ async function initDiagram() {
 }
 
 function connectWebSocket() {
-  // ALB 80 포트 사용 (wss 대신 ws, 포트 제거)
-  const wsUrl = "wss://web-tool-lb-627934048.ap-northeast-2.elb.amazonaws.com/ws";
+  // 템플릿에서 전달받은 WebSocket URL 사용
+  const wsUrl = "{{ websocket_url }}".replace(/^http/, 'ws');
+  
+  console.log('WebSocket 연결 시도:', wsUrl);
   
   try {
     ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
-      console.log('WebSocket 연결됨');
-      addBotMessage('AI 어시스턴트가 연결되었습니다.');
+      console.log('WebSocket 연결 성공!');
+      addBotMessage('✅ AI 어시스턴트가 연결되었습니다. 이제 다이어그램 요청을 입력하세요.');
     };
     
     ws.onmessage = (event) => {
+      console.log('메시지 수신:', event.data);
       const data = JSON.parse(event.data);
       if (data.type === 'diagram_update') {
         addBotMessage('다이어그램이 업데이트되었습니다.');
@@ -297,14 +300,16 @@ function connectWebSocket() {
     };
     
     ws.onerror = (error) => {
-      console.log('WebSocket 연결 실패 (선택적 기능)');
+      console.error('WebSocket 에러:', error);
+      addBotMessage('❌ WebSocket 연결 실패. 서버를 확인하세요.');
     };
     
     ws.onclose = () => {
       console.log('WebSocket 연결 종료');
     };
   } catch (e) {
-    console.log('WebSocket 초기화 실패:', e);
+    console.error('WebSocket 초기화 실패:', e);
+    addBotMessage('WebSocket 초기화 실패: ' + e.message);
   }
 }
 
