@@ -244,21 +244,23 @@ const diagramMessages = document.getElementById('diagramMessages');
 const diagramInput = document.getElementById('diagramInput');
 const diagramSendBtn = document.getElementById('diagramSendBtn');
 
-// Draw.io는 WebSocket으로 통신하므로 직접 iframe 사용 불가
-// 대신 공식 draw.io 임베드 사용 (AWS 템플릿으로 시작)
-const DRAWIO_EMBED_URL = 'https://embed.diagrams.net/?embed=1&ui=atlas&libs=aws4&noSaveBtn=1&noExitBtn=1';
+// Draw.io 기본 빈 다이어그램 XML
+const EMPTY_DIAGRAM = '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>';
+
+// Draw.io 임베드 URL (데이터 포함)
+const DRAWIO_EMBED_URL = 'https://embed.diagrams.net/?embed=1&ui=atlas&libs=aws4&noSaveBtn=1&noExitBtn=1#R' + encodeURIComponent(EMPTY_DIAGRAM);
 
 // 초기화
 async function initDiagram() {
   addBotMessage('다이어그램 에디터를 로드하고 있습니다...');
   
-  // Draw.io 임베드 로드 - AWS 라이브러리 포함
+  // Draw.io 임베드 로드
   drawioFrame.src = DRAWIO_EMBED_URL;
   
   // 메시지 표시
   setTimeout(() => {
     addBotMessage('다이어그램 에디터가 준비되었습니다.');
-    addBotMessage('왼쪽 에디터에서 직접 편집하거나, 챗봇에 "3-tier 아키텍처 만들어줘" 같은 요청을 입력하세요.');
+    addBotMessage('왼쪽 에디터에서 직접 AWS 아이콘을 드래그하여 편집하거나, 챗봇에 요청하세요.');
   }, 2000);
   
   // WebSocket 연결 시도
