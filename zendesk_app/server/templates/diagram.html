@@ -1,55 +1,21 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AWS 아키텍처 다이어그램</title>
+  <style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-{% block title %}AWS 아키텍처 다이어그램{% endblock %}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  overflow: hidden;
+}
 
-{% block content %}
-<!-- 토스트 컨테이너 추가 -->
-<div class="toast-container" id="toastContainer"></div>
-
-<div class="diagram-app">
-  <!-- 다이어그램 + 챗봇 레이아웃 -->
-  <div class="diagram-layout">
-    <!-- Draw.io 영역 (75%) -->
-    <div class="diagram-container">
-      <div class="diagram-header">
-        <button class="back-btn" onclick="window.location.href='/'">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          대시보드로
-        </button>
-        <h2>AWS 아키텍처 다이어그램</h2>
-        <div class="diagram-actions">
-          <button class="action-btn" id="exportBtn">내보내기</button>
-        </div>
-      </div>
-      <iframe id="drawioFrame" src="" style="width: 100%; height: calc(100vh - 60px); border: none;"></iframe>
-    </div>
-
-    <!-- 챗봇 영역 (25%) -->
-    <div class="chatbot-sidebar">
-      <div class="chatbot-header">
-        <h3>아키텍처 어시스턴트</h3>
-      </div>
-      <div class="chatbot-messages" id="diagramMessages">
-        <div class="bot-message">
-          안녕하세요! AWS 아키텍처 다이어그램을 도와드리겠습니다.<br><br>
-          <strong>예시:</strong><br>
-          • "3-tier 아키텍처 만들어줘"<br>
-          • "Lambda 함수 추가해줘"<br>
-          • "RDS를 Multi-AZ로 변경해줘"<br>
-          • "보안 서비스 추가해줘"
-        </div>
-      </div>
-      <div class="chatbot-input">
-        <textarea id="diagramInput" placeholder="다이어그램 요청사항을 입력하세요..." rows="3"></textarea>
-        <button id="diagramSendBtn" class="send-btn">전송</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<style>
 .diagram-app {
   width: 100%;
   height: 100vh;
@@ -91,6 +57,7 @@
   font-size: 14px;
   color: #374151;
   transition: all 0.2s;
+  text-decoration: none;
 }
 
 .back-btn:hover {
@@ -223,7 +190,51 @@
   background: #9ca3af;
   cursor: not-allowed;
 }
-</style>
+  </style>
+</head>
+<body>
+<div class="diagram-app">
+  <!-- 다이어그램 + 챗봇 레이아웃 -->
+  <div class="diagram-layout">
+    <!-- Draw.io 영역 (75%) -->
+    <div class="diagram-container">
+      <div class="diagram-header">
+        <button class="back-btn" onclick="window.location.href='/'">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          대시보드로
+        </button>
+        <h2>AWS 아키텍처 다이어그램</h2>
+        <div class="diagram-actions">
+          <button class="action-btn" id="exportBtn">내보내기</button>
+        </div>
+      </div>
+      <iframe id="drawioFrame" src="" style="width: 100%; height: calc(100vh - 60px); border: none;"></iframe>
+    </div>
+
+    <!-- 챗봇 영역 (25%) -->
+    <div class="chatbot-sidebar">
+      <div class="chatbot-header">
+        <h3>아키텍처 어시스턴트</h3>
+      </div>
+      <div class="chatbot-messages" id="diagramMessages">
+        <div class="bot-message">
+          안녕하세요! AWS 아키텍처 다이어그램을 도와드리겠습니다.<br><br>
+          <strong>예시:</strong><br>
+          • "3-tier 아키텍처 만들어줘"<br>
+          • "Lambda 함수 추가해줘"<br>
+          • "RDS를 Multi-AZ로 변경해줘"<br>
+          • "보안 서비스 추가해줘"
+        </div>
+      </div>
+      <div class="chatbot-input">
+        <textarea id="diagramInput" placeholder="다이어그램 요청사항을 입력하세요..." rows="3"></textarea>
+        <button id="diagramSendBtn" class="send-btn">전송</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 // WebSocket 연결 (선택적)
@@ -335,4 +346,5 @@ document.getElementById('exportBtn').addEventListener('click', () => {
 // 페이지 로드 시 초기화
 initDiagram();
 </script>
-{% endblock %}
+</body>
+</html>
