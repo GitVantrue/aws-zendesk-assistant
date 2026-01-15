@@ -244,22 +244,20 @@ const diagramMessages = document.getElementById('diagramMessages');
 const diagramInput = document.getElementById('diagramInput');
 const diagramSendBtn = document.getElementById('diagramSendBtn');
 
-// Draw.io MCP 서버 URL (FastAPI 프록시 경유)
-const DRAWIO_MCP_URL = '/drawio';
+// Draw.io는 WebSocket으로 통신하므로 직접 iframe 사용 불가
+// 대신 공식 draw.io 임베드 사용
+const DRAWIO_EMBED_URL = 'https://embed.diagrams.net/?embed=1&ui=atlas&spin=1&proto=json';
 
 // 초기화
 async function initDiagram() {
-  addBotMessage('다이어그램 세션을 시작하고 있습니다...');
+  addBotMessage('다이어그램 에디터를 로드하고 있습니다...');
   
-  // Draw.io iframe 로드
-  drawioFrame.src = DRAWIO_MCP_URL;
+  // Draw.io 임베드 로드
+  drawioFrame.src = DRAWIO_EMBED_URL;
   
   drawioFrame.onload = () => {
-    addBotMessage('다이어그램이 로드되었습니다.');
-  };
-  
-  drawioFrame.onerror = () => {
-    addBotMessage('다이어그램 로드 실패. Draw.io MCP 서버가 실행 중인지 확인하세요.');
+    addBotMessage('다이어그램 에디터가 준비되었습니다.');
+    addBotMessage('챗봇에 요청하면 AI가 다이어그램을 생성합니다.');
   };
 }
 
@@ -322,18 +320,21 @@ diagramInput.addEventListener('keypress', (e) => {
 
 function sendMessage() {
   const message = diagramInput.value.trim();
-  if (!message || !ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!message) return;
   
   addUserMessage(message);
   diagramInput.value = '';
   
-  // WebSocket으로 메시지 전송
-  ws.send(JSON.stringify({
-    type: 'diagram_request',
-    content: message
-  }));
-  
-  addBotMessage('처리 중입니다...');
+  // WebSocket으로 Q CLI에 메시지 전송
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'diagram_request',
+      content: message
+    }));
+    addBotMessage('처리 중입니다...');
+  } else {
+    addBotMessage('WebSocket 연결이 필요합니다. 잠시 후 다시 시도해주세요.');
+  }
 }
 
 // 내보내기
