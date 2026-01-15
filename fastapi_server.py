@@ -82,6 +82,9 @@ def get_websocket_url(request: Request) -> str:
 async def index(request: Request):
     """메인 페이지"""
     try:
+        # HTTPS 스키마 강제 설정
+        request.scope['scheme'] = 'https'
+        
         websocket_url = get_websocket_url(request)
         logger.info(f"[DEBUG] WebSocket URL: {websocket_url}")
         
@@ -119,6 +122,9 @@ async def index(request: Request):
 async def diagram(request: Request):
     """다이어그램 페이지"""
     try:
+        # HTTPS 스키마 강제 설정
+        request.scope['scheme'] = 'https'
+        
         websocket_url = get_websocket_url(request)
         logger.info(f"[DEBUG] Diagram WebSocket URL: {websocket_url}")
         
