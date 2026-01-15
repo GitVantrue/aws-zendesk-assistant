@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -134,6 +134,34 @@ async def diagram(request: Request):
     except Exception as e:
         logger.error(f"[ERROR] 다이어그램 페이지 렌더링 실패: {e}")
         return f"<h1>오류 발생</h1><p>{str(e)}</p>"
+
+
+@app.api_route("/drawio/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+async def drawio_proxy(request: Request, path: str):
+    """Draw.io MCP 서버 프록시"""
+    import httpx
+    
+    drawio_url = f"http://localhost:6002/{path}"
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            # 요청 전달
+            response = await client.request(
+                method=request.method,
+                url=drawio_url,
+                headers=dict(request.headers),
+                content=await request.body()
+            )
+            
+            # 응답 반환
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers=dict(response.headers)
+            )
+        except Exception as e:
+            logger.error(f"[ERROR] Draw.io 프록시 오류: {e}")
+            return {"error": str(e)}
 
 
 @app.get("/health")

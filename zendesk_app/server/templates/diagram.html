@@ -244,24 +244,23 @@ const diagramMessages = document.getElementById('diagramMessages');
 const diagramInput = document.getElementById('diagramInput');
 const diagramSendBtn = document.getElementById('diagramSendBtn');
 
-// Draw.io MCP 서버 URL
-const DRAWIO_MCP_URL = 'http://localhost:6002';
+// Draw.io MCP 서버 URL (FastAPI 프록시 경유)
+const DRAWIO_MCP_URL = '/drawio';
 
 // 초기화
 async function initDiagram() {
   addBotMessage('다이어그램 세션을 시작하고 있습니다...');
   
-  // Draw.io iframe 직접 로드 (WebSocket 없이)
-  drawioFrame.src = `${DRAWIO_MCP_URL}`;
+  // Draw.io iframe 로드
+  drawioFrame.src = DRAWIO_MCP_URL;
   
-  addBotMessage('다이어그램이 로드되었습니다. 현재는 수동 편집만 가능합니다.');
+  drawioFrame.onload = () => {
+    addBotMessage('다이어그램이 로드되었습니다.');
+  };
   
-  // WebSocket 연결 시도 (실패해도 계속 진행)
-  try {
-    connectWebSocket();
-  } catch (e) {
-    console.log('WebSocket 연결 실패 (선택적 기능):', e);
-  }
+  drawioFrame.onerror = () => {
+    addBotMessage('다이어그램 로드 실패. Draw.io MCP 서버가 실행 중인지 확인하세요.');
+  };
 }
 
 function connectWebSocket() {
