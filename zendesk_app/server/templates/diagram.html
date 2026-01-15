@@ -210,7 +210,7 @@ body {
           <button class="action-btn" id="exportBtn">내보내기</button>
         </div>
       </div>
-      <iframe id="drawioFrame" src="" style="width: 100%; height: calc(100vh - 60px); border: none;"></iframe>
+      <iframe id="drawioFrame" src="" style="width: 100%; height: calc(100vh - 60px); border: none; background: white;"></iframe>
     </div>
 
     <!-- 챗봇 영역 (25%) -->
@@ -254,8 +254,21 @@ const DRAWIO_EMBED_URL = 'https://embed.diagrams.net/?embed=1&ui=atlas&libs=aws4
 async function initDiagram() {
   addBotMessage('다이어그램 에디터를 로드하고 있습니다...');
   
+  console.log('Draw.io URL:', DRAWIO_EMBED_URL);
+  
   // Draw.io 임베드 로드
   drawioFrame.src = DRAWIO_EMBED_URL;
+  
+  // iframe 로드 이벤트
+  drawioFrame.addEventListener('load', () => {
+    console.log('iframe loaded');
+    addBotMessage('iframe이 로드되었습니다.');
+  });
+  
+  drawioFrame.addEventListener('error', (e) => {
+    console.error('iframe error:', e);
+    addBotMessage('iframe 로드 실패');
+  });
   
   // 메시지 표시
   setTimeout(() => {
