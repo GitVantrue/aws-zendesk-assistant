@@ -3,6 +3,9 @@
 {% block title %}AWS 아키텍처 다이어그램{% endblock %}
 
 {% block content %}
+<!-- 토스트 컨테이너 추가 -->
+<div class="toast-container" id="toastContainer"></div>
+
 <div class="diagram-app">
   <!-- 다이어그램 + 챗봇 레이아웃 -->
   <div class="diagram-layout">
@@ -223,54 +226,63 @@
 </style>
 
 <script>
-// WebSocket 연결
+// WebSocket 연결 (선택적)
 let ws = null;
 const drawioFrame = document.getElementById('drawioFrame');
 const diagramMessages = document.getElementById('diagramMessages');
 const diagramInput = document.getElementById('diagramInput');
 const diagramSendBtn = document.getElementById('diagramSendBtn');
 
-// Draw.io MCP 서버 URL (환경에 맞게 수정)
+// Draw.io MCP 서버 URL
 const DRAWIO_MCP_URL = 'http://localhost:6002';
 
 // 초기화
 async function initDiagram() {
-  // Draw.io 세션 시작 요청
   addBotMessage('다이어그램 세션을 시작하고 있습니다...');
   
-  // WebSocket 연결
-  connectWebSocket();
+  // Draw.io iframe 직접 로드 (WebSocket 없이)
+  drawioFrame.src = `${DRAWIO_MCP_URL}`;
   
-  // 임시로 직접 URL 설정 (실제로는 MCP 서버에서 세션 ID 받아야 함)
-  drawioFrame.src = `${DRAWIO_MCP_URL}?mcp=session-${Date.now()}`;
+  addBotMessage('다이어그램이 로드되었습니다. 현재는 수동 편집만 가능합니다.');
+  
+  // WebSocket 연결 시도 (실패해도 계속 진행)
+  try {
+    connectWebSocket();
+  } catch (e) {
+    console.log('WebSocket 연결 실패 (선택적 기능):', e);
+  }
 }
 
 function connectWebSocket() {
   const wsUrl = "{{ websocket_url }}".replace(/^http/, 'ws');
-  ws = new WebSocket(wsUrl);
   
-  ws.onopen = () => {
-    console.log('WebSocket 연결됨');
-    addBotMessage('연결되었습니다. 다이어그램 요청을 입력하세요.');
-  };
-  
-  ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    if (data.type === 'diagram_update') {
-      addBotMessage('다이어그램이 업데이트되었습니다.');
-    } else if (data.type === 'message') {
-      addBotMessage(data.content);
-    }
-  };
-  
-  ws.onerror = (error) => {
-    console.error('WebSocket 오류:', error);
-    addBotMessage('연결 오류가 발생했습니다.');
-  };
-  
-  ws.onclose = () => {
-    console.log('WebSocket 연결 종료');
-  };
+  try {
+    ws = new WebSocket(wsUrl);
+    
+    ws.onopen = () => {
+      console.log('WebSocket 연결됨');
+      addBotMessage('AI 어시스턴트가 연결되었습니다.');
+    };
+    
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'diagram_update') {
+        addBotMessage('다이어그램이 업데이트되었습니다.');
+      } else if (data.type === 'message') {
+        addBotMessage(data.content);
+      }
+    };
+    
+    ws.onerror = (error) => {
+      console.log('WebSocket 연결 실패 (선택적 기능)');
+    };
+    
+    ws.onclose = () => {
+      console.log('WebSocket 연결 종료');
+    };
+  } catch (e) {
+    console.log('WebSocket 초기화 실패:', e);
+  }
 }
 
 function addBotMessage(text) {
