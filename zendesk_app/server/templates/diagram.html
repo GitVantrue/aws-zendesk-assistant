@@ -274,14 +274,13 @@ async function initDiagram() {
   </diagram>
 </mxfile>`;
         
-        iframe.contentWindow.postMessage(
-          JSON.stringify({
-            action: 'load',
-            autosave: 1,
-            xml: emptyDiagram
-          }),
-          '*'
-        );
+        // postMessage는 객체를 직접 전달 (JSON.stringify 불필요)
+        iframe.contentWindow.postMessage({
+          action: 'load',
+          autosave: 1,
+          xml: emptyDiagram
+        }, '*');
+        
         console.log('빈 다이어그램 초기화 완료');
       }, 1000);
       
@@ -327,14 +326,14 @@ function connectWebSocket() {
         // Draw.io iframe에 XML 로드
         const iframe = document.getElementById('drawioFrame');
         if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage(
-            JSON.stringify({
-              action: 'load',
-              autosave: 1,
-              xml: data.xml
-            }),
-            '*'
-          );
+          // postMessage는 객체를 직접 전달 (JSON.stringify 불필요)
+          iframe.contentWindow.postMessage({
+            action: 'load',
+            autosave: 1,
+            xml: data.xml
+          }, '*');
+          
+          console.log('Draw.io에 XML 전송 완료');
           addBotMessage('✅ 다이어그램이 로드되었습니다!');
         }
       }
