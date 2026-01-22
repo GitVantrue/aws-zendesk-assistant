@@ -274,12 +274,15 @@ async function initDiagram() {
   </diagram>
 </mxfile>`;
         
-        // postMessage는 객체를 직접 전달 (JSON.stringify 불필요)
-        iframe.contentWindow.postMessage({
+        const message = JSON.stringify({
           action: 'load',
           autosave: 1,
           xml: emptyDiagram
-        }, '*');
+        });
+        
+        console.log('초기 다이어그램 메시지 전송:', message.substring(0, 200));
+        
+        iframe.contentWindow.postMessage(message, '*');
         
         console.log('빈 다이어그램 초기화 완료');
       }, 1000);
@@ -325,20 +328,18 @@ function connectWebSocket() {
         console.log('XML 타입:', typeof data.xml);
         console.log('XML 길이:', data.xml.length);
         console.log('XML 첫 100자:', data.xml.substring(0, 100));
-        console.log('XML 전체:', data.xml);
         
         // Draw.io iframe에 XML 로드
         const iframe = document.getElementById('drawioFrame');
         if (iframe && iframe.contentWindow) {
-          const message = {
+          const message = JSON.stringify({
             action: 'load',
             autosave: 1,
             xml: data.xml
-          };
+          });
           
-          console.log('Draw.io에 전송할 메시지:', message);
+          console.log('Draw.io에 전송할 메시지 (첫 200자):', message.substring(0, 200));
           
-          // postMessage는 객체를 직접 전달 (JSON.stringify 불필요)
           iframe.contentWindow.postMessage(message, '*');
           
           console.log('Draw.io에 XML 전송 완료');
