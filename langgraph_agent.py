@@ -658,11 +658,33 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                 if q_result["success"]:
                     answer = q_result["answer"]
                     
-                    # 응답에서 XML 추출
+                    # 응답에서 XML 추출 (여러 패턴 시도)
+                    xml_match = None
+                    
+                    # 패턴 1: ```xml ... ```
                     xml_match = re.search(r'```xml\s*(.*?)\s*```', answer, re.DOTALL)
+                    
+                    # 패턴 2: xml\n<mxGraphModel> (백틱 없음)
+                    if not xml_match:
+                        xml_match = re.search(r'xml\s*\n\s*(<mxGraphModel>.*?</mxGraphModel>)', answer, re.DOTALL)
+                    
+                    # 패턴 3: 직접 <mxGraphModel> 찾기
+                    if not xml_match:
+                        xml_match = re.search(r'(<mxGraphModel>.*?</mxGraphModel>)', answer, re.DOTALL)
                     
                     if xml_match:
                         diagram_xml = xml_match.group(1).strip()
+                        
+                        # mxfile 래퍼가 없으면 추가
+                        if not diagram_xml.startswith('<?xml'):
+                            diagram_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
+  <diagram name="AWS Architecture" id="aws-arch">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+      {diagram_xml}
+    </mxGraphModel>
+  </diagram>
+</mxfile>'''
                         
                         # WebSocket으로 XML 전송 (diagram.html에서 처리)
                         await state["websocket"].send_str(json.dumps({
