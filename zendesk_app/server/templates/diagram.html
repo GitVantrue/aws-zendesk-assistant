@@ -321,17 +321,25 @@ function connectWebSocket() {
       
       // Draw.io XML 수신
       if (data.type === 'diagram_xml' && data.xml) {
-        console.log('다이어그램 XML 수신:', data.xml.substring(0, 100) + '...');
+        console.log('=== 다이어그램 XML 수신 ===');
+        console.log('XML 타입:', typeof data.xml);
+        console.log('XML 길이:', data.xml.length);
+        console.log('XML 첫 100자:', data.xml.substring(0, 100));
+        console.log('XML 전체:', data.xml);
         
         // Draw.io iframe에 XML 로드
         const iframe = document.getElementById('drawioFrame');
         if (iframe && iframe.contentWindow) {
-          // postMessage는 객체를 직접 전달 (JSON.stringify 불필요)
-          iframe.contentWindow.postMessage({
+          const message = {
             action: 'load',
             autosave: 1,
             xml: data.xml
-          }, '*');
+          };
+          
+          console.log('Draw.io에 전송할 메시지:', message);
+          
+          // postMessage는 객체를 직접 전달 (JSON.stringify 불필요)
+          iframe.contentWindow.postMessage(message, '*');
           
           console.log('Draw.io에 XML 전송 완료');
           addBotMessage('✅ 다이어그램이 로드되었습니다!');
@@ -422,6 +430,14 @@ document.getElementById('exportBtn').addEventListener('click', () => {
 
 // 페이지 로드 시 초기화
 initDiagram();
+
+// Draw.io iframe에서 오는 메시지 수신 (디버깅용)
+window.addEventListener('message', (event) => {
+  // Draw.io에서 오는 메시지만 로깅
+  if (event.origin === 'https://embed.diagrams.net') {
+    console.log('Draw.io로부터 메시지 수신:', event.data);
+  }
+});
 </script>
 </body>
 </html>
