@@ -666,21 +666,21 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                     diagram_xml = None
                     
                     # 패턴 1: xml\n<?xml ... </mxfile> (Q CLI 실제 출력 형식)
-                    xml_match = re.search(r'xml\s*\n\s*(<?xml[\s\S]*?</mxfile>)', answer, re.DOTALL)
+                    xml_match = re.search(r'xml\s*\n\s*(<\?xml[\s\S]*?</mxfile>)', answer, re.DOTALL)
                     if xml_match:
                         diagram_xml = xml_match.group(1).strip()
                         log_debug("패턴 1 매칭 성공: xml\\n<?xml...mxfile>")
                     
                     # 패턴 2: 직접 <?xml로 시작하는 경우
                     if not diagram_xml and '<?xml' in answer:
-                        xml_match = re.search(r'(<?xml[\s\S]*?</mxfile>)', answer, re.DOTALL)
+                        xml_match = re.search(r'(<\?xml[\s\S]*?</mxfile>)', answer, re.DOTALL)
                         if xml_match:
                             diagram_xml = xml_match.group(1).strip()
                             log_debug("패턴 2 매칭 성공: <?xml...mxfile>")
                     
                     # 패턴 3: ```xml ... ``` (백틱 포함)
                     if not diagram_xml:
-                        xml_match = re.search(r'```xml\s*(<?xml[\s\S]*?</mxfile>)\s*```', answer, re.DOTALL)
+                        xml_match = re.search(r'```xml\s*(<\?xml[\s\S]*?</mxfile>)\s*```', answer, re.DOTALL)
                         if xml_match:
                             diagram_xml = xml_match.group(1).strip()
                             log_debug("패턴 3 매칭 성공: ```xml...```")
