@@ -264,6 +264,23 @@ async function initDiagram() {
     iframe.onload = () => {
       console.log('Draw.io iframe 로드 완료');
       addBotMessage('✅ Draw.io 에디터가 준비되었습니다.');
+      
+      // 2초 후 빈 다이어그램 강제 초기화 (ready 이벤트 대기 없이)
+      setTimeout(() => {
+        if (!drawioReady) {
+          console.log('ready 이벤트 없음, 강제 초기화 시도');
+          const emptyDiagram = `<?xml version="1.0"?><mxfile><diagram><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>`;
+          
+          const message = JSON.stringify({
+            action: 'load',
+            xml: emptyDiagram,
+            autosave: 1
+          });
+          
+          iframe.contentWindow.postMessage(message, 'https://embed.diagrams.net');
+          console.log('강제 초기화 완료');
+        }
+      }, 2000);
     };
     
     iframe.onerror = () => {
