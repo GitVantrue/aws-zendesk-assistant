@@ -378,6 +378,12 @@ function addUserMessage(text) {
 function checkAndLoadXML() {
   if (!streamingBuffer) return;
   
+  // </mxfile>이 있는지 확인 (완성 여부)
+  if (!streamingBuffer.includes('</mxfile>')) {
+    console.log('XML 아직 불완전 (</mxfile> 없음), 버퍼 길이:', streamingBuffer.length);
+    return;
+  }
+  
   console.log('=== XML 추출 시도 ===');
   console.log('버퍼 길이:', streamingBuffer.length);
   console.log('버퍼 첫 200자:', streamingBuffer.substring(0, 200));
@@ -421,7 +427,7 @@ function checkAndLoadXML() {
   }
   
   // XML이 완성되었으면 로드
-  if (xmlContent && xmlContent.includes('</mxfile>')) {
+  if (xmlContent) {
     console.log('=== XML 추출 성공 ===');
     console.log('XML 길이:', xmlContent.length);
     console.log('XML 첫 100자:', xmlContent.substring(0, 100));
@@ -432,7 +438,7 @@ function checkAndLoadXML() {
     // 버퍼 초기화 (중복 로드 방지)
     streamingBuffer = '';
   } else {
-    console.log('XML 추출 실패 또는 불완전');
+    console.log('XML 추출 실패 - 패턴 매칭 안됨');
   }
 }
 
