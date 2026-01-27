@@ -456,27 +456,24 @@ function loadDiagramXML(xmlContent) {
 // 실제 XML 로드 함수
 function loadDiagramXMLNow(xmlContent) {
   const iframe = document.getElementById('drawioFrame');
-  if (iframe && iframe.contentWindow) {
+  if (iframe) {
     console.log('=== Draw.io에 XML 로드 시작 ===');
     console.log('XML 샘플 (첫 200자):', xmlContent.substring(0, 200));
     
-    // XML을 URL 인코딩
-    const encodedXml = encodeURIComponent(xmlContent);
-    console.log('URL 인코딩 완료, 길이:', encodedXml.length);
+    // XML을 base64 인코딩
+    const base64Xml = btoa(unescape(encodeURIComponent(xmlContent)));
+    console.log('Base64 인코딩 완료, 길이:', base64Xml.length);
     
-    // merge 액션 사용 (새 다이어그램 생성)
-    const message = {
-      action: 'merge',
-      xml: encodedXml
-    };
+    // iframe src를 XML 포함한 URL로 변경
+    const newSrc = `https://embed.diagrams.net/?embed=1&ui=min&libraries=1&saveAndExit=0&noSaveBtn=1&noExitBtn=1&libs=aws4#R${base64Xml}`;
     
-    console.log('Draw.io에 merge 액션으로 전송');
-    iframe.contentWindow.postMessage(message, '*');
+    console.log('iframe src 변경 시작');
+    iframe.src = newSrc;
     
-    console.log('Draw.io에 XML 전송 완료 (merge)');
+    console.log('Draw.io iframe src 변경 완료');
     addBotMessage('✅ 다이어그램이 로드되었습니다!');
   } else {
-    console.error('Draw.io iframe을 찾을 수 없거나 contentWindow가 없습니다');
+    console.error('Draw.io iframe을 찾을 수 없습니다');
   }
 }
 
@@ -531,28 +528,14 @@ window.addEventListener('message', (event) => {
       drawioReady = true;
       console.log('Draw.io ready 상태 확인');
       
-      const iframe = document.getElementById('drawioFrame');
-      if (iframe && iframe.contentWindow) {
-        // 1단계: AWS 라이브러리 명시적 활성화
-        console.log('AWS 라이브러리 활성화 시도...');
-        iframe.contentWindow.postMessage({
-          action: 'configure',
-          config: {
-            defaultLibraries: 'general;aws4'
-          }
-        }, '*');
-        
-        // 2단계: 잠시 대기 후 대기 중인 XML 로드
-        setTimeout(() => {
-          if (pendingXML) {
-            console.log('대기 중인 XML 로드 시작');
-            loadDiagramXMLNow(pendingXML);
-            pendingXML = null;
-          } else {
-            console.log('빈 캔버스 준비 완료 (초기화 없음)');
-            addBotMessage('📐 Draw.io 캔버스가 준비되었습니다! (AWS 라이브러리 활성화됨)');
-          }
-        }, 500); // 500ms 대기
+      // 대기 중인 XML이 있으면 로드
+      if (pendingXML) {
+        console.log('대기 중인 XML 로드 시작');
+        loadDiagramXMLNow(pendingXML);
+        pendingXML = null;
+      } else {
+        console.log('빈 캔버스 준비 완료');
+        addBotMessage('📐 Draw.io 캔버스가 준비되었습니다!');
       }
     }
   }
