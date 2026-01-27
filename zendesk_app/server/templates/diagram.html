@@ -320,10 +320,67 @@ function connectWebSocket() {
       }
       // 스트리밍 완료 (기존 로직)
       else if (data.type === 'streaming_complete' && data.data) {
-        // 다이어그램 이미지 경로 추출 (폴백)
         const answer = data.data.answer || '';
-        const imageMatch = answer.match(/\/root\/aws-zendesk-assistant\/([\w-]+\.png)/);
         
+        console.log('=== streaming_complete 수신 ===');
+        console.log('Answer 길이:', answer.length);
+        console.log('Answer 첫 200자:', answer.substring(0, 200));
+        
+        // XML 추출 시도 (여러 패턴)
+        let xmlContent = null;
+        
+        // 패턴 1: xml\n<?xml ... (Q CLI 응답 형식) - 가장 정확한 패턴
+        const xmlMatch1 = answer.match(/xml\s*\n\s*(<\?xml[\s\S]*<\/mxfile>)/);
+        if (xmlMatch1) {
+          xmlContent = xmlMatch1[1].trim();
+          console.log('패턴 1 매칭 성공: xml\\n<?xml...mxfile>');
+        }
+        
+        // 패턴 2: 직접 <?xml로 시작
+        if (!xmlContent && answer.includes('<?xml')) {
+          const xmlMatch2 = answer.match(/(<\?xml[\s\S]*<\/mxfile>)/);
+          if (xmlMatch2) {
+            xmlContent = xmlMatch2[1].trim();
+            console.log('패턴 2 매칭 성공: <?xml...mxfile>');
+          }
+        }
+        
+        // 패턴 3: ```xml ... ``` (백틱 포함)
+        if (!xmlContent) {
+          const xmlMatch3 = answer.match(/```xml\s*(<\?xml[\s\S]*<\/mxfile>)\s*```/);
+          if (xmlMatch3) {
+            xmlContent = xmlMatch3[1].trim();
+            console.log('패턴 3 매칭 성공: ```xml...```');
+          }
+        }
+        
+        // XML이 있으면 Draw.io에 로드
+        if (xmlContent) {
+          console.log('=== XML 추출 성공 ===');
+          console.log('XML 길이:', xmlContent.length);
+          console.log('XML 첫 100자:', xmlContent.substring(0, 100));
+          
+          const iframe = document.getElementById('drawioFrame');
+          if (iframe && iframe.contentWindow) {
+            const message = JSON.stringify({
+              action: 'load',
+              autosave: 1,
+              xml: xmlContent
+            });
+            
+            console.log('Draw.io에 전송할 메시지 (첫 200자):', message.substring(0, 200));
+            iframe.contentWindow.postMessage(message, '*');
+            console.log('Draw.io에 XML 전송 완료');
+            addBotMessage('✅ 다이어그램이 로드되었습니다!');
+          } else {
+            console.error('Draw.io iframe을 찾을 수 없거나 contentWindow가 없습니다');
+          }
+        } else {
+          console.log('XML 추출 실패 - 패턴이 매칭되지 않음');
+        }
+        
+        // 다이어그램 이미지 경로 추출 (폴백)
+        const imageMatch = answer.match(/\/root\/aws-zendesk-assistant\/([\w-]+\.png)/);
         if (imageMatch) {
           const imageName = imageMatch[1];
           addBotMessage(`📊 다이어그램 이미지: /reports/${imageName}`);
