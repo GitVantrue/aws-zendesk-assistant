@@ -409,6 +409,35 @@ window.addEventListener('message', (event) => {
   // Draw.io에서 오는 메시지만 로깅
   if (event.origin === 'https://embed.diagrams.net') {
     console.log('Draw.io로부터 메시지 수신:', event.data);
+    
+    // Draw.io가 ready 상태가 되면 빈 다이어그램 초기화
+    if (event.data === 'ready') {
+      const iframe = document.getElementById('drawioFrame');
+      if (iframe && iframe.contentWindow) {
+        // 빈 다이어그램 XML
+        const emptyDiagram = `<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
+  <diagram name="AWS Architecture" id="aws-arch">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>`;
+        
+        const message = JSON.stringify({
+          action: 'load',
+          autosave: 1,
+          xml: emptyDiagram
+        });
+        
+        iframe.contentWindow.postMessage(message, '*');
+        console.log('빈 다이어그램 초기화 완료');
+        addBotMessage('📐 Draw.io 캔버스가 준비되었습니다!');
+      }
+    }
   }
 });
 </script>
