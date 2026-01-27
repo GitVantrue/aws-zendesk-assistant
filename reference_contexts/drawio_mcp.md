@@ -17,47 +17,72 @@ AWS 아키텍처 다이어그램을 mxGraphModel XML 형식으로 생성합니�
 - 대신 클라이언트 브라우저에서 Draw.io iframe으로 렌더링합니다
 - 서버는 XML만 생성하여 전달하면 됩니다
 
+## ⚠️ 중요: XML 구조
+
+**올바른 구조** (diagram 태그 없음):
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
+  <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+    <root>
+      <mxCell id="0"/>
+      <mxCell id="1" parent="0"/>
+      <!-- 컴포넌트들 -->
+    </root>
+  </mxGraphModel>
+</mxfile>
+```
+
+**잘못된 구조** (diagram 태그 있음 - 사용하지 마세요):
+```xml
+<mxfile>
+  <diagram>  ← 이 태그를 사용하지 마세요!
+    <mxGraphModel>
+      ...
+    </mxGraphModel>
+  </diagram>  ← 이 태그를 사용하지 마세요!
+</mxfile>
+```
+
 ## AWS 아키텍처 다이어그램 생성 예시
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
-  <diagram name="AWS Architecture" id="aws-arch">
-    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
-      <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-        
-        <!-- VPC -->
-        <mxCell id="vpc" value="VPC" 
-          style="sketch=0;outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc;strokeColor=#248814;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#AAB7B8;dashed=0;" 
-          vertex="1" parent="1">
-          <mxGeometry x="40" y="40" width="720" height="520" as="geometry"/>
-        </mxCell>
-        
-        <!-- EC2 Instance -->
-        <mxCell id="ec2" value="EC2 Instance" 
-          style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.ec2_instance;" 
-          vertex="1" parent="1">
-          <mxGeometry x="320" y="200" width="78" height="78" as="geometry"/>
-        </mxCell>
-        
-        <!-- RDS -->
-        <mxCell id="rds" value="RDS Database" 
-          style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.rds_instance;" 
-          vertex="1" parent="1">
-          <mxGeometry x="560" y="200" width="78" height="78" as="geometry"/>
-        </mxCell>
-        
-        <!-- Connection -->
-        <mxCell id="edge1" value="" 
-          style="endArrow=classic;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;edgeStyle=orthogonalEdgeStyle;curved=1;" 
-          edge="1" parent="1" source="ec2" target="rds">
-          <mxGeometry relative="1" as="geometry"/>
-        </mxCell>
-      </root>
-    </mxGraphModel>
-  </diagram>
+  <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+    <root>
+      <mxCell id="0"/>
+      <mxCell id="1" parent="0"/>
+      
+      <!-- VPC -->
+      <mxCell id="vpc" value="VPC" 
+        style="sketch=0;outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc;strokeColor=#248814;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#AAB7B8;dashed=0;" 
+        vertex="1" parent="1">
+        <mxGeometry x="40" y="40" width="720" height="520" as="geometry"/>
+      </mxCell>
+      
+      <!-- EC2 Instance -->
+      <mxCell id="ec2" value="EC2 Instance" 
+        style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.ec2_instance;" 
+        vertex="1" parent="1">
+        <mxGeometry x="320" y="200" width="78" height="78" as="geometry"/>
+      </mxCell>
+      
+      <!-- RDS -->
+      <mxCell id="rds" value="RDS Database" 
+        style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.rds_instance;" 
+        vertex="1" parent="1">
+        <mxGeometry x="560" y="200" width="78" height="78" as="geometry"/>
+      </mxCell>
+      
+      <!-- Connection -->
+      <mxCell id="edge1" value="" 
+        style="endArrow=classic;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;edgeStyle=orthogonalEdgeStyle;curved=1;" 
+        edge="1" parent="1" source="ec2" target="rds">
+        <mxGeometry relative="1" as="geometry"/>
+      </mxCell>
+    </root>
+  </mxGraphModel>
 </mxfile>
 ```
 
@@ -116,7 +141,7 @@ AWS 아키텍처 다이어그램을 mxGraphModel XML 형식으로 생성합니�
 
 ## 응답 형식
 
-반드시 다음 형식으로 응답하세요:
+반드시 다음 형식으로 응답하세요 (diagram 태그 없이):
 
 ```
 AWS 아키텍처 다이어그램을 생성했습니다.
@@ -124,15 +149,13 @@ AWS 아키텍처 다이어그램을 생성했습니다.
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
-  <diagram name="AWS Architecture" id="aws-arch">
-    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
-      <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-        <!-- 컴포넌트들 -->
-      </root>
-    </mxGraphModel>
-  </diagram>
+  <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+    <root>
+      <mxCell id="0"/>
+      <mxCell id="1" parent="0"/>
+      <!-- 컴포넌트들 -->
+    </root>
+  </mxGraphModel>
 </mxfile>
 ```
 
@@ -144,6 +167,7 @@ AWS 아키텍처 다이어그램을 생성했습니다.
 - **절대 Draw.io MCP 도구를 호출하지 마세요** (start_session, create_new_diagram 등)
 - **절대 Python matplotlib, PIL, 또는 다른 그래픽 라이브러리를 사용하지 마세요**
 - **반드시 mxGraphModel XML 텍스트만 생성하여 응답하세요**
+- **<diagram> 태그를 사용하지 마세요** - mxfile 바로 아래에 mxGraphModel이 와야 합니다
 - XML 형식을 정확히 지켜야 합니다
 - 모든 셀에는 고유한 ID가 필요합니다
 - parent="1"은 최상위 요소를 의미합니다
