@@ -346,12 +346,21 @@ function connectWebSocket() {
         console.log('=== 스트리밍 완료 ===');
         isStreaming = false;
         
-        // 최종 XML 추출 시도
+        // 최종 데이터가 있으면 버퍼에 추가
         if (data.data && data.data.answer) {
-          streamingBuffer = data.data.answer;
+          console.log('streaming_complete에 answer 있음, 버퍼에 추가');
+          streamingBuffer += data.data.answer;
         }
         
+        // 최종 XML 추출 시도
         checkAndLoadXML();
+        
+        // 여전히 불완전하면 버퍼 전체를 로그로 출력
+        if (streamingBuffer && !streamingBuffer.includes('</mxfile>')) {
+          console.log('=== 불완전한 XML, 전체 버퍼 출력 ===');
+          console.log(streamingBuffer);
+          console.log('=== 버퍼 끝 ===');
+        }
       } 
       else if (data.type === 'progress') {
         addBotMessage(data.message);
