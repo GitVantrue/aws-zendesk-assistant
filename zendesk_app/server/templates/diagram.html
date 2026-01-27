@@ -446,15 +446,18 @@ function checkAndLoadXML() {
 function loadDiagramXML(xmlContent) {
   const iframe = document.getElementById('drawioFrame');
   if (iframe && iframe.contentWindow) {
-    const message = JSON.stringify({
+    // Draw.io embed API: XML을 직접 전달하지 말고 base64 인코딩
+    const xmlBase64 = btoa(unescape(encodeURIComponent(xmlContent)));
+    
+    const message = {
       action: 'load',
       autosave: 1,
-      xml: xmlContent
-    });
+      xmlpng: xmlBase64
+    };
     
-    console.log('Draw.io에 전송할 메시지 (첫 200자):', message.substring(0, 200));
-    iframe.contentWindow.postMessage(message, '*');
-    console.log('Draw.io에 XML 전송 완료');
+    console.log('Draw.io에 전송할 메시지:', JSON.stringify(message).substring(0, 200));
+    iframe.contentWindow.postMessage(JSON.stringify(message), '*');
+    console.log('Draw.io에 XML 전송 완료 (base64)');
     addBotMessage('✅ 다이어그램이 로드되었습니다!');
   } else {
     console.error('Draw.io iframe을 찾을 수 없거나 contentWindow가 없습니다');
