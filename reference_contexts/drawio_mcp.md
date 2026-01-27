@@ -35,7 +35,11 @@ AWS 아키텍처 다이어그램을 mxGraphModel XML 형식으로 생성합니�
 </mxfile>
 ```
 
-**중요**: `<diagram>` 태그는 **반드시 필요**합니다!
+**매우 중요**: 
+- `<diagram>` 태그는 **반드시 필요**합니다!
+- `<mxfile>` → `<diagram>` → `<mxGraphModel>` → `<root>` 순서를 정확히 지켜야 합니다
+- `</mxGraphModel>` 다음에 반드시 `</diagram>`이 와야 합니다
+- `</diagram>` 다음에 `</mxfile>`로 닫아야 합니다
 
 ## AWS 아키텍처 다이어그램 생성 예시
 
@@ -135,7 +139,7 @@ AWS 아키텍처 다이어그램을 mxGraphModel XML 형식으로 생성합니�
 
 ## 응답 형식
 
-반드시 다음 형식으로 응답하세요 (diagram 태그 없이):
+반드시 다음 형식으로 응답하세요:
 
 ```
 AWS 아키텍처 다이어그램을 생성했습니다.
@@ -164,7 +168,7 @@ AWS 아키텍처 다이어그램을 생성했습니다.
 - **절대 Python matplotlib, PIL, 또는 다른 그래픽 라이브러리를 사용하지 마세요**
 - **반드시 mxGraphModel XML 텍스트만 생성하여 응답하세요**
 - **<diagram> 태그는 반드시 필요합니다** - mxfile과 mxGraphModel 사이에 diagram 태그가 있어야 합니다
-- XML 형식을 정확히 지켜야 합니다
+- **XML 구조를 정확히 지켜야 합니다**: `<mxfile>` → `<diagram>` → `<mxGraphModel>` → `</mxGraphModel>` → `</diagram>` → `</mxfile>`
 - 모든 셀에는 고유한 ID가 필요합니다
 - parent="1"은 최상위 요소를 의미합니다
 - AWS 아이콘은 shape=mxgraph.aws4.* 형식을 사용합니다

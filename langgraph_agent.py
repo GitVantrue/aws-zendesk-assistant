@@ -10,6 +10,61 @@ import websockets
 from utils.logging_config import log_debug, log_error, log_info
 
 
+def validate_and_fix_diagram_xml(xml_content: str) -> str:
+    """
+    Draw.io XML 구조 검증 및 자동 수정
+    
+    문제: Q CLI가 생성한 XML에서 <diagram> 태그가 제대로 닫히지 않는 경우가 있음
+    해결: </mxGraphModel> 다음에 </diagram>이 없으면 자동으로 추가
+    
+    Args:
+        xml_content: 원본 XML 문자열
+        
+    Returns:
+        수정된 XML 문자열
+    """
+    try:
+        # 1. <diagram> 태그가 있는지 확인
+        if '<diagram' not in xml_content:
+            log_error("XML에 <diagram> 태그가 없습니다")
+            return xml_content
+        
+        # 2. </diagram> 태그가 있는지 확인
+        if '</diagram>' in xml_content:
+            log_debug("XML 구조 정상: </diagram> 태그 존재")
+            return xml_content
+        
+        # 3. </diagram>이 없으면 자동 수정
+        log_debug("XML 구조 오류 감지: </diagram> 태그 없음 - 자동 수정 시작")
+        
+        # </mxGraphModel> 다음에 </diagram>을 추가
+        if '</mxGraphModel>' in xml_content:
+            # </mxGraphModel> 위치 찾기
+            mxgraph_end_pos = xml_content.rfind('</mxGraphModel>')
+            if mxgraph_end_pos != -1:
+                # </mxGraphModel> 다음 위치에 </diagram> 삽입
+                insert_pos = mxgraph_end_pos + len('</mxGraphModel>')
+                
+                # 줄바꿈 추가 (가독성)
+                fixed_xml = (
+                    xml_content[:insert_pos] + 
+                    '\n  </diagram>' + 
+                    xml_content[insert_pos:]
+                )
+                
+                log_debug("XML 자동 수정 완료: </diagram> 태그 추가됨")
+                log_debug(f"수정된 XML 길이: {len(fixed_xml)} 문자")
+                
+                return fixed_xml
+        
+        log_error("XML 자동 수정 실패: </mxGraphModel> 태그를 찾을 수 없음")
+        return xml_content
+        
+    except Exception as e:
+        log_error(f"XML 검증 중 오류: {e}")
+        return xml_content
+
+
 class AgentState(TypedDict):
     """
     LangGraph 에이전트 상태 관리
@@ -688,6 +743,9 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                     if diagram_xml:
                         log_debug(f"XML 추출 성공: {len(diagram_xml)} 문자")
                         log_debug(f"XML 첫 100자: {diagram_xml[:100]}")
+                        
+                        # XML 구조 검증 및 자동 수정
+                        diagram_xml = validate_and_fix_diagram_xml(diagram_xml)
                         
                         # WebSocket으로 XML 전송 (diagram.html에서 처리)
                         log_debug("diagram_xml 메시지 전송 시작")
