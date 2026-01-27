@@ -456,37 +456,30 @@ function loadDiagramXML(xmlContent) {
 // 실제 XML 로드 함수
 function loadDiagramXMLNow(xmlContent) {
   const iframe = document.getElementById('drawioFrame');
-  if (iframe) {
+  if (iframe && iframe.contentWindow) {
     console.log('=== Draw.io에 XML 로드 시작 ===');
     console.log('XML 길이:', xmlContent.length);
+    console.log('XML 첫 200자:', xmlContent.substring(0, 200));
     
     try {
-      // Blob 생성
-      const blob = new Blob([xmlContent], { type: 'application/xml' });
-      const blobUrl = URL.createObjectURL(blob);
+      // postMessage로 XML 전송 (정확한 형식)
+      const message = JSON.stringify({
+        action: 'load',
+        xml: xmlContent,
+        autosave: 1
+      });
       
-      console.log('Blob URL 생성:', blobUrl);
+      console.log('Draw.io에 postMessage 전송');
+      iframe.contentWindow.postMessage(message, 'https://embed.diagrams.net');
       
-      // Draw.io에 Blob URL로 다이어그램 로드
-      const newSrc = `https://embed.diagrams.net/?embed=1&ui=min&libraries=1&saveAndExit=0&noSaveBtn=1&noExitBtn=1&libs=aws4&url=${encodeURIComponent(blobUrl)}`;
-      
-      console.log('iframe src 변경 시작');
-      iframe.src = newSrc;
-      
-      console.log('Draw.io iframe src 변경 완료');
+      console.log('Draw.io에 XML 전송 완료');
       addBotMessage('✅ 다이어그램이 로드되었습니다!');
-      
-      // 5초 후 Blob URL 해제 (메모리 정리)
-      setTimeout(() => {
-        URL.revokeObjectURL(blobUrl);
-        console.log('Blob URL 해제됨');
-      }, 5000);
     } catch (error) {
-      console.error('Blob URL 생성 실패:', error);
+      console.error('XML 로드 실패:', error);
       addBotMessage('❌ 다이어그램 로드 실패: ' + error.message);
     }
   } else {
-    console.error('Draw.io iframe을 찾을 수 없습니다');
+    console.error('Draw.io iframe을 찾을 수 없거나 contentWindow가 없습니다');
   }
 }
 
