@@ -470,12 +470,16 @@ function checkAndLoadXML() {
 
 // Draw.io에 XML 로드
 function loadDiagramXML(xmlContent) {
-  if (!drawioReady) {
-    console.log('Draw.io 아직 준비 안됨, XML 대기 중');
-    pendingXML = xmlContent;
+  const iframe = document.getElementById('drawioFrame');
+  
+  // iframe이 없으면 실패
+  if (!iframe || !iframe.contentWindow) {
+    console.error('Draw.io iframe을 찾을 수 없습니다');
     return;
   }
   
+  // 즉시 로드 시도 (ready 상태 무시)
+  console.log('Draw.io에 XML 즉시 로드 시도');
   loadDiagramXMLNow(xmlContent);
 }
 
