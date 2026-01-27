@@ -384,15 +384,17 @@ function checkAndLoadXML() {
   
   let xmlContent = null;
   
-  // 패턴 1: xml\n<?xml ... (Q CLI 응답 형식 - 줄바꿈 있음)
-  const xmlMatch1 = streamingBuffer.match(/xml\s*\n\s*(<\?xml[\s\S]*?<\/mxfile>)/);
-  if (xmlMatch1) {
-    xmlContent = xmlMatch1[1].trim();
-    console.log('패턴 1 매칭 성공: xml\\n<?xml...mxfile>');
+  // 패턴 1: 직접 <?xml로 시작 (가장 단순)
+  if (streamingBuffer.includes('<?xml')) {
+    const xmlMatch1 = streamingBuffer.match(/(<\?xml[\s\S]*?<\/mxfile>)/);
+    if (xmlMatch1) {
+      xmlContent = xmlMatch1[1].trim();
+      console.log('패턴 1 매칭 성공: <?xml...mxfile>');
+    }
   }
   
   // 패턴 2: xml<?xml ... (Q CLI 응답 형식 - 줄바꿈 없음)
-  if (!xmlContent) {
+  if (!xmlContent && streamingBuffer.includes('xml<?xml')) {
     const xmlMatch2 = streamingBuffer.match(/xml\s*(<\?xml[\s\S]*?<\/mxfile>)/);
     if (xmlMatch2) {
       xmlContent = xmlMatch2[1].trim();
@@ -400,12 +402,12 @@ function checkAndLoadXML() {
     }
   }
   
-  // 패턴 3: 직접 <?xml로 시작
-  if (!xmlContent && streamingBuffer.includes('<?xml')) {
-    const xmlMatch3 = streamingBuffer.match(/(<\?xml[\s\S]*?<\/mxfile>)/);
+  // 패턴 3: xml\n<?xml ... (Q CLI 응답 형식 - 줄바꿈 있음)
+  if (!xmlContent) {
+    const xmlMatch3 = streamingBuffer.match(/xml\s*\n\s*(<\?xml[\s\S]*?<\/mxfile>)/);
     if (xmlMatch3) {
       xmlContent = xmlMatch3[1].trim();
-      console.log('패턴 3 매칭 성공: <?xml...mxfile>');
+      console.log('패턴 3 매칭 성공: xml\\n<?xml...mxfile>');
     }
   }
   
@@ -423,11 +425,14 @@ function checkAndLoadXML() {
     console.log('=== XML 추출 성공 ===');
     console.log('XML 길이:', xmlContent.length);
     console.log('XML 첫 100자:', xmlContent.substring(0, 100));
+    console.log('XML이 <?xml로 시작하는지:', xmlContent.startsWith('<?xml'));
     
     loadDiagramXML(xmlContent);
     
     // 버퍼 초기화 (중복 로드 방지)
     streamingBuffer = '';
+  } else {
+    console.log('XML 추출 실패 또는 불완전');
   }
 }
 
