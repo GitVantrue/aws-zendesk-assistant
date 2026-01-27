@@ -360,6 +360,12 @@ function connectWebSocket() {
           console.log('=== 불완전한 XML, 전체 버퍼 출력 ===');
           console.log(streamingBuffer);
           console.log('=== 버퍼 끝 ===');
+          
+          // 다운로드 버튼 생성
+          downloadXMLBuffer(streamingBuffer, 'incomplete_xml.txt');
+        } else if (streamingBuffer) {
+          // 완전한 XML도 다운로드 가능하게
+          downloadXMLBuffer(streamingBuffer, 'complete_xml.txt');
         }
       } 
       else if (data.type === 'progress') {
@@ -547,6 +553,22 @@ document.getElementById('exportBtn').addEventListener('click', () => {
   // Draw.io export 기능 호출
   addBotMessage('다이어그램을 내보내는 기능은 곧 추가됩니다.');
 });
+
+// XML 버퍼 다운로드 함수
+function downloadXMLBuffer(content, filename) {
+  console.log(`=== ${filename} 다운로드 준비 ===`);
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  console.log(`${filename} 다운로드 완료`);
+  addBotMessage(`📥 ${filename} 파일이 다운로드되었습니다.`);
+}
 
 // 페이지 로드 시 초기화
 initDiagram();
