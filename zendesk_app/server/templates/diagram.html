@@ -528,16 +528,27 @@ window.addEventListener('message', (event) => {
       drawioReady = true;
       console.log('Draw.io ready 상태 확인');
       
-      // 대기 중인 XML이 있으면 로드
-      if (pendingXML) {
-        console.log('대기 중인 XML 로드 시작');
-        loadDiagramXMLNow(pendingXML);
-        pendingXML = null;
-      } else {
-        // 빈 다이어그램 초기화
-        const iframe = document.getElementById('drawioFrame');
-        if (iframe && iframe.contentWindow) {
-          const emptyDiagram = `<?xml version="1.0" encoding="UTF-8"?>
+      const iframe = document.getElementById('drawioFrame');
+      if (iframe && iframe.contentWindow) {
+        // 1단계: AWS 라이브러리 명시적 활성화
+        console.log('AWS 라이브러리 활성화 시도...');
+        iframe.contentWindow.postMessage({
+          action: 'configure',
+          config: {
+            defaultLibraries: 'general;aws4'
+          }
+        }, '*');
+        
+        // 2단계: 잠시 대기 후 다이어그램 로드
+        setTimeout(() => {
+          // 대기 중인 XML이 있으면 로드
+          if (pendingXML) {
+            console.log('대기 중인 XML 로드 시작');
+            loadDiagramXMLNow(pendingXML);
+            pendingXML = null;
+          } else {
+            // 빈 다이어그램 초기화
+            const emptyDiagram = `<?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
   <diagram name="AWS Architecture" id="aws-arch">
     <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
@@ -548,16 +559,17 @@ window.addEventListener('message', (event) => {
     </mxGraphModel>
   </diagram>
 </mxfile>`;
-          
-          iframe.contentWindow.postMessage({
-            action: 'load',
-            autosave: 1,
-            xml: emptyDiagram
-          }, '*');
-          
-          console.log('빈 다이어그램 초기화 완료');
-          addBotMessage('📐 Draw.io 캔버스가 준비되었습니다!');
-        }
+            
+            iframe.contentWindow.postMessage({
+              action: 'load',
+              autosave: 1,
+              xml: emptyDiagram
+            }, '*');
+            
+            console.log('빈 다이어그램 초기화 완료');
+            addBotMessage('📐 Draw.io 캔버스가 준비되었습니다! (AWS 라이브러리 활성화됨)');
+          }
+        }, 500); // 500ms 대기
       }
     }
   }
