@@ -230,9 +230,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     data = await backend_ws.recv()
                     logger.info(f"[DEBUG] 백엔드 메시지 수신: {data[:100]}")
                     
-                    # 클라이언트로 전달
-                    await websocket.send_text(data)
-                    logger.info("[DEBUG] 클라이언트로 메시지 전달 완료")
+                    # 클라이언트 연결 상태 확인
+                    try:
+                        await websocket.send_text(data)
+                        logger.info("[DEBUG] 클라이언트로 메시지 전달 완료")
+                    except Exception as send_error:
+                        logger.warning(f"[WARN] 클라이언트 전송 실패 (연결 종료됨): {send_error}")
+                        raise  # 연결 종료 시 루프 탈출
                     
             except websockets.exceptions.ConnectionClosed:
                 logger.info("[DEBUG] 백엔드 연결 종료")
