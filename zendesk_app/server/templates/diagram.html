@@ -444,19 +444,28 @@ function checkAndLoadXML() {
 
 // Draw.io에 XML 로드
 function loadDiagramXML(xmlContent) {
+  if (!drawioReady) {
+    console.log('Draw.io 아직 준비 안됨, XML 대기 중');
+    pendingXML = xmlContent;
+    return;
+  }
+  
+  loadDiagramXMLNow(xmlContent);
+}
+
+// 실제 XML 로드 함수
+function loadDiagramXMLNow(xmlContent) {
   const iframe = document.getElementById('drawioFrame');
   if (iframe && iframe.contentWindow) {
-    // Draw.io embed API: xml 필드 사용, URL 인코딩
+    console.log('Draw.io에 XML 로드 시작');
+    console.log('XML 샘플 (첫 200자):', xmlContent.substring(0, 200));
+    
     const message = {
       action: 'load',
       autosave: 1,
       xml: xmlContent
     };
     
-    console.log('Draw.io에 전송할 메시지:', message);
-    console.log('XML 샘플 (첫 200자):', xmlContent.substring(0, 200));
-    
-    // postMessage는 문자열이 아닌 객체를 직접 전달
     iframe.contentWindow.postMessage(message, '*');
     
     console.log('Draw.io에 XML 전송 완료');
@@ -504,17 +513,29 @@ document.getElementById('exportBtn').addEventListener('click', () => {
 initDiagram();
 
 // Draw.io iframe에서 오는 메시지 수신 (디버깅용)
+let drawioReady = false;
+let pendingXML = null;
+
 window.addEventListener('message', (event) => {
   // Draw.io에서 오는 메시지만 로깅
   if (event.origin === 'https://embed.diagrams.net') {
     console.log('Draw.io로부터 메시지 수신:', event.data);
     
-    // Draw.io가 ready 상태가 되면 빈 다이어그램 초기화
+    // Draw.io가 ready 상태가 되면
     if (event.data === 'ready') {
-      const iframe = document.getElementById('drawioFrame');
-      if (iframe && iframe.contentWindow) {
-        // 빈 다이어그램 XML
-        const emptyDiagram = `<?xml version="1.0" encoding="UTF-8"?>
+      drawioReady = true;
+      console.log('Draw.io ready 상태 확인');
+      
+      // 대기 중인 XML이 있으면 로드
+      if (pendingXML) {
+        console.log('대기 중인 XML 로드 시작');
+        loadDiagramXMLNow(pendingXML);
+        pendingXML = null;
+      } else {
+        // 빈 다이어그램 초기화
+        const iframe = document.getElementById('drawioFrame');
+        if (iframe && iframe.contentWindow) {
+          const emptyDiagram = `<?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
   <diagram name="AWS Architecture" id="aws-arch">
     <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
@@ -525,16 +546,16 @@ window.addEventListener('message', (event) => {
     </mxGraphModel>
   </diagram>
 </mxfile>`;
-        
-        const message = JSON.stringify({
-          action: 'load',
-          autosave: 1,
-          xml: emptyDiagram
-        });
-        
-        iframe.contentWindow.postMessage(message, '*');
-        console.log('빈 다이어그램 초기화 완료');
-        addBotMessage('📐 Draw.io 캔버스가 준비되었습니다!');
+          
+          iframe.contentWindow.postMessage({
+            action: 'load',
+            autosave: 1,
+            xml: emptyDiagram
+          }, '*');
+          
+          console.log('빈 다이어그램 초기화 완료');
+          addBotMessage('📐 Draw.io 캔버스가 준비되었습니다!');
+        }
       }
     }
   }
