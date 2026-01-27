@@ -329,28 +329,37 @@ function connectWebSocket() {
         // XML 추출 시도 (여러 패턴)
         let xmlContent = null;
         
-        // 패턴 1: xml\n<?xml ... (Q CLI 응답 형식) - 가장 정확한 패턴
+        // 패턴 1: xml\n<?xml ... (Q CLI 응답 형식 - 줄바꿈 있음)
         const xmlMatch1 = answer.match(/xml\s*\n\s*(<\?xml[\s\S]*<\/mxfile>)/);
         if (xmlMatch1) {
           xmlContent = xmlMatch1[1].trim();
           console.log('패턴 1 매칭 성공: xml\\n<?xml...mxfile>');
         }
         
-        // 패턴 2: 직접 <?xml로 시작
-        if (!xmlContent && answer.includes('<?xml')) {
-          const xmlMatch2 = answer.match(/(<\?xml[\s\S]*<\/mxfile>)/);
+        // 패턴 2: xml<?xml ... (Q CLI 응답 형식 - 줄바꿈 없음)
+        if (!xmlContent) {
+          const xmlMatch2 = answer.match(/xml\s*(<\?xml[\s\S]*<\/mxfile>)/);
           if (xmlMatch2) {
             xmlContent = xmlMatch2[1].trim();
-            console.log('패턴 2 매칭 성공: <?xml...mxfile>');
+            console.log('패턴 2 매칭 성공: xml<?xml...mxfile> (줄바꿈 없음)');
           }
         }
         
-        // 패턴 3: ```xml ... ``` (백틱 포함)
-        if (!xmlContent) {
-          const xmlMatch3 = answer.match(/```xml\s*(<\?xml[\s\S]*<\/mxfile>)\s*```/);
+        // 패턴 3: 직접 <?xml로 시작
+        if (!xmlContent && answer.includes('<?xml')) {
+          const xmlMatch3 = answer.match(/(<\?xml[\s\S]*<\/mxfile>)/);
           if (xmlMatch3) {
             xmlContent = xmlMatch3[1].trim();
-            console.log('패턴 3 매칭 성공: ```xml...```');
+            console.log('패턴 3 매칭 성공: <?xml...mxfile>');
+          }
+        }
+        
+        // 패턴 4: ```xml ... ``` (백틱 포함)
+        if (!xmlContent) {
+          const xmlMatch4 = answer.match(/```xml\s*(<\?xml[\s\S]*<\/mxfile>)\s*```/);
+          if (xmlMatch4) {
+            xmlContent = xmlMatch4[1].trim();
+            console.log('패턴 4 매칭 성공: ```xml...```');
           }
         }
         
