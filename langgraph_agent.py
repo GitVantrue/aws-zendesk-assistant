@@ -640,6 +640,7 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
             # Draw.io 다이어그램 생성 (Q CLI로 XML만 생성)
             from aws_tools.q_cli import call_q_cli
             import re
+            import json as json_module  # 명시적으로 import
             
             try:
                 # 진행 상황 업데이트
@@ -690,7 +691,7 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                         
                         # WebSocket으로 XML 전송 (diagram.html에서 처리)
                         log_debug("diagram_xml 메시지 전송 시작")
-                        await state["websocket"].send_str(json.dumps({
+                        await state["websocket"].send_str(json_module.dumps({
                             "type": "diagram_xml",
                             "xml": diagram_xml,
                             "timestamp": datetime.now().isoformat()
