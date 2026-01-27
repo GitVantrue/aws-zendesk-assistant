@@ -19,40 +19,34 @@ AWS 아키텍처 다이어그램을 mxGraphModel XML 형식으로 생성합니�
 
 ## ⚠️ 중요: XML 구조
 
-**올바른 구조** (diagram 태그 없음):
+**올바른 구조** (diagram 태그 필수):
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
-  <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
-    <root>
-      <mxCell id="0"/>
-      <mxCell id="1" parent="0"/>
-      <!-- 컴포넌트들 -->
-    </root>
-  </mxGraphModel>
+  <diagram name="AWS Architecture" id="aws-diagram">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <!-- 컴포넌트들 -->
+      </root>
+    </mxGraphModel>
+  </diagram>
 </mxfile>
 ```
 
-**잘못된 구조** (diagram 태그 있음 - 사용하지 마세요):
-```xml
-<mxfile>
-  <diagram>  ← 이 태그를 사용하지 마세요!
-    <mxGraphModel>
-      ...
-    </mxGraphModel>
-  </diagram>  ← 이 태그를 사용하지 마세요!
-</mxfile>
-```
+**중요**: `<diagram>` 태그는 **반드시 필요**합니다!
 
 ## AWS 아키텍처 다이어그램 생성 예시
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
-  <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
-    <root>
-      <mxCell id="0"/>
-      <mxCell id="1" parent="0"/>
+  <diagram name="AWS Architecture" id="aws-diagram">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
       
       <!-- VPC -->
       <mxCell id="vpc" value="VPC" 
@@ -149,13 +143,15 @@ AWS 아키텍처 다이어그램을 생성했습니다.
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
-  <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
-    <root>
-      <mxCell id="0"/>
-      <mxCell id="1" parent="0"/>
-      <!-- 컴포넌트들 -->
-    </root>
-  </mxGraphModel>
+  <diagram name="AWS Architecture" id="aws-diagram">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <!-- 컴포넌트들 -->
+      </root>
+    </mxGraphModel>
+  </diagram>
 </mxfile>
 ```
 
@@ -167,7 +163,7 @@ AWS 아키텍처 다이어그램을 생성했습니다.
 - **절대 Draw.io MCP 도구를 호출하지 마세요** (start_session, create_new_diagram 등)
 - **절대 Python matplotlib, PIL, 또는 다른 그래픽 라이브러리를 사용하지 마세요**
 - **반드시 mxGraphModel XML 텍스트만 생성하여 응답하세요**
-- **<diagram> 태그를 사용하지 마세요** - mxfile 바로 아래에 mxGraphModel이 와야 합니다
+- **<diagram> 태그는 반드시 필요합니다** - mxfile과 mxGraphModel 사이에 diagram 태그가 있어야 합니다
 - XML 형식을 정확히 지켜야 합니다
 - 모든 셀에는 고유한 ID가 필요합니다
 - parent="1"은 최상위 요소를 의미합니다

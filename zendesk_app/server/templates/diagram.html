@@ -271,12 +271,14 @@ async function initDiagram() {
           console.log('ready 이벤트 없음, 빈 캔버스 초기화');
           const emptyDiagram = `<?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
-  <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
-    <root>
-      <mxCell id="0"/>
-      <mxCell id="1" parent="0"/>
-    </root>
-  </mxGraphModel>
+  <diagram name="AWS Architecture" id="aws-diagram">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+      </root>
+    </mxGraphModel>
+  </diagram>
 </mxfile>`;
           
           const message = JSON.stringify({
@@ -617,12 +619,14 @@ window.addEventListener('message', (event) => {
           if (iframe && iframe.contentWindow) {
             const emptyDiagram = `<?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
-  <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
-    <root>
-      <mxCell id="0"/>
-      <mxCell id="1" parent="0"/>
-    </root>
-  </mxGraphModel>
+  <diagram name="AWS Architecture" id="aws-diagram">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+      </root>
+    </mxGraphModel>
+  </diagram>
 </mxfile>`;
             
             const message = JSON.stringify({
