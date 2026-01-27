@@ -508,6 +508,15 @@ function loadDiagramXMLNow(xmlContent) {
       console.log('Draw.io에 postMessage 전송');
       iframe.contentWindow.postMessage(message, 'https://embed.diagrams.net');
       
+      // 로드 후 0.5초 뒤에 화면에 맞추기
+      setTimeout(() => {
+        const fitMessage = JSON.stringify({
+          action: 'fit'
+        });
+        iframe.contentWindow.postMessage(fitMessage, 'https://embed.diagrams.net');
+        console.log('Draw.io 화면 맞추기 완료');
+      }, 500);
+      
       console.log('Draw.io에 XML 전송 완료');
       addBotMessage('✅ 다이어그램이 로드되었습니다!');
     } catch (error) {
