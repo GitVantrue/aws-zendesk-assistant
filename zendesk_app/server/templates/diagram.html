@@ -265,7 +265,30 @@ async function initDiagram() {
       console.log('Draw.io iframe 로드 완료');
       addBotMessage('✅ Draw.io 에디터가 준비되었습니다.');
       
-      // 빈 다이어그램 초기화 제거 - XML이 직접 로드됨
+      // 2초 후 빈 캔버스 초기화 (처음 로드 시)
+      setTimeout(() => {
+        if (!drawioReady) {
+          console.log('ready 이벤트 없음, 빈 캔버스 초기화');
+          const emptyDiagram = `<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
+  <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+    <root>
+      <mxCell id="0"/>
+      <mxCell id="1" parent="0"/>
+    </root>
+  </mxGraphModel>
+</mxfile>`;
+          
+          const message = JSON.stringify({
+            action: 'load',
+            xml: emptyDiagram,
+            autosave: 1
+          });
+          
+          iframe.contentWindow.postMessage(message, 'https://embed.diagrams.net');
+          console.log('빈 캔버스 초기화 완료');
+        }
+      }, 2000);
     };
     
     iframe.onerror = () => {
@@ -588,8 +611,30 @@ window.addEventListener('message', (event) => {
           console.log('대기 중인 XML 로드 시작');
           loadDiagramXMLNow(pendingXML);
           pendingXML = null;
+        } else {
+          // 빈 캔버스로 초기화 (처음 로드 시)
+          const iframe = document.getElementById('drawioFrame');
+          if (iframe && iframe.contentWindow) {
+            const emptyDiagram = `<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
+  <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+    <root>
+      <mxCell id="0"/>
+      <mxCell id="1" parent="0"/>
+    </root>
+  </mxGraphModel>
+</mxfile>`;
+            
+            const message = JSON.stringify({
+              action: 'load',
+              xml: emptyDiagram,
+              autosave: 1
+            });
+            
+            console.log('빈 캔버스 초기화 시작');
+            iframe.contentWindow.postMessage(message, 'https://embed.diagrams.net');
+          }
         }
-        // 빈 다이어그램 초기화 제거 - 필요 없음
       }
     }
     
