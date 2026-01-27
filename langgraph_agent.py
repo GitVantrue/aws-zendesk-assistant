@@ -658,40 +658,44 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                 if q_result["success"]:
                     answer = q_result["answer"]
                     
+                    log_debug(f"Q CLI 응답 길이: {len(answer)} 문자")
+                    log_debug(f"Q CLI 응답 첫 200자: {answer[:200]}")
+                    
                     # 응답에서 XML 추출 (여러 패턴 시도)
-                    xml_match = None
+                    diagram_xml = None
                     
-                    # 패턴 1: ```xml ... ```
-                    xml_match = re.search(r'```xml\s*(.*?)\s*```', answer, re.DOTALL)
-                    
-                    # 패턴 2: xml\n<mxGraphModel> (백틱 없음)
-                    if not xml_match:
-                        xml_match = re.search(r'xml\s*\n\s*(<mxGraphModel>.*?</mxGraphModel>)', answer, re.DOTALL)
-                    
-                    # 패턴 3: 직접 <mxGraphModel> 찾기
-                    if not xml_match:
-                        xml_match = re.search(r'(<mxGraphModel>.*?</mxGraphModel>)', answer, re.DOTALL)
-                    
+                    # 패턴 1: xml\n<?xml ... </mxfile> (Q CLI 실제 출력 형식)
+                    xml_match = re.search(r'xml\s*\n\s*(<?xml[\s\S]*?</mxfile>)', answer, re.DOTALL)
                     if xml_match:
                         diagram_xml = xml_match.group(1).strip()
-                        
-                        # mxfile 래퍼가 없으면 추가
-                        if not diagram_xml.startswith('<?xml'):
-                            diagram_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
-<mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
-  <diagram name="AWS Architecture" id="aws-arch">
-    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
-      {diagram_xml}
-    </mxGraphModel>
-  </diagram>
-</mxfile>'''
+                        log_debug("패턴 1 매칭 성공: xml\\n<?xml...mxfile>")
+                    
+                    # 패턴 2: 직접 <?xml로 시작하는 경우
+                    if not diagram_xml and '<?xml' in answer:
+                        xml_match = re.search(r'(<?xml[\s\S]*?</mxfile>)', answer, re.DOTALL)
+                        if xml_match:
+                            diagram_xml = xml_match.group(1).strip()
+                            log_debug("패턴 2 매칭 성공: <?xml...mxfile>")
+                    
+                    # 패턴 3: ```xml ... ``` (백틱 포함)
+                    if not diagram_xml:
+                        xml_match = re.search(r'```xml\s*(<?xml[\s\S]*?</mxfile>)\s*```', answer, re.DOTALL)
+                        if xml_match:
+                            diagram_xml = xml_match.group(1).strip()
+                            log_debug("패턴 3 매칭 성공: ```xml...```")
+                    
+                    if diagram_xml:
+                        log_debug(f"XML 추출 성공: {len(diagram_xml)} 문자")
+                        log_debug(f"XML 첫 100자: {diagram_xml[:100]}")
                         
                         # WebSocket으로 XML 전송 (diagram.html에서 처리)
+                        log_debug("diagram_xml 메시지 전송 시작")
                         await state["websocket"].send_str(json.dumps({
                             "type": "diagram_xml",
                             "xml": diagram_xml,
                             "timestamp": datetime.now().isoformat()
                         }, ensure_ascii=False))
+                        log_debug("diagram_xml 메시지 전송 완료")
                         
                         result = {
                             "question": state["question"],
@@ -703,6 +707,7 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                         }
                     else:
                         # XML이 없으면 일반 응답
+                        log_debug("XML 추출 실패 - 일반 응답으로 처리")
                         result = {
                             "question": state["question"],
                             "answer": answer,
