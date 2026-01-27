@@ -506,11 +506,12 @@ function sendMessage() {
   addUserMessage(message);
   diagramInput.value = '';
   
-  // WebSocket으로 Q CLI에 메시지 전송
+  // WebSocket으로 Q CLI에 메시지 전송 (question 타입 사용)
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({
-      type: 'diagram_request',
-      content: message
+      type: 'question',
+      content: message,
+      question_type: 'drawio'  // 다이어그램 질문임을 명시
     }));
     addBotMessage('처리 중입니다...');
   } else {
