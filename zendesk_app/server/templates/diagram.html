@@ -464,16 +464,16 @@ function loadDiagramXMLNow(xmlContent) {
     const encodedXml = encodeURIComponent(xmlContent);
     console.log('URL 인코딩 완료, 길이:', encodedXml.length);
     
+    // merge 액션 사용 (새 다이어그램 생성)
     const message = {
-      action: 'load',
-      autosave: 1,
+      action: 'merge',
       xml: encodedXml
     };
     
-    console.log('Draw.io에 전송할 메시지:', message);
+    console.log('Draw.io에 merge 액션으로 전송');
     iframe.contentWindow.postMessage(message, '*');
     
-    console.log('Draw.io에 XML 전송 완료 (URL encoded)');
+    console.log('Draw.io에 XML 전송 완료 (merge)');
     addBotMessage('✅ 다이어그램이 로드되었습니다!');
   } else {
     console.error('Draw.io iframe을 찾을 수 없거나 contentWindow가 없습니다');
@@ -542,34 +542,14 @@ window.addEventListener('message', (event) => {
           }
         }, '*');
         
-        // 2단계: 잠시 대기 후 다이어그램 로드
+        // 2단계: 잠시 대기 후 대기 중인 XML 로드
         setTimeout(() => {
-          // 대기 중인 XML이 있으면 로드
           if (pendingXML) {
             console.log('대기 중인 XML 로드 시작');
             loadDiagramXMLNow(pendingXML);
             pendingXML = null;
           } else {
-            // 빈 다이어그램 초기화
-            const emptyDiagram = `<?xml version="1.0" encoding="UTF-8"?>
-<mxfile host="embed.diagrams.net" modified="2024-01-01T00:00:00.000Z" agent="5.0" version="22.0.0">
-  <diagram name="AWS Architecture" id="aws-arch">
-    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
-      <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-      </root>
-    </mxGraphModel>
-  </diagram>
-</mxfile>`;
-            
-            iframe.contentWindow.postMessage({
-              action: 'load',
-              autosave: 1,
-              xml: emptyDiagram
-            }, '*');
-            
-            console.log('빈 다이어그램 초기화 완료');
+            console.log('빈 캔버스 준비 완료 (초기화 없음)');
             addBotMessage('📐 Draw.io 캔버스가 준비되었습니다! (AWS 라이브러리 활성화됨)');
           }
         }, 500); // 500ms 대기
