@@ -253,6 +253,9 @@ const diagramSendBtn = document.getElementById('diagramSendBtn');
 let streamingBuffer = '';
 let isStreaming = false;
 
+// 현재 다이어그램 XML 저장 (메모리)
+let currentDiagramXML = null;
+
 // 초기화
 async function initDiagram() {
   addBotMessage('다이어그램 생성 준비 완료!');
@@ -494,6 +497,10 @@ function loadDiagramXML(xmlContent) {
     return;
   }
   
+  // 현재 다이어그램 XML 저장 (메모리)
+  currentDiagramXML = xmlContent;
+  console.log('현재 다이어그램 XML 저장 완료:', currentDiagramXML.length, '문자');
+  
   // 즉시 로드 시도 (ready 상태 무시)
   console.log('Draw.io에 XML 즉시 로드 시도');
   loadDiagramXMLNow(xmlContent);
@@ -547,12 +554,24 @@ function sendMessage() {
   
   // WebSocket으로 Q CLI에 메시지 전송 (question 타입 사용)
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
+    // 현재 다이어그램이 있으면 함께 전송 (수정 모드)
+    const payload = {
       type: 'question',
       content: message,
-      question_type: 'drawio'  // 다이어그램 질문임을 명시
-    }));
-    addBotMessage('처리 중입니다...');
+      question_type: 'drawio'
+    };
+    
+    // 현재 다이어그램이 있으면 수정 모드로 전송
+    if (currentDiagramXML) {
+      payload.current_diagram = currentDiagramXML;
+      console.log('수정 모드: 현재 다이어그램 포함 전송');
+      addBotMessage('🔄 기존 다이어그램을 수정합니다...');
+    } else {
+      console.log('생성 모드: 새 다이어그램 생성');
+      addBotMessage('🎨 새 다이어그램을 생성합니다...');
+    }
+    
+    ws.send(JSON.stringify(payload));
   } else {
     addBotMessage('WebSocket 연결이 필요합니다. 잠시 후 다시 시도해주세요.');
   }

@@ -15,7 +15,8 @@ async def call_q_cli(
     credentials: Optional[Dict[str, str]] = None,
     context_file: Optional[str] = None,
     question_type: str = "general",
-    timeout: int = 600
+    timeout: int = 600,
+    current_diagram: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Q CLI 호출 (Reference 코드 로직 재사용)
@@ -27,6 +28,7 @@ async def call_q_cli(
         context_file: 컨텍스트 파일 경로
         question_type: 질문 유형
         timeout: 타임아웃 (초)
+        current_diagram: 현재 다이어그램 XML (수정 모드, 선택적)
         
     Returns:
         Q CLI 응답 결과
@@ -35,7 +37,7 @@ async def call_q_cli(
         log_debug(f"Q CLI 호출 시작: {question_type}")
         
         # 1. 프롬프트 구성
-        prompt = build_prompt(question, account_id, context_file, question_type)
+        prompt = build_prompt(question, account_id, context_file, question_type, current_diagram)
         
         # 2. 환경 변수 설정
         env_vars = build_environment(credentials)
@@ -127,7 +129,8 @@ def build_prompt(
     question: str,
     account_id: Optional[str],
     context_file: Optional[str],
-    question_type: str
+    question_type: str,
+    current_diagram: Optional[str] = None
 ) -> str:
     """
     Q CLI 프롬프트 구성
@@ -137,6 +140,7 @@ def build_prompt(
         account_id: AWS 계정 ID
         context_file: 컨텍스트 파일 경로
         question_type: 질문 유형
+        current_diagram: 현재 다이어그램 XML (수정 모드, 선택적)
         
     Returns:
         구성된 프롬프트
@@ -153,6 +157,14 @@ def build_prompt(
                 log_debug(f"컨텍스트 파일 로드: {context_file}")
         except Exception as e:
             log_error(f"컨텍스트 파일 로드 실패: {e}")
+    
+    # 현재 다이어그램이 있으면 수정 모드로 프롬프트 구성
+    if current_diagram and question_type == "drawio":
+        prompt_parts.append("## 다이어그램 수정 모드\n\n")
+        prompt_parts.append("다음은 현재 다이어그램의 XML입니다. 사용자의 요청에 따라 이 XML을 수정해주세요:\n\n")
+        prompt_parts.append(f"```xml\n{current_diagram}\n```\n\n")
+        prompt_parts.append("**중요**: 위 XML을 기반으로 사용자가 요청한 변경사항만 적용하여 수정된 전체 XML을 생성해주세요.\n\n")
+        log_debug(f"수정 모드: 현재 다이어그램 길이 {len(current_diagram)} 문자")
     
     # 계정 정보 추가
     if account_id:

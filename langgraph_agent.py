@@ -711,23 +711,33 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                     "authenticated": True
                 }
         elif question_type == "drawio":
-            # Draw.io 다이어그램 생성 (Q CLI로 XML만 생성)
+            # Draw.io 다이어그램 생성 또는 수정 (Q CLI로 XML만 생성)
             from aws_tools.q_cli import call_q_cli
             import re
             import json as json_module  # 명시적으로 import
             
             try:
-                # 진행 상황 업데이트
-                await send_websocket_progress(state, "🎨 AWS 아키텍처 다이어그램을 생성하고 있습니다...")
+                # 현재 다이어그램 XML 확인 (수정 모드)
+                current_diagram = state.get("current_diagram")
                 
-                # Q CLI 호출 (XML 생성만)
+                if current_diagram:
+                    # 수정 모드
+                    await send_websocket_progress(state, "🔄 기존 다이어그램을 수정하고 있습니다...")
+                    log_debug(f"수정 모드: 현재 다이어그램 길이 {len(current_diagram)} 문자")
+                else:
+                    # 생성 모드
+                    await send_websocket_progress(state, "🎨 AWS 아키텍처 다이어그램을 생성하고 있습니다...")
+                    log_debug("생성 모드: 새 다이어그램 생성")
+                
+                # Q CLI 호출 (XML 생성 또는 수정)
                 q_result = await call_q_cli(
                     question=state["question"],
                     account_id=account_id,
                     credentials=credentials,
                     context_file=state.get("context_file"),
                     question_type=question_type,
-                    timeout=600
+                    timeout=600,
+                    current_diagram=current_diagram  # 현재 다이어그램 전달
                 )
                 
                 if q_result["success"]:
@@ -775,9 +785,12 @@ async def execute_aws_operation(state: AgentState) -> AgentState:
                         }, ensure_ascii=False))
                         log_debug("diagram_xml 메시지 전송 완료")
                         
+                        # 수정 모드인지 생성 모드인지에 따라 메시지 변경
+                        success_message = "✅ 다이어그램이 수정되었습니다!" if current_diagram else "✅ 다이어그램이 생성되었습니다!"
+                        
                         result = {
                             "question": state["question"],
-                            "answer": "✅ 다이어그램이 생성되었습니다! 왼쪽 화면에서 확인하세요.",
+                            "answer": f"{success_message} 왼쪽 화면에서 확인하세요.",
                             "question_type": question_type,
                             "account_id": account_id,
                             "authenticated": bool(credentials),
@@ -872,7 +885,8 @@ async def process_question_workflow(
     question: str,
     question_key: str,
     client_id: str,
-    websocket: websockets.WebSocketServerProtocol
+    websocket: websockets.WebSocketServerProtocol,
+    current_diagram: str = None
 ) -> AgentState:
     """
     질문 처리 워크플로우 (LangGraph 스타일)
@@ -882,6 +896,7 @@ async def process_question_workflow(
         question_key: 질문 고유 키
         client_id: 클라이언트 ID
         websocket: WebSocket 연결
+        current_diagram: 현재 다이어그램 XML (수정 모드, 선택적)
         
     Returns:
         최종 상태
@@ -891,6 +906,11 @@ async def process_question_workflow(
         
         # 1. 초기 상태 생성
         state = create_initial_state(question, question_key, client_id, websocket)
+        
+        # 현재 다이어그램이 있으면 상태에 추가 (수정 모드)
+        if current_diagram:
+            state["current_diagram"] = current_diagram
+            log_debug(f"수정 모드: 현재 다이어그램 길이 {len(current_diagram)} 문자")
         
         # 2. 질문 분석 및 라우팅
         state = route_question(state)

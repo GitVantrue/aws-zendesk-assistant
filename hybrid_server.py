@@ -107,11 +107,13 @@ class HybridServer:
             # 메시지 파싱
             try:
                 data = json.loads(message)
-                question = data.get("message", message)
+                question = data.get("message", data.get("content", message))
                 session_id = data.get("session_id", client_id)
+                current_diagram = data.get("current_diagram")  # 현재 다이어그램 XML (수정 모드)
             except json.JSONDecodeError:
                 question = message
                 session_id = client_id
+                current_diagram = None
             
             # 중복 방지
             question_key = f"{client_id}:{question}"
@@ -136,7 +138,7 @@ class HybridServer:
             # 비동기로 질문 처리 (LangGraph 에이전트 사용)
             thread = threading.Thread(
                 target=self._process_question_thread,
-                args=(question, session_id, client_id, ws, question_key)
+                args=(question, session_id, client_id, ws, question_key, current_diagram)
             )
             thread.daemon = True
             thread.start()
@@ -148,19 +150,21 @@ class HybridServer:
                 "message": f"오류 발생: {str(e)}"
             }, ensure_ascii=False))
     
-    def _process_question_thread(self, question: str, session_id: str, client_id: str, ws, question_key: str):
+    def _process_question_thread(self, question: str, session_id: str, client_id: str, ws, question_key: str, current_diagram: str = None):
         """질문 처리 스레드"""
         try:
             print(f"[DEBUG] 질문 처리 시작: {session_id} - {question}", flush=True)
+            if current_diagram:
+                print(f"[DEBUG] 수정 모드: 현재 다이어그램 길이 {len(current_diagram)} 문자", flush=True)
             
             # 비동기 함수를 동기 스레드에서 실행
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
             try:
-                # LangGraph 에이전트로 질문 처리
+                # LangGraph 에이전트로 질문 처리 (current_diagram 전달)
                 result = loop.run_until_complete(
-                    process_question_workflow(question, question_key, client_id, ws)
+                    process_question_workflow(question, question_key, client_id, ws, current_diagram)
                 )
                 
                 print(f"[DEBUG] 질문 처리 완료: {session_id}", flush=True)
