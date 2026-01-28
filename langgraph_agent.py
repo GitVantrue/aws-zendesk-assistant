@@ -14,8 +14,10 @@ def validate_and_fix_diagram_xml(xml_content: str) -> str:
     """
     Draw.io XML 구조 검증 및 자동 수정
     
-    문제: Q CLI가 생성한 XML에서 <diagram> 태그가 제대로 닫히지 않는 경우가 있음
-    해결: </mxGraphModel> 다음에 </diagram>이 없으면 자동으로 추가
+    문제: Q CLI가 생성한 XML에서 <diagram> 태그가 없거나 제대로 닫히지 않는 경우가 있음
+    해결: 
+    1. <diagram> 태그가 없으면 <mxfile> 다음에 추가
+    2. </diagram> 태그가 없으면 </mxGraphModel> 다음에 추가
     
     Args:
         xml_content: 원본 XML 문자열
@@ -26,8 +28,25 @@ def validate_and_fix_diagram_xml(xml_content: str) -> str:
     try:
         # 1. <diagram> 태그가 있는지 확인
         if '<diagram' not in xml_content:
-            log_error("XML에 <diagram> 태그가 없습니다")
-            return xml_content
+            log_error("XML에 <diagram> 태그가 없습니다 - 자동 추가 시작")
+            
+            # <mxfile> 다음에 <diagram> 추가
+            if '<mxfile' in xml_content and '<mxGraphModel' in xml_content:
+                # <mxfile ...> 태그의 끝 위치 찾기
+                mxfile_start = xml_content.find('<mxfile')
+                mxfile_tag_end = xml_content.find('>', mxfile_start)
+                
+                if mxfile_tag_end != -1:
+                    # <mxfile> 태그 다음에 <diagram> 삽입
+                    insert_pos = mxfile_tag_end + 1
+                    
+                    xml_content = (
+                        xml_content[:insert_pos] +
+                        '\n  <diagram name="AWS Architecture" id="aws-diagram">' +
+                        xml_content[insert_pos:]
+                    )
+                    
+                    log_debug("XML 자동 수정: <diagram> 태그 추가됨")
         
         # 2. </diagram> 태그가 있는지 확인
         if '</diagram>' in xml_content:
