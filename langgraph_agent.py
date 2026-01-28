@@ -179,17 +179,32 @@ def log_state_transition(state: AgentState, from_status: str, to_status: str):
     log_debug(f"상태 전환: {from_status} -> {to_status} (질문: {state['question_key']})")
 
 
-def analyze_question_type(question: str) -> tuple[str, Optional[str]]:
+def analyze_question_type(question: str, current_diagram: Optional[str] = None) -> tuple[str, Optional[str]]:
     """
     질문 유형 분석 및 적절한 컨텍스트 파일 경로 반환
     Reference 코드와 동일한 로직
     
+    우선순위:
+    0. 다이어그램 수정 모드 (current_diagram이 있으면 무조건 drawio)
+    1. Service Screener (가장 우선)
+    2. 월간 보고서 생성
+    3. Draw.io 다이어그램
+    4. CloudTrail/감사
+    5. CloudWatch/모니터링
+    6. 일반 AWS 질문
+    
     Args:
         question: 사용자 질문
+        current_diagram: 현재 다이어그램 XML (수정 모드인 경우)
         
     Returns:
         tuple: (질문_타입, 컨텍스트_파일_경로)
     """
+    # 우선순위 0: 다이어그램 수정 모드 (current_diagram이 있으면 무조건 drawio)
+    if current_diagram:
+        log_debug("다이어그램 수정 모드 감지 - 질문 타입: drawio")
+        return 'drawio', 'reference_contexts/drawio_mcp.md'
+    
     question_lower = question.lower()
     log_debug(f"질문 타입 분석 시작: '{question_lower}'")
 
@@ -311,8 +326,11 @@ def route_question(state: AgentState) -> AgentState:
         업데이트된 상태
     """
     try:
-        # 질문 타입 분석
-        question_type, context_file = analyze_question_type(state["question"])
+        # current_diagram 가져오기 (수정 모드인 경우)
+        current_diagram = state.get("current_diagram")
+        
+        # 질문 타입 분석 (current_diagram 전달)
+        question_type, context_file = analyze_question_type(state["question"], current_diagram)
         
         # 상태 업데이트
         state["question_type"] = question_type
